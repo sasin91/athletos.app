@@ -51,6 +51,9 @@
     rm -rf {{ $app_dir }}/current
     ln -s {{ $new_release_dir }} {{ $app_dir }}/current
 
+    # Set correct permissions for storage and cache directories
+    chmod -R 775 {{ $app_dir }}/current/storage {{ $app_dir }}/current/bootstrap/cache
+
     # reload php-fpm
     sudo systemctl restart php8.4-fpm
 
