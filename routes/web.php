@@ -60,4 +60,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/appearance', [Settings\AppearanceController::class, 'edit'])->name('settings.appearance.edit');
 });
 
+Route::view('/terms', 'terms')->name('terms');
+Route::view('/privacy', 'privacy')->name('privacy');
+Route::view('/about', 'about')->name('about');
+
 require __DIR__.'/auth.php';
