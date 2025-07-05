@@ -27,7 +27,6 @@ return new class extends Migration
             $table->json('notification_preferences')->nullable();
             $table->string('difficulty_preference')->default('moderate');
             $table->unique(['user_id', 'current_plan_id']);
-            $table->index('training_days');
             $table->timestamps();
             $table->softDeletes();
         });
