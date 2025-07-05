@@ -42,7 +42,7 @@
                 </div>
                 <!-- Bottom row -->
                 <div class="flex justify-between items-center mt-6">
-                    <span class="text-gray-500 dark:text-gray-400 text-sm">Week {{ $athlete->current_phase_week ?? '—' }} - Day {{ $athlete->day_number ?? '—' }}</span>
+                    <span class="text-gray-500 dark:text-gray-400 text-sm">Week {{ $this->currentPhaseWeek ?? '—' }} - Day {{ $this->dayNumber ?? '—' }}</span>
                     <a href="{{ route('trainings.create') }}" class="bg-blue-600 dark:bg-blue-500 text-white px-5 py-2 rounded text-sm font-semibold shadow hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none">Start Training</a>
                 </div>
             </div>

@@ -38,8 +38,7 @@ use App\Traits\HasTrainingPhaseProgress;
  * @property-read int $totalPhaseWeeks
  * @property-read \Illuminate\Support\Collection $completedTrainings
  * @property-read \Illuminate\Support\Collection $allTrainingsForCurrentPlan
- * @property-read Training $training
- * @property-read Collection<int, Training> $trainings
+ * @property-read \Illuminate\Support\Collection $training
  * @property-read WeightProgressions $weightProgressions
  * @property-read DashboardMetrics $metrics
  */
@@ -241,6 +240,23 @@ class Dashboard extends Component
     {
         $currentPhase = $this->getCurrentPhase($this->athlete);
         return $currentPhase['name'] ?? 'No Plan';
+    }
+
+    #[Computed]
+    public function currentPhaseWeek(): int
+    {
+        return $this->getCompletedTrainingWeeks($this->athlete);
+    }
+
+    #[Computed]
+    public function dayNumber(): int
+    {
+        $dateKey = $this->date?->format('Y-m-d');
+        $training = $this->training->get($dateKey) ?? null;
+        if (!$training) {
+            return 1;
+        }
+        return $this->getTrainingDayNumber($training);
     }
 
     public function render(): \Illuminate\View\View
