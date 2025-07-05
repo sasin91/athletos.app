@@ -52,7 +52,7 @@
     ln -s {{ $new_release_dir }} {{ $app_dir }}/current
 
     # reload php-fpm
-    sudo systemctl restart php-fpm
+    sudo systemctl restart php8.4-fpm
 
     echo "Deployment completed successfully!"
 @endtask
