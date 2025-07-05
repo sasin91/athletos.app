@@ -218,7 +218,7 @@ class Dashboard extends Component
     private function getCurrent1RM(Exercise $exercise)
     {
         $indicator = PerformanceIndicator::where('athlete_id', $this->athlete->id)
-            ->where('key', $exercise->oneRepMaxKey())
+            ->where('exercise', $exercise)
             ->latest()
             ->first();
 
@@ -228,7 +228,7 @@ class Dashboard extends Component
     private function getPrevious1RM(Exercise $exercise)
     {
         $indicator = PerformanceIndicator::where('athlete_id', $this->athlete->id)
-            ->where('key', $exercise->oneRepMaxKey())
+            ->where('exercise', $exercise)
             ->where('created_at', '<=', Carbon::now()->subMonth())
             ->latest()
             ->first();
