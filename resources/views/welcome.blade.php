@@ -1,11 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AthletOS</title>
-    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ config('app.name') }}</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#18181b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+    <link rel="icon" href="/favicon.ico">
+    @vite(['resources/css/app.css'])
 </head>
 
 <body>
@@ -335,8 +341,19 @@
     </div>
   </footer>
   </div>
-
+  <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(function(registration) {
+                        // Registration successful
+                    }, function(err) {
+                        // Registration failed
+                        console.warn('ServiceWorker registration failed:', err);
+                    });
+            });
+        }
+    </script>
 </body>
 
 </html>
-</rewritten_file>
