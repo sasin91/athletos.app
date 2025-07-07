@@ -249,6 +249,31 @@ class Dashboard extends Component
     }
 
     #[Computed]
+    public function selectedDateWeek(): int
+    {
+        if (!$this->date || !$this->athlete->plan_start_date) {
+            return 0;
+        }
+
+        $startDate = Carbon::parse($this->athlete->plan_start_date)->startOfDay();
+        $selectedDate = $this->date->startOfDay();
+        
+        // If selected date is before plan start, return 0
+        if ($selectedDate->lt($startDate)) {
+            return 0;
+        }
+
+        $daysDiff = $startDate->diffInDays($selectedDate);
+        $trainingDaysPerWeek = count($this->athlete->training_days ?? []);
+        
+        if ($trainingDaysPerWeek === 0) {
+            return 0;
+        }
+
+        return (int) floor($daysDiff / 7) + 1;
+    }
+
+    #[Computed]
     public function dayNumber(): int
     {
         $dateKey = $this->date?->format('Y-m-d');
@@ -257,6 +282,16 @@ class Dashboard extends Component
             return 1;
         }
         return $this->getTrainingDayNumber($training);
+    }
+
+    #[Computed]
+    public function formattedDate(): string
+    {
+        if (!$this->date) {
+            return '';
+        }
+        
+        return $this->date->format('M j, Y');
     }
 
     public function render(): \Illuminate\View\View
