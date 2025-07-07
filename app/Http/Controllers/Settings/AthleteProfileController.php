@@ -52,9 +52,9 @@ class AthleteProfileController extends Controller
             'preferred_time' => ['required', 'in:' . implode(',', array_column(TrainingTime::cases(), 'value'))],
             'session_duration' => 'required|integer|in:45,60,75,90,120',
             'difficulty_preference' => ['required', 'in:' . implode(',', array_column(Difficulty::cases(), 'value'))],
-            'top_squat' => 'nullable|integer|min:0|max:2000',
-            'top_bench' => 'nullable|integer|min:0|max:2000',
-            'top_deadlift' => 'nullable|integer|min:0|max:2000',
+            'top_squat' => 'nullable|numeric|min:0|max:2000',
+            'top_bench' => 'nullable|numeric|min:0|max:2000',
+            'top_deadlift' => 'nullable|numeric|min:0|max:2000',
         ]);
 
         // Save athlete data (excluding top lifts)
