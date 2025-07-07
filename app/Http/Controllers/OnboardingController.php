@@ -141,6 +141,7 @@ class OnboardingController extends Controller
 
         $validated = $request->validate([
             'training_days' => 'required|array|min:1',
+            'training_frequency' => 'nullable|string|in:2w,3w,4w',
             'preferred_time' => ['required', Rule::enum(TrainingTime::class)],
             'session_duration' => 'required|integer|in:45,60,75,90,120',
         ]);

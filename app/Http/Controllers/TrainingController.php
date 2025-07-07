@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Actions\DetermineTrainingPhase;
 use App\Models\Training;
 use App\Models\User;
+use App\Actions\CalculateTrainingOffset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Auth;
@@ -13,6 +14,10 @@ use Illuminate\Container\Attributes\CurrentUser;
 
 class TrainingController extends Controller
 {
+    public function __construct(
+        private CalculateTrainingOffset $calculateTrainingOffset,
+    ) {}
+
     public function index(#[CurrentUser] User $user): \Illuminate\View\View|\Illuminate\Http\RedirectResponse
     {
         Gate::authorize('viewAny', Training::class);
@@ -56,6 +61,20 @@ class TrainingController extends Controller
             return redirect()->route('dashboard')->with('error', 'Please select a training plan first.');
         }
 
+        // Check if this is a training day
+        $trainingDays = $athlete->training_days ?? [];
+        $dayOfWeek = strtolower($today->format('l')); // 'monday', 'tuesday', etc.
+        
+        if (!in_array($dayOfWeek, $trainingDays)) {
+            return redirect()->route('dashboard')->with('error', 'No training scheduled for today.');
+        }
+
+        // Check if training should occur on this date based on offset
+        $startDate = $athlete->plan_start_date ? \Carbon\Carbon::instance($athlete->plan_start_date) : Carbon::now();
+        if (!$this->calculateTrainingOffset->shouldTrainOnDate($athlete->training_frequency, $today, $startDate)) {
+            return redirect()->route('dashboard')->with('info', 'This is a recovery week. No training scheduled for today.');
+        }
+
         // Check if a training session already exists for today
         $existingTraining = Training::where('athlete_id', $athlete->id)
             ->whereDate('scheduled_at', $today)
@@ -67,8 +86,6 @@ class TrainingController extends Controller
         }
 
         // Determine which training day this is
-        $trainingDays = $athlete->training_days ?? [];
-        $dayOfWeek = strtolower($today->format('l')); // 'monday', 'tuesday', etc.
         $dayIndex = array_search($dayOfWeek, $trainingDays);
         $trainingDayNumber = $dayIndex !== false ? $dayIndex + 1 : 1;
         

@@ -5,11 +5,16 @@ namespace App\Policies;
 use App\Enums\UserRole;
 use App\Models\Training;
 use App\Models\User;
+use App\Actions\CalculateTrainingOffset;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\Response;
 
 class TrainingPolicy
 {
+    public function __construct(
+        private CalculateTrainingOffset $calculateTrainingOffset,
+    ) {}
+
     /**
      * Determine whether the user can view any trainings.
      */
@@ -69,6 +74,12 @@ class TrainingPolicy
 
         if (!in_array($dayOfWeek, $trainingDays)) {
             return Response::deny('No training scheduled for today.');
+        }
+
+        // Check if training should occur on this date based on offset
+        $startDate = $user->athlete->plan_start_date ? \Carbon\Carbon::instance($user->athlete->plan_start_date) : Carbon::now();
+        if (!$this->calculateTrainingOffset->shouldTrainOnDate($user->athlete->training_frequency, Carbon::now(), $startDate)) {
+            return Response::deny('This is a recovery week. No training scheduled for today.');
         }
 
         return Response::allow();

@@ -148,6 +148,26 @@
                                     @enderror
                                 </div>
 
+                                <!-- Training Frequency -->
+                                <div>
+                                    <label for="training_frequency" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        {{ __('Training Frequency') }}
+                                    </label>
+                                    <select id="training_frequency" name="training_frequency" 
+                                            class="w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-blue-500">
+                                        <option value="">Every week (standard)</option>
+                                        <option value="2w" {{ old('training_frequency', $athlete->training_frequency) == '2w' ? 'selected' : '' }}>Every other week (1 week on, 1 week off)</option>
+                                        <option value="3w" {{ old('training_frequency', $athlete->training_frequency) == '3w' ? 'selected' : '' }}>Every 3 weeks (1 week on, 2 weeks off)</option>
+                                        <option value="4w" {{ old('training_frequency', $athlete->training_frequency) == '4w' ? 'selected' : '' }}>Every 4 weeks (1 week on, 3 weeks off)</option>
+                                    </select>
+                                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                        {{ __('Choose a pattern that fits your recovery needs and schedule') }}
+                                    </p>
+                                    @error('training_frequency')
+                                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                    @enderror
+                                </div>
+
                                 <!-- Preferred Time -->
                                 <div>
                                     <label for="preferred_time" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

@@ -7,6 +7,8 @@ use App\Enums\Difficulty;
 use App\Enums\ExperienceLevel;
 use App\Enums\TrainingGoal;
 use App\Models\PerformanceIndicator;
+use App\Actions\CalculateTrainingOffset;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -85,6 +87,7 @@ class Athlete extends Model
         'user_id',
         'current_plan_id',
         'training_days',
+        'training_frequency',
         'training_plan_id',
         'experience_level',
         'primary_goal',
@@ -175,5 +178,40 @@ class Athlete extends Model
     public function getProgressionRate(float $baseRate): float
     {
         return $baseRate * $this->difficulty_preference->getMultiplier() * $this->experience_level->getProgressionMultiplier();
+    }
+
+    /**
+     * Check if training should occur on a given date based on training offset
+     */
+    public function shouldTrainOnDate(Carbon $date): bool
+    {
+        $startDate = $this->plan_start_date ? \Carbon\Carbon::instance($this->plan_start_date) : Carbon::now();
+        return app(CalculateTrainingOffset::class)->shouldTrainOnDate($this->training_frequency, $date, $startDate);
+    }
+
+    /**
+     * Get the human-readable description of the training offset
+     */
+    public function getTrainingOffsetDescription(): string
+    {
+        return app(CalculateTrainingOffset::class)->getOffsetDescription($this->training_frequency);
+    }
+
+    /**
+     * Get the next training week after a given date
+     */
+    public function getNextTrainingWeek(Carbon $date): ?Carbon
+    {
+        $startDate = $this->plan_start_date ? \Carbon\Carbon::instance($this->plan_start_date) : Carbon::now();
+        return app(CalculateTrainingOffset::class)->getNextTrainingWeek($this->training_frequency, $date, $startDate);
+    }
+
+    /**
+     * Get the previous training week before a given date
+     */
+    public function getPreviousTrainingWeek(Carbon $date): ?Carbon
+    {
+        $startDate = $this->plan_start_date ? \Carbon\Carbon::instance($this->plan_start_date) : Carbon::now();
+        return app(CalculateTrainingOffset::class)->getPreviousTrainingWeek($this->training_frequency, $date, $startDate);
     }
 }

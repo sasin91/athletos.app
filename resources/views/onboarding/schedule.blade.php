@@ -35,6 +35,24 @@
                     @enderror
                 </fieldset>
 
+                <fieldset>
+                    <legend class="text-lg font-semibold text-gray-900 dark:text-gray-100">Training Frequency</legend>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">How often do you want to train? This helps us schedule recovery weeks</p>
+                    <div class="mt-4">
+                        <label for="training_frequency" class="block text-sm font-medium text-gray-900 dark:text-gray-100">Training Pattern</label>
+                        <select id="training_frequency" name="training_frequency" class="mt-2 w-full rounded-md bg-white dark:bg-gray-700 py-2 px-3 text-base text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 focus:border-blue-600 focus:ring-1 focus:ring-blue-600">
+                            <option value="">Every week (standard)</option>
+                            <option value="2w" {{ old('training_frequency', $athlete?->training_frequency) == '2w' ? 'selected' : '' }}>Every other week (1 week on, 1 week off)</option>
+                            <option value="3w" {{ old('training_frequency', $athlete?->training_frequency) == '3w' ? 'selected' : '' }}>Every 3 weeks (1 week on, 2 weeks off)</option>
+                            <option value="4w" {{ old('training_frequency', $athlete?->training_frequency) == '4w' ? 'selected' : '' }}>Every 4 weeks (1 week on, 3 weeks off)</option>
+                        </select>
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Choose a pattern that fits your recovery needs and schedule</p>
+                        @error('training_frequency')
+                            <p class="mt-2 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </fieldset>
+
                 <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div>
                         <label for="preferred_time" class="block text-sm font-medium text-gray-900 dark:text-gray-100">Preferred Training Time</label>
