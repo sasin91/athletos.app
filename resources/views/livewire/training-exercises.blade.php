@@ -1,4 +1,4 @@
-<div>
+<div class="relative">
     @if(count($plannedExercises) > 0)
         <!-- Exercise Navigation -->
         @if(count($plannedExercises) > 1)
@@ -76,8 +76,42 @@
                 
                 @for($set = 1; $set <= $exercise->sets; $set++)
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                    <div class="flex items-center">
+                    <div class="flex flex-col items-start md:items-center">
                         <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Set {{ $set }}</span>
+                        <!-- Set Timer (below label) -->
+                        <div class="w-full mt-1">
+                            <div x-data="{
+                                running: false,
+                                seconds: 0,
+                                interval: null,
+                                start() {
+                                    if (!this.running) {
+                                        this.running = true;
+                                        this.interval = setInterval(() => { this.seconds++ }, 1000);
+                                        $wire.startTotalTimer();
+                                        window.activeSetTimers = (window.activeSetTimers || 0) + 1;
+                                    }
+                                },
+                                pause() {
+                                    if (this.running) {
+                                        this.running = false;
+                                        clearInterval(this.interval);
+                                        window.activeSetTimers = (window.activeSetTimers || 1) - 1;
+                                        if (window.activeSetTimers <= 0) {
+                                            window.activeSetTimers = 0;
+                                            window.dispatchEvent(new CustomEvent('pause-total-timer'));
+                                        }
+                                    }
+                                },
+                                reset() { this.pause(); this.seconds = 0; }
+                            }" class="flex flex-row items-center gap-2 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">
+                                <span class="text-xs text-blue-700 dark:text-blue-200">Set Timer</span>
+                                <span class="font-mono text-xs" x-text="`${String(Math.floor(seconds/60)).padStart(2, '0')}:${String(seconds%60).padStart(2, '0')}`"></span>
+                                <button type="button" @click="start()" x-show="!running" class="px-2 py-1 text-xs rounded bg-blue-600 text-white">▶</button>
+                                <button type="button" @click="pause()" x-show="running" class="px-2 py-1 text-xs rounded bg-yellow-500 text-white">⏸</button>
+                                <button type="button" @click="reset()" class="px-2 py-1 text-xs rounded bg-gray-400 text-white">⟲</button>
+                            </div>
+                        </div>
                     </div>
                     
                     <div>
@@ -156,4 +190,43 @@
             <p class="text-gray-500 dark:text-gray-400">This training session doesn't have any exercises planned yet.</p>
         </div>
     @endif
+    <!-- Total Timer Footer (single Alpine store, only passive display) -->
+    <div 
+        x-data="{
+            running: false,
+            seconds: $wire.entangle('totalTimerSeconds'),
+            started: $wire.entangle('totalTimerStarted'),
+            interval: null,
+            debounceTimeout: null,
+            start() { 
+                if (!this.running) { 
+                    this.running = true; 
+                    this.interval = setInterval(() => { 
+                        this.seconds++; 
+                        this.debouncedSync(); 
+                    }, 1000); 
+                } 
+            },
+            pause() {
+                if (this.running) {
+                    this.running = false;
+                    clearInterval(this.interval);
+                }
+            },
+            debouncedSync() {
+                clearTimeout(this.debounceTimeout);
+                this.debounceTimeout = setTimeout(() => { $wire.updateTotalTimer(this.seconds); }, 2000);
+            },
+            init() {
+                if (this.started && !this.interval) { this.start(); }
+                this.$watch('started', value => { if (value) this.start(); });
+                window.addEventListener('pause-total-timer', () => { this.pause(); });
+            }
+        }"
+        x-init="init()"
+        class="fixed bottom-0 left-0 w-full z-50 flex items-center justify-center bg-gray-900/95 text-white py-3 shadow-lg"
+    >
+        <span class="font-medium mr-2">Total Timer:</span>
+        <span class="font-mono text-lg" x-text="`${String(Math.floor(seconds/60)).padStart(2, '0')}:${String(seconds%60).padStart(2, '0')}`"></span>
+    </div>
 </div> 

@@ -24,7 +24,10 @@ class TrainingExercises extends Component
     
     /** @var array<string, string> */
     public array $exerciseNotes = [];
-    
+
+    public int $totalTimerSeconds = 0;
+    public bool $totalTimerStarted = false;
+
     public bool $isLoading = true;
     public bool $hasError = false;
     public string $errorMessage = '';
@@ -52,6 +55,7 @@ class TrainingExercises extends Component
         
         // Load completed sets from events
         $this->loadCompletedData();
+        $this->totalTimerSeconds = $training->total_timer_seconds ?? 0;
     }
 
     public function loadExercises()
@@ -209,6 +213,18 @@ class TrainingExercises extends Component
     public function getCompletedSetsCount(string $exerciseSlug): int
     {
         return count($this->completedSets[$exerciseSlug] ?? []);
+    }
+
+    public function updateTotalTimer($seconds)
+    {
+        $this->totalTimerSeconds = $seconds;
+        $this->training->total_timer_seconds = $seconds;
+        $this->training->save();
+    }
+
+    public function startTotalTimer()
+    {
+        $this->totalTimerStarted = true;
     }
 
     public function render()

@@ -93,6 +93,8 @@ class Training extends Model
         'energy_level',
         'completed_at',
         'notes',
+        'total_timer_seconds',
+        'set_timer_seconds',
     ];
 
     /**
@@ -109,6 +111,8 @@ class Training extends Model
             'scheduled_at' => 'datetime',
             'postponed' => 'boolean',
             'completed_at' => 'datetime',
+            'total_timer_seconds' => 'integer',
+            'set_timer_seconds' => 'integer',
         ];
     }
 
