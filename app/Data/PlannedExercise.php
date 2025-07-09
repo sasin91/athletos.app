@@ -19,6 +19,7 @@ class PlannedExercise implements Wireable
         public string $category,
         public string $difficulty,
         public array $tags,
+        public ?string $notes = null,
     ) {
     }
 
@@ -42,6 +43,7 @@ class PlannedExercise implements Wireable
             'category' => $this->category,
             'difficulty' => $this->difficulty,
             'tags' => $this->tags,
+            'notes' => $this->notes,
         ];
     }
 
@@ -61,6 +63,7 @@ class PlannedExercise implements Wireable
             category: $value['category'],
             difficulty: $value['difficulty'],
             tags: $value['tags'],
+            notes: $value['notes'] ?? null,
         );
     }
 

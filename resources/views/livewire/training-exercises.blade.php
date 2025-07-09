@@ -25,6 +25,15 @@
                 {{ $exercise->displayName }}
             </legend>
 
+            @if(!empty($exercise->notes))
+            <div class="mb-4">
+                <div class="flex items-start gap-2 px-4 py-2 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 text-sm border-l-4 border-blue-400">
+                    <x-heroicon-o-information-circle class="w-5 h-5 mt-0.5 text-blue-400" />
+                    <span>{{ $exercise->notes }}</span>
+                </div>
+            </div>
+            @endif
+
             <!-- Exercise Details -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">

@@ -58,6 +58,7 @@ class ComputePlannedExercises
                 category: $exercise->category()->value,
                 difficulty: $exercise->difficulty()->value,
                 tags: $exercise->tags(),
+                notes: $exerciseConfig->notes,
             );
         }
 
