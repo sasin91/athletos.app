@@ -8,7 +8,7 @@ use Carbon\Carbon;
 
 class DetermineTrainingPhase
 {
-    public function execute(Athlete $athlete, Carbon $date): TrainingPhase
+    public function execute(Athlete $athlete, Carbon $date): ?TrainingPhase
     {
         $elapsedDays = $athlete->plan_start_date->diffInDays($date);
         $cumulativeDays = 0;

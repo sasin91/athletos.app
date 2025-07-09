@@ -85,12 +85,14 @@ class Training extends Model
     protected $fillable = [
         'athlete_id',
         'training_plan_id',
+        'training_phase_id',
         'scheduled_at',
         'postponed',
         'reschedule_reason',
         'mood',
         'energy_level',
         'completed_at',
+        'notes',
     ];
 
     /**

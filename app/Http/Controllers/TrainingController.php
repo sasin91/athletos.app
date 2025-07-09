@@ -113,7 +113,7 @@ class TrainingController extends Controller
      * Store a new training session
      * Creates the Training model when the user actually starts training
      */
-    public function store(Request $request, #[CurrentUser] User $user)
+    public function store(Request $request, #[CurrentUser] User $user, \App\Actions\DetermineTrainingPhase $determineTrainingPhase)
     {
         Gate::authorize('create', Training::class);
         $athlete = $user->athlete;
@@ -135,10 +135,17 @@ class TrainingController extends Controller
             return redirect()->route('trainings.show', $existingTraining);
         }
 
+        // Determine the current training phase for this date using method injection
+        $trainingPhase = $determineTrainingPhase->execute($athlete, $scheduledAt);
+        if (!$trainingPhase) {
+            return redirect()->route('dashboard')->with('error', 'No training phase found for this date.');
+        }
+
         // Create a new training session
         $training = Training::create([
             'athlete_id' => $athlete->id,
             'training_plan_id' => $validated['training_plan_id'],
+            'training_phase_id' => $trainingPhase->id,
             'scheduled_at' => $scheduledAt,
             'postponed' => false,
             'reschedule_reason' => null,

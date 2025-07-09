@@ -31,9 +31,9 @@
                                                     • {{ $exercise->weight }}
                                                 @endif
                                             </p>
-                                            @if($exercise->restMinutes)
+                                            @if($exercise->restSeconds)
                                                 <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                                                    Rest: {{ $exercise->restMinutes }} minutes
+                                                    Rest: {{ round($exercise->restSeconds / 60, 1) }} minutes
                                                 </p>
                                             @endif
                                         </div>

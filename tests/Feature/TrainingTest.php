@@ -281,6 +281,34 @@ class TrainingTest extends TestCase
         $response->assertSessionHasNoErrors();
     }
 
+    public function test_user_can_start_training_session_via_store(): void
+    {
+        $user = User::factory()->create();
+        $trainingPlan = TrainingPlan::factory()->create();
+        $athlete = Athlete::factory()->create([
+            'user_id' => $user->id,
+            'current_plan_id' => $trainingPlan->id,
+            'training_days' => ['monday', 'wednesday', 'friday'],
+            'plan_start_date' => now(),
+        ]);
+
+        $scheduledAt = now()->setTime(9, 0);
+
+        $this->actingAs($user);
+
+        $response = $this->post(route('trainings.store'), [
+            'training_plan_id' => $trainingPlan->id,
+            'scheduled_at' => $scheduledAt->format('Y-m-d H:i:s'),
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('trainings', [
+            'athlete_id' => $athlete->id,
+            'training_plan_id' => $trainingPlan->id,
+            'scheduled_at' => $scheduledAt->format('Y-m-d H:i:s'),
+        ]);
+    }
+
     public function test_can_assign_training_plan(): void
     {
         $user = User::factory()->create();
