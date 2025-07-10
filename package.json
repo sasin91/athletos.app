@@ -17,6 +17,7 @@
         "vite": "^6.2.4"
     },
     "dependencies": {
+        "@tsparticles/confetti": "^3.8.1",
         "alpinejs": "^3.14.9",
         "apexcharts": "^4.7.0"
     }

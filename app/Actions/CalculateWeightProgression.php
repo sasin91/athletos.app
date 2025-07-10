@@ -132,4 +132,35 @@ class CalculateWeightProgression
             default => $currentWeight + ($rate * $week),
         };
     }
+
+    /**
+     * Suggest the next weight for an exercise, given athlete and previous weights
+     */
+    public function suggestWeight(\App\Models\Athlete $athlete, \App\Enums\Exercise $exerciseEnum, array $previousWeights = []): float
+    {
+        // 1. Try to get 1RM (with synonym fallback)
+        $performanceIndicators = $athlete->performanceIndicators->where('type', 'strength')->keyBy(fn($pi) => $pi->exercise);
+        $oneRM = $performanceIndicators[$exerciseEnum->value]->value ?? null;
+        if (!$oneRM) {
+            $synonymEnum = $exerciseEnum->synonym();
+            if ($synonymEnum !== $exerciseEnum && isset($performanceIndicators[$synonymEnum->value])) {
+                $oneRM = $performanceIndicators[$synonymEnum->value]->value;
+            }
+        }
+        // 2. If 1RM, use progression logic
+        if ($oneRM && $oneRM > 0) {
+            $progression = $this->calculateWeightProgression($athlete, $exerciseEnum, 1);
+            if ($progression && !empty($progression->dataPoints)) {
+                return $progression->dataPoints[0]['expected_weight'] ?? (float) $oneRM;
+            }
+            return (float) $oneRM;
+        }
+        // 3. Fallback: last logged weight + increment
+        $lastWeight = !empty($previousWeights) ? (float) $previousWeights[0] : null;
+        if ($lastWeight && $lastWeight > 0) {
+            return round($lastWeight + 2.5, 1);
+        }
+        // 4. Default
+        return $exerciseEnum->category()->value === 'strength' ? 20.0 : ($exerciseEnum->category()->value === 'dumbbell' ? 10.0 : 0.0);
+    }
 } 

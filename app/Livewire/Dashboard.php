@@ -52,21 +52,26 @@ class Dashboard extends Component
     #[Computed]
     public function training(): Collection
     {
-        if ($this->date === null) {
-            return new Collection();
+        // Instead of filtering by date or day of week, always show the next not completed workout
+        // or the most recent uncompleted one, regardless of the day.
+        $allTrainings = $this->athlete->trainings()->orderBy('scheduled_at')->get();
+        $nextUncompleted = $allTrainings->first(function ($training) {
+            return $training->completed_at === null;
+        });
+
+        if ($nextUncompleted) {
+            // Only show the next uncompleted training
+            return collect([$nextUncompleted->scheduled_at->format('Y-m-d') => $nextUncompleted]);
         }
 
-        $dateIsPast = Carbon::today()->startOfDay()->greaterThan($this->date);
-
-        if ($dateIsPast) {
-            return $this->athlete->trainings()
-                ->where('scheduled_at', '>=', $this->date->startOfDay())
-                ->where('scheduled_at', '<=', $this->date->endOfDay())
-                ->get()
-                ->keyBy(fn(Training $training) => $training->scheduled_at->format('Y-m-d'));
+        // If all trainings are completed, show the most recent one
+        $lastCompleted = $allTrainings->whereNotNull('completed_at')->last();
+        if ($lastCompleted) {
+            return collect([$lastCompleted->scheduled_at->format('Y-m-d') => $lastCompleted]);
         }
 
-        return app(ComputePlannedTrainings::class)->execute($this->athlete, $this->date);
+        // Fallback: empty collection
+        return new Collection();
     }
 
     #[Computed]
@@ -169,28 +174,10 @@ class Dashboard extends Component
 
     private function getTrainingDayNumber(Training $training): int
     {
-        $trainingDays = $this->athlete->training_days ?? [];
-        
-        if (empty($trainingDays)) {
-            return 1; // Default to day 1 if no training days set
-        }
-        
-        $dayOfWeek = strtolower($training->scheduled_at->format('l')); // 'monday', 'tuesday', etc.
-        
-        // Find the index of this day in the training days array
-        $dayIndex = array_search($dayOfWeek, $trainingDays);
-        
-        // Return 1-based index (day 1, day 2, etc.) or default to 1
-        $dayNumber = $dayIndex !== false ? $dayIndex + 1 : 1;
-        
-        // If the day number exceeds the available exercise days, cycle back to day 1
-        // This handles cases where athlete has more training days than exercise configurations
-        $maxExerciseDay = 4; // Based on the seeder data
-        if ($dayNumber > $maxExerciseDay) {
-            $dayNumber = ((($dayNumber - 1) % $maxExerciseDay) + 1);
-        }
-        
-        return $dayNumber;
+        // Instead of using day of week, use the order of the training in the plan
+        $allTrainings = $this->athlete->trainings()->orderBy('scheduled_at')->get();
+        $index = $allTrainings->search(fn($t) => $t->id === $training->id);
+        return $index !== false ? $index + 1 : 1;
     }
 
     #[Computed]

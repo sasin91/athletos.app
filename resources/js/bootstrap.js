@@ -1,5 +1,6 @@
 import axios from "axios";
 import Alpine from "alpinejs";
+import { confetti } from "@tsparticles/confetti";
 
 window.axios = axios;
 window.axios.defaults.headers.common["X-Requested-With"] = "XMLHttpRequest";
@@ -9,3 +10,5 @@ if (! window.Alpine) {
 
     Alpine.start();
 }
+
+window.confetti = confetti;

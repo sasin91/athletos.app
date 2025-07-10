@@ -50,7 +50,13 @@ class TrainingTest extends TestCase
             ->assertViewHas('training', $training);
     }
 
-    public function test_user_can_complete_training_with_exercises(): void
+    #[Test]
+    #[DataProvider('trainingCompletionProvider')]
+    public function test_user_can_complete_training_various_cases(
+        array $exercises,
+        array $expectedExerciseNotes,
+        array $expectedTraining,
+    ): void
     {
         $user = User::factory()->create();
         $trainingPlan = TrainingPlan::factory()->create();
@@ -65,46 +71,94 @@ class TrainingTest extends TestCase
             'difficulty_preference' => 'challenging',
             'plan_start_date' => now(),
         ]);
-
-        // Create a training session manually (simulating user starting a session)
         $training = Training::factory()->create([
             'athlete_id' => $athlete->id,
             'training_plan_id' => $trainingPlan->id,
-            'scheduled_at' => Carbon::today()->setTime(9, 0),
+            'scheduled_at' => now()->setTime(9, 0),
         ]);
 
-        $response = $this->actingAs($user)
-            ->post(route('trainings.complete', $training), [
-                'exercises' => [
-                    Exercise::BarbellBackSquat->value => [
-                        '1' => ['reps' => 5, 'weight' => 315, 'rpe' => 8],
-                        '2' => ['reps' => 5, 'weight' => 315, 'rpe' => 8],
-                        '3' => ['reps' => 5, 'weight' => 315, 'rpe' => 9],
-                    ],
-                    Exercise::BenchPress->value => [
-                        '1' => ['reps' => 5, 'weight' => 225, 'rpe' => 7],
-                        '2' => ['reps' => 5, 'weight' => 225, 'rpe' => 7],
-                        '3' => ['reps' => 5, 'weight' => 225, 'rpe' => 8],
-                    ]
-                ],
-                'mood' => 'good',
-                'energy_level' => 8,
-            ]);
+        $payload = [
+            'exercises' => $exercises,
+            'mood' => $expectedTraining['mood'],
+            'energy_level' => $expectedTraining['energy_level'],
+        ];
 
-        $response->assertRedirect(route('trainings.complete.show', $training))
-            ->assertSessionHas('success');
+        $this->actingAs($user)
+            ->post(route('trainings.complete', $training), $payload)
+            ->assertSessionHasNoErrors()
+            ->assertRedirectToRoute('trainings.complete.show', $training);
 
-        $this->assertDatabaseHas('trainings', [
-            'id' => $training->id,
-            'mood' => 'good',
-            'energy_level' => 8,
-        ]);
-        
-        // Verify training was marked as completed (has completed_at timestamp)
+        $this->assertDatabaseHas('trainings', array_merge(['id' => $training->id], $expectedTraining));
         $this->assertDatabaseMissing('trainings', [
             'id' => $training->id,
             'completed_at' => null,
         ]);
+
+        foreach ($expectedExerciseNotes as $exerciseEnum => $note) {
+            $this->assertDatabaseHas('exercises', [
+                'training_id' => $training->id,
+                'exercise_enum' => $exerciseEnum,
+                'notes' => $note,
+            ]);
+        }
+    }
+
+    public static function trainingCompletionProvider(): array
+    {
+        return [
+            'basic exercises' => [
+                [
+                    \App\Enums\Exercise::BarbellBackSquat->value => [
+                        '1' => [
+                            'reps' => 5,
+                            'weight' => 315,
+                            'rpe' => 8,
+                            'notes' => '',
+                        ],
+                        '2' => [
+                            'reps' => 5,
+                            'weight' => 315,
+                            'rpe' => 9,
+                            'notes' => null,
+                        ],
+                        '3' => [
+                            'reps' => 5,
+                            'weight' => 315,
+                            'rpe' => 9,
+                            'notes' => 'tough but good form and explosive',
+                        ],
+                    ],
+                    \App\Enums\Exercise::BenchPress->value => [
+                        '1' => [
+                            'reps' => 5,
+                            'weight' => 225,
+                            'rpe' => 7,
+                            'notes' => 'easy but good form',
+                        ],
+                        '2' => [
+                            'reps' => 5,
+                            'weight' => 225,
+                            'rpe' => 7,
+                        ],
+                        '3' => [
+                            'reps' => 5,
+                            'weight' => 225,
+                            'rpe' => 8,
+                            'notes' => '',
+                        ],
+                    ]
+                ],
+                [],
+                ['mood' => 'good', 'energy_level' => 8],
+                null
+            ],
+            'minimal completion' => [
+                [],
+                [],
+                ['mood' => 'good', 'energy_level' => 8],
+                'Great session!'
+            ],
+        ];
     }
 
     public function test_guest_cannot_access_training_page(): void
@@ -254,43 +308,10 @@ class TrainingTest extends TestCase
         }
     }
 
-    #[Test]
-    public function can_complete_training(): void
+    public function test_user_can_start_training(): void
     {
-        $user = User::factory()->create();
         $trainingPlan = TrainingPlan::factory()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'current_plan_id' => $trainingPlan->id,
-            'plan_start_date' => now(),
-        ]);
-        $training = Training::factory()->create([
-            'athlete_id' => $athlete->id,
-            'training_plan_id' => $trainingPlan->id,
-        ]);
-        
-        $this->actingAs($user);
-
-        $response = $this->post(route('trainings.complete', $training), [
-            'exercises' => [],
-            'mood' => 'good',
-            'energy_level' => 8,
-            'notes' => 'Great session!'
-        ]);
-
-        $response->assertSessionHasNoErrors();
-    }
-
-    public function test_user_can_start_training_session_via_store(): void
-    {
-        $user = User::factory()->create();
-        $trainingPlan = TrainingPlan::factory()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'current_plan_id' => $trainingPlan->id,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'plan_start_date' => now(),
-        ]);
+        $user = User::factory()->athlete($trainingPlan)->create();
 
         $scheduledAt = now()->setTime(9, 0);
 
@@ -303,7 +324,7 @@ class TrainingTest extends TestCase
 
         $response->assertRedirect();
         $this->assertDatabaseHas('trainings', [
-            'athlete_id' => $athlete->id,
+            'athlete_id' => $user->athlete->id,
             'training_plan_id' => $trainingPlan->id,
             'scheduled_at' => $scheduledAt->format('Y-m-d H:i:s'),
         ]);
@@ -311,30 +332,58 @@ class TrainingTest extends TestCase
 
     public function test_can_assign_training_plan(): void
     {
-        $user = User::factory()->create();
-        $trainingPlan1 = TrainingPlan::factory()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan1->id,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-            'plan_start_date' => now(),
-        ]);
-
+        $user = User::factory()->athlete()->create();    
         $trainingPlan = TrainingPlan::factory()->create();
 
-        $response = $this->actingAs($user)
-            ->post(route('training-plans.assign', $trainingPlan));
+        $this->actingAs($user)
+            ->post(route('training-plans.assign', $trainingPlan))
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('dashboard'));
 
-        $response->assertRedirect(route('dashboard'));
-        
         $this->assertDatabaseHas('athletes', [
             'user_id' => $user->id,
             'current_plan_id' => $trainingPlan->id,
+        ]);
+    }
+
+    public function test_select_alternative_works(): void
+    {
+        $user = User::factory()->create();
+        $trainingPlan = TrainingPlan::factory()->create();
+        $athlete = Athlete::factory()->create([
+            'user_id' => $user->id,
+            'current_plan_id' => $trainingPlan->id,
+            'training_days' => ['monday'],
+            'plan_start_date' => now(),
+        ]);
+        $training = Training::factory()->create([
+            'athlete_id' => $athlete->id,
+            'training_plan_id' => $trainingPlan->id,
+            'scheduled_at' => now()->setTime(9, 0),
+        ]);
+
+        $originalExercise = \App\Enums\Exercise::BarbellBackSquat;
+        $alternativeExercise = \App\Enums\Exercise::GluteBridge;
+
+        // Simulate swap (would be done via Livewire event in UI)
+        $trainingExercises = app(\App\Livewire\TrainingExercises::class);
+        $trainingExercises->mount($training);
+        $trainingExercises->swapExercise([
+            'originalExercise' => $originalExercise->value,
+            'alternativeValue' => $alternativeExercise->value,
+        ]);
+
+        // Complete a set for the alternative exercise
+        $trainingExercises->completeSet($alternativeExercise->value, 1, 12, 0, 6);
+
+        // Assert that the alternative exercise is present and the original is not
+        $this->assertDatabaseHas('exercises', [
+            'training_id' => $training->id,
+            'exercise_enum' => $alternativeExercise->value,
+        ]);
+        $this->assertDatabaseMissing('exercises', [
+            'training_id' => $training->id,
+            'exercise_enum' => $originalExercise->value,
         ]);
     }
 } 

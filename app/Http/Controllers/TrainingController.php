@@ -61,13 +61,15 @@ class TrainingController extends Controller
             return redirect()->route('dashboard')->with('error', 'Please select a training plan first.');
         }
 
-        // Check if this is a training day
-        $trainingDays = $athlete->training_days ?? [];
-        $dayOfWeek = strtolower($today->format('l')); // 'monday', 'tuesday', etc.
-        
-        if (!in_array($dayOfWeek, $trainingDays)) {
-            return redirect()->route('dashboard')->with('error', 'No training scheduled for today.');
-        }
+        // Remove $dayOfWeek logic and use next uncompleted or most recent completed training if needed
+        // (Implementation depends on the context of this method)
+        // If you want to fetch the next uncompleted training:
+        // $nextUncompleted = $athlete->trainings()->orderBy('scheduled_at')->get()->first(fn($t) => $t->completed_at === null);
+        // If you want the most recent completed:
+        // $lastCompleted = $athlete->trainings()->orderBy('scheduled_at')->get()->whereNotNull('completed_at')->last();
+        // Use as needed in your controller logic.
+
+        // (Removed $dayOfWeek and $trainingDays logic)
 
         // Check if training should occur on this date based on offset
         $startDate = $athlete->plan_start_date ? \Carbon\Carbon::instance($athlete->plan_start_date) : Carbon::now();
@@ -85,11 +87,12 @@ class TrainingController extends Controller
             return redirect()->route('trainings.show', $existingTraining);
         }
 
-        // Determine which training day this is
-        $dayIndex = array_search($dayOfWeek, $trainingDays);
-        $trainingDayNumber = $dayIndex !== false ? $dayIndex + 1 : 1;
-        
         $training = new Training();
+        // Determine which training day this is
+        $allTrainings = $athlete->trainings()->orderBy('scheduled_at')->get();
+        $index = $allTrainings->search(fn($t) => $t->id === $training->id);
+        $trainingDayNumber = $index !== false ? $index + 1 : 1;
+        
         $training->setRelation('trainingPlan', $athlete->currentPlan);
 
         $trainingPhase = app(DetermineTrainingPhase::class)->execute(

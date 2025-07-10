@@ -113,6 +113,7 @@
     </footer>
 
     @livewireScripts
+    <livewire:notification />
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {

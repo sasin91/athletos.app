@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 /**
  * 
@@ -157,6 +158,20 @@ class Athlete extends Model
     public function performanceIndicators(): HasMany
     {
         return $this->hasMany(PerformanceIndicator::class);
+    }
+
+    public function completedExercises(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            related: Exercise::class,
+            through: Training::class,
+            firstKey: 'id',
+            secondKey: 'training_id',
+            localKey: 'id',
+            secondLocalKey: 'athlete_id',
+        )
+            ->completed()
+            ->latest();
     }
 
     /**

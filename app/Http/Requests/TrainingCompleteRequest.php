@@ -25,6 +25,7 @@ class TrainingCompleteRequest extends FormRequest
             'exercises' => 'nullable|array',
             'exercises.*' => 'array',
             'exercises.*.*' => 'array',
+            'exercises.*.*.notes' => 'nullable|string',
             'exercises.*.*.reps' => 'required|integer|min:1|max:100',
             'exercises.*.*.weight' => 'nullable|numeric|min:0|max:1000',
             'exercises.*.*.rpe' => 'nullable|integer|min:1|max:10',

@@ -72,19 +72,9 @@ class ExerciseSummary extends Component
      */
     private function getTrainingDayNumber(Training $training): int
     {
-        $trainingDays = $this->athlete->training_days ?? [];
-        
-        if (empty($trainingDays)) {
-            return 1; // Default to day 1 if no training days set
-        }
-        
-        $dayOfWeek = strtolower($training->scheduled_at->format('l')); // 'monday', 'tuesday', etc.
-        
-        // Find the index of this day in the training days array
-        $dayIndex = array_search($dayOfWeek, $trainingDays);
-        
-        // Return 1-based index (day 1, day 2, etc.) or default to 1
-        return $dayIndex !== false ? $dayIndex + 1 : 1;
+        $allTrainings = $this->athlete->trainings()->orderBy('scheduled_at')->get();
+        $index = $allTrainings->search(fn($t) => $t->id === $training->id);
+        return $index !== false ? $index + 1 : 1;
     }
 
     #[On('show')]

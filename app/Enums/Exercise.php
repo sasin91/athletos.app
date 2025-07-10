@@ -480,4 +480,21 @@ enum Exercise: string
             ],
         };
     }
+
+    /**
+     * In the AthletOS domain, some exercises are considered synonyms for tracking (e.g., Flat Barbell Bench Press and Barbell Bench Press).
+     * This method returns the canonical synonym for 1RM and progression lookup.
+     */
+    public function synonym(): self
+    {
+        return match($this) {
+            // Bench press synonyms
+            self::FlatBarbellBenchPress, self::BenchPress => self::BenchPress,
+            // Squat synonyms (if present)
+            // self::BarbellSquat, self::Squat => self::BarbellBackSquat,
+            self::BarbellBackSquat => self::BarbellBackSquat,
+            // Deadlift has no synonym
+            default => $this,
+        };
+    }
 } 

@@ -20,37 +20,26 @@ class ComputePlannedTrainings
     {
         $plannedTrainings = new Collection();
 
-        // Single date logic
-        $dayOfWeek = strtolower($date->format('l')); // 'monday', 'tuesday', etc.
-        $dateKey = $date->format('Y-m-d');
+        // Find the next uncompleted training for the athlete
+        $nextUncompleted = $athlete->trainings()->orderBy('scheduled_at')->get()->first(function ($training) {
+            return $training->completed_at === null;
+        });
 
-        // Check if this is a training day
-        if (!in_array($dayOfWeek, $athlete->training_days)) {
+        if ($nextUncompleted) {
+            $dateKey = $nextUncompleted->scheduled_at->format('Y-m-d');
+            $plannedTrainings[$dateKey] = $nextUncompleted;
             return $plannedTrainings;
         }
 
-        // Check if training should occur on this date based on offset
-        $startDate = $athlete->plan_start_date ? \Carbon\Carbon::instance($athlete->plan_start_date) : Carbon::now();
-        if (!$this->calculateTrainingOffset->shouldTrainOnDate($athlete->training_frequency, $date, $startDate)) {
+        // If all trainings are completed, return the most recent one
+        $lastCompleted = $athlete->trainings()->orderBy('scheduled_at')->get()->whereNotNull('completed_at')->last();
+        if ($lastCompleted) {
+            $dateKey = $lastCompleted->scheduled_at->format('Y-m-d');
+            $plannedTrainings[$dateKey] = $lastCompleted;
             return $plannedTrainings;
         }
 
-        $scheduledTraining = new Training();
-        $scheduledTraining->forceFill([
-            'scheduled_at' => $date,
-            'completed_at' => null,
-        ]);
-
-        $scheduledTraining->setRelation('trainingPlan', $athlete->trainingPlan);
-
-        $trainingPhase = $this->determineTrainingPhase->execute(
-            $athlete,
-            $date,
-        );
-
-        $scheduledTraining->setRelation('trainingPhase', $trainingPhase);
-        $plannedTrainings[$dateKey] = $scheduledTraining;
-
+        // Fallback: empty collection
         return $plannedTrainings;
     }
 }

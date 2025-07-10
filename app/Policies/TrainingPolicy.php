@@ -69,14 +69,15 @@ class TrainingPolicy
             return Response::deny('Please complete your athlete onboarding first.');
         }
 
-        $dayOfWeek = strtolower(Carbon::now()->format('l'));
-        $trainingDays = $user->athlete->training_days ?? [];
+        // Optionally, check if the athlete has already completed all scheduled workouts for the plan
+        // (This can be omitted if you want to allow unlimited training creation)
+        //
+        // Example: Only allow if there is an uncompleted training for today or in the future
+        // $hasUncompleted = $user->athlete->trainings()->whereNull('completed_at')->exists();
+        // if (!$hasUncompleted) {
+        //     return Response::deny('No scheduled training available.');
+        // }
 
-        if (!in_array($dayOfWeek, $trainingDays)) {
-            return Response::deny('No training scheduled for today.');
-        }
-
-        // Check if training should occur on this date based on offset
         $startDate = $user->athlete->plan_start_date ? \Carbon\Carbon::instance($user->athlete->plan_start_date) : Carbon::now();
         if (!$this->calculateTrainingOffset->shouldTrainOnDate($user->athlete->training_frequency, Carbon::now(), $startDate)) {
             return Response::deny('This is a recovery week. No training scheduled for today.');

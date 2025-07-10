@@ -25,10 +25,6 @@ class CompleteTraining
                 $exerciseEnum = ExerciseEnum::from($exerciseSlug);
 
                 foreach ($exerciseData as $setNumber => $setData) {
-                    if ($setNumber === 'notes' || !is_array($setData)) {
-                        continue;
-                    }
-
                     // Only record if at least reps or weight is provided
                     if (!empty($setData['reps']) || !empty($setData['weight'])) {
                         $training->exercises()->updateOrCreate(
@@ -41,6 +37,7 @@ class CompleteTraining
                                 'weight' => $setData['weight'] ?? null,
                                 'rpe' => $setData['rpe'] ?? null,
                                 'completed_at' => now(),
+                                'notes' => $setData['notes'] ?? null,
                             ]
                         );
                     }
