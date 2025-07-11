@@ -627,6 +627,225 @@ enum Exercise: string
     }
 
     /**
+     * Get exercise cues and technique tips
+     * 
+     * @return array<string> List of technique cues and tips
+     */
+    public function cues(): array
+    {
+        return match($this) {
+            // Main Compound Lifts
+            self::BarbellBackSquat => [
+                'Keep weight balanced across mid-foot throughout movement',
+                'Maintain neutral spine - chest up, core engaged',
+                'Control descent - slow and steady down',
+                'Drive through floor on ascent with full foot contact',
+                'Keep knees tracking over toes, not caving inward',
+                'Full depth - hip crease below knee cap if mobility allows',
+            ],
+            
+            self::BenchPress, self::FlatBarbellBenchPress => [
+                'Retract shoulder blades and maintain throughout lift',
+                'Keep feet firmly planted on floor for stability',
+                'Control bar descent to chest with 2-second pause',
+                'Explosive press up while maintaining shoulder position',
+                'Keep wrists straight and elbows at 45-degree angle',
+                'Full range of motion - touch chest to full lockout',
+            ],
+            
+            self::Deadlift => [
+                'Start with bar over mid-foot, close to shins',
+                'Hinge at hips first, then bend knees to reach bar',
+                'Maintain neutral spine throughout entire movement',
+                'Drive through heels and engage glutes on ascent',
+                'Keep bar close to body - drag it up your legs',
+                'Finish with full hip extension, shoulders over bar',
+            ],
+            
+            // Upper Body Isolation
+            self::InclineDumbbellPress => [
+                'Set bench to 30-45 degree angle for optimal chest activation',
+                'Control weight through full range of motion',
+                'Focus on squeezing chest muscles at top',
+                'Keep core engaged and back flat against bench',
+                'Lower weights with control, feel chest stretch',
+            ],
+            
+            self::DeclineDumbbellPress => [
+                'Secure feet in foot rests for safety',
+                'Focus on lower chest muscle activation',
+                'Control negative portion of movement',
+                'Squeeze chest muscles at top of movement',
+                'Maintain stable shoulder blade position',
+            ],
+            
+            self::LatPulldown => [
+                'Pull with back muscles, not just arms',
+                'Lean back slightly and pull to upper chest',
+                'Squeeze shoulder blades together at bottom',
+                'Control the weight on the way up',
+                'Keep chest up and core engaged throughout',
+            ],
+            
+            self::OneArmDumbbellRow => [
+                'Support body with opposite hand and knee on bench',
+                'Keep torso parallel to floor, core engaged',
+                'Pull elbow back and up, driving with back muscles',
+                'Squeeze shoulder blade at top of movement',
+                'Control weight down with muscle tension',
+            ],
+            
+            self::SeatedCableRow => [
+                'Sit tall with chest up and shoulders back',
+                'Pull cable to lower chest/upper abdomen',
+                'Squeeze shoulder blades together at end',
+                'Keep elbows close to body during pull',
+                'Control the return with muscle tension',
+            ],
+            
+            self::DumbbellCurls => [
+                'Keep elbows stationary at your sides',
+                'Control weight up and down - no swinging',
+                'Squeeze biceps at top of movement',
+                'Full range of motion - stretch to contraction',
+                'Keep wrists straight and core engaged',
+            ],
+            
+            self::SideLateralRaises => [
+                'Start with arms at sides, slight bend in elbows',
+                'Raise arms out to sides until parallel to floor',
+                'Lead with pinkies, thumbs slightly down',
+                'Control weight down slowly for muscle tension',
+                'Keep torso upright, avoid using momentum',
+            ],
+            
+            // Lower Body
+            self::RomanianDeadlift => [
+                'Start standing tall with slight knee bend',
+                'Hinge at hips, push hips back behind you',
+                'Keep bar close to legs throughout movement',
+                'Feel stretch in hamstrings at bottom',
+                'Drive hips forward to return to standing',
+            ],
+            
+            self::LegExtensions => [
+                'Sit back fully in seat with back supported',
+                'Control weight up and squeeze quads at top',
+                'Lower weight slowly with muscle control',
+                'Keep core engaged and avoid arching back',
+                'Full range of motion for maximum muscle activation',
+            ],
+            
+            self::SeatedHamstringCurls => [
+                'Sit with back against pad, legs positioned correctly',
+                'Curl heels toward glutes with controlled motion',
+                'Squeeze hamstrings at bottom of movement',
+                'Control weight back up with muscle tension',
+                'Keep core engaged throughout movement',
+            ],
+            
+            self::LegPress => [
+                'Position feet shoulder-width apart on platform',
+                'Lower weight with control until knees reach 90 degrees',
+                'Drive through whole foot to press weight up',
+                'Keep core engaged and back against pad',
+                'Full range of motion for maximum muscle activation',
+            ],
+            
+            self::DumbbellLunges => [
+                'Step forward into lunge position with control',
+                'Lower back knee toward ground with control',
+                'Keep front knee over ankle, not past toes',
+                'Drive through front heel to return to start',
+                'Maintain upright torso throughout movement',
+            ],
+            
+            // Cable Exercises
+            self::CableChestFly => [
+                'Set cables at shoulder height or slightly above',
+                'Start with arms wide, slight bend in elbows',
+                'Squeeze chest muscles to bring arms together',
+                'Feel stretch in chest at starting position',
+                'Control return to starting position',
+            ],
+            
+            // Mobility and Recovery
+            self::GluteBridge => [
+                'Lie on back with knees bent, feet flat on floor',
+                'Squeeze glutes and lift hips up off ground',
+                'Create straight line from knees to shoulders',
+                'Hold position briefly and squeeze glutes',
+                'Lower with control and repeat',
+            ],
+            
+            self::Plank => [
+                'Support body on forearms and toes',
+                'Keep body in straight line from head to heels',
+                'Engage core muscles and breathe normally',
+                'Keep hips level - don\'t let them sag or pike',
+                'Hold position with good form over duration',
+            ],
+            
+            self::BirdDog => [
+                'Start on hands and knees, core engaged',
+                'Extend opposite arm and leg simultaneously',
+                'Keep hips level and core stable',
+                'Hold position briefly with control',
+                'Return to start and switch sides',
+            ],
+            
+            // Stretching and Yoga
+            self::ChildsPose => [
+                'Kneel on floor and sit back on heels',
+                'Reach arms forward and lower chest toward floor',
+                'Relax and breathe deeply into the stretch',
+                'Hold position and focus on lengthening spine',
+                'Feel gentle stretch through back and shoulders',
+            ],
+            
+            self::DownwardDog => [
+                'Start on hands and knees, tuck toes under',
+                'Lift hips up and back to create inverted V',
+                'Keep hands shoulder-width apart, fingers spread',
+                'Pedal feet to warm up calves and hamstrings',
+                'Breathe deeply and hold position',
+            ],
+            
+            self::CobraStretch => [
+                'Lie face down with palms flat under shoulders',
+                'Press through hands to lift chest off ground',
+                'Keep hips on ground and shoulders away from ears',
+                'Feel gentle stretch through front of body',
+                'Breathe deeply and hold position',
+            ],
+            
+            self::PigeonPose => [
+                'Bring front leg into 90-degree angle',
+                'Extend back leg straight behind you',
+                'Square hips toward front of mat',
+                'Breathe deeply into hip stretch',
+                'Hold position and switch sides',
+            ],
+            
+            self::CatCowStretch => [
+                'Start on hands and knees in neutral position',
+                'Arch back and lift chest for cow position',
+                'Round spine and tuck chin for cat position',
+                'Move slowly between positions with breath',
+                'Feel stretch through entire spine',
+            ],
+            
+            // Default for any exercises not specifically covered
+            default => [
+                'Maintain proper form throughout the movement',
+                'Focus on controlled movement patterns',
+                'Breathe consistently during execution',
+                'Listen to your body and adjust as needed',
+            ],
+        };
+    }
+
+    /**
      * Generate linear ramping from start percentage to 100%
      * 
      * @param int $sets Total number of sets

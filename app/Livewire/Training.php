@@ -23,6 +23,14 @@ use Carbon\Carbon;
 
 /**
  * @property-read Athlete $athlete
+ * @property-read Collection<int, PlannedExercise> $plannedExercises
+ * @property-read array<string, array<int, float>> $suggestedExerciseWeights Exercise slug => [set index => weight]
+ * @property-read array<string, array<int, float>> $previousExerciseWeights Exercise slug => [historical weights]
+ * @property-read array<string, array<int, int>> $suggestedReps Exercise slug => [set number => reps]
+ * @property-read array<string, array<int, array<string, mixed>>> $completedSets Exercise slug => [set number => [field => value]]
+ * @property-read array<string, string> $exerciseNotes Exercise slug => notes
+ * @property-read array<string, int> $exerciseSetsCount Exercise slug => count
+ * @property-read int $totalTimerSeconds
  */
 #[Layout('components.layouts.app')]
 #[Title('Training Session')]
@@ -31,8 +39,13 @@ class Training extends Component
     public TrainingModel $training;
 
     // Exercise tracking
+    /** @var array<string, array<int, array<string, mixed>>> Exercise slug => [set number => [field => value]] */
     public array $completedSets = [];
+    
+    /** @var array<string, string> Exercise slug => notes */
     public array $exerciseNotes = [];
+    
+    /** @var array<string, int> Exercise slug => count */
     public array $exerciseSetsCount = [];
     
     // Timer states
@@ -58,7 +71,7 @@ class Training extends Component
         return $this->training->athlete;
     }
 
-    public function mount(TrainingModel $training)
+    public function mount(TrainingModel $training): void
     {
         $this->authorize('view', $training);
         
@@ -70,6 +83,7 @@ class Training extends Component
     {
         try {
             // Load existing completed sets
+            /** @phpstan-ignore-next-line */
             $existingExercises = $this->training->exercises()
                 ->completed()
                 ->get()
@@ -109,6 +123,8 @@ class Training extends Component
     }
 
     #[Computed()]
+    /** @return Collection<int, PlannedExercise> */
+    /** @phpstan-ignore-next-line */
     public function plannedExercises(): Collection
     {
         // Skip if athlete not available (during testing)
@@ -118,7 +134,8 @@ class Training extends Component
         
         // Get planned exercises for current training day
         $allTrainings = $this->training->athlete->trainings()->orderBy('scheduled_at')->get();
-        $index = $allTrainings->search(fn($t) => $t->id === $this->training->id);
+        $trainingId = $this->training->getKey();
+        $index = $allTrainings->search(fn($t) => $t->getKey() === $trainingId);
         $trainingDayNumber = $index !== false ? $index + 1 : 1;
 
         $exercises = app(ComputePlannedExercises::class)->execute($this->training, $trainingDayNumber);
@@ -129,12 +146,25 @@ class Training extends Component
         return $exercises;
     }
     
+    /** @param Collection<int|string, PlannedExercise> $exercises */
     private function initializeExerciseSetsCount(Collection $exercises): void
     {
         foreach ($exercises as $exercise) {
             if (!isset($this->exerciseSetsCount[$exercise->exerciseSlug])) {
+                $exerciseEnum = Exercise::from($exercise->exerciseSlug);
+                $canonicalExercise = $exerciseEnum->synonym();
+                
+                // Check for user's preferred set count for this exercise (check both current and canonical)
+                $preferredSets = $this->training->athlete->performanceIndicators()
+                    ->whereIn('exercise', [$exerciseEnum, $canonicalExercise])
+                    ->where('type', 'preference')
+                    ->where('label', 'preferred_sets')
+                    ->latest()
+                    ->value('value');
+                
                 $this->exerciseSetsCount[$exercise->exerciseSlug] = max(
                     $exercise->sets,
+                    (int) $preferredSets ?: $exercise->sets,
                     count($this->completedSets[$exercise->exerciseSlug] ?? [])
                 );
             }
@@ -142,6 +172,8 @@ class Training extends Component
     }
 
     #[Computed()]
+    /** @return array<string, array<int, float>> */
+    /** @phpstan-ignore-next-line */
     public function suggestedExerciseWeights(): array
     {
         $suggestions = [];
@@ -154,21 +186,36 @@ class Training extends Component
         
         foreach ($this->plannedExercises as $exercise) {
             $exerciseEnum = Exercise::from($exercise->exerciseSlug);
-            $sets = $this->exerciseSetsCount[$exercise->exerciseSlug] ?? $exercise->sets;
+            $currentSets = $this->exerciseSetsCount[$exercise->exerciseSlug] ?? $exercise->sets;
+            $originalSets = $exercise->sets;
             $previousWeights = $this->previousExerciseWeights[$exercise->exerciseSlug] ?? [];
             
-            $suggestions[$exercise->exerciseSlug] = $calculator->suggestProgressiveWeights(
+            // Calculate base weights for original planned sets first
+            $baseWeights = $calculator->suggestProgressiveWeights(
                 $this->training->athlete,
                 $exerciseEnum,
-                $sets,
+                $originalSets,
                 $previousWeights
             );
+            
+            // If sets were added, extend the pattern intelligently
+            if ($currentSets > $originalSets) {
+                $suggestions[$exercise->exerciseSlug] = $this->extendWeightSuggestions(
+                    $baseWeights, 
+                    $currentSets, 
+                    $exerciseEnum
+                );
+            } else {
+                $suggestions[$exercise->exerciseSlug] = array_slice($baseWeights, 0, $currentSets);
+            }
         }
         
         return $suggestions;
     }
 
     #[Computed()]
+    /** @return array<string, array<int, float>> */
+    /** @phpstan-ignore-next-line */
     public function previousExerciseWeights(): array
     {
         $weights = [];
@@ -193,7 +240,11 @@ class Training extends Component
                 ->orderBy('completed_at', 'desc')
                 ->take(5)
                 ->get()
-                ->flatMap(fn($training) => $training->exercises)
+                /** @phpstan-ignore-next-line */
+                ->flatMap(function($training) {
+                    /** @phpstan-ignore-next-line */
+                    return $training->exercises;
+                })
                 ->pluck('weight')
                 ->unique()
                 ->sort()
@@ -206,17 +257,145 @@ class Training extends Component
         return $weights;
     }
 
-    public function completeSet(string $exerciseSlug, int $setNumber, int $reps, float $weight, ?int $rpe = null): void
+    #[Computed()]
+    /** @return array<string, array<int, int>> */
+    /** @phpstan-ignore-next-line */
+    public function suggestedReps(): array
     {
+        $suggestions = [];
+        
+        // Skip if athlete not available (during testing)
+        if (!$this->training->athlete) {
+            return $suggestions;
+        }
+        
+        foreach ($this->plannedExercises as $exercise) {
+            $exerciseSlug = $exercise->exerciseSlug;
+            $plannedReps = $this->extractRepsFromString($exercise->reps);
+            $currentSets = $this->exerciseSetsCount[$exerciseSlug] ?? $exercise->sets;
+            
+            $exerciseSuggestions = [];
+            
+            for ($set = 1; $set <= $currentSets; $set++) {
+                $exerciseSuggestions[$set] = $this->calculateRepSuggestion(
+                    $exerciseSlug, 
+                    $set, 
+                    $plannedReps,
+                    $exercise
+                );
+            }
+            
+            $suggestions[$exerciseSlug] = $exerciseSuggestions;
+        }
+        
+        return $suggestions;
+    }
+
+    private function extractRepsFromString(string $reps): int
+    {
+        // Handle different rep formats: "8-12", "10", "3x5", etc.
+        if (preg_match('/(\d+)-(\d+)/', $reps, $matches)) {
+            // Range format like "8-12" - use the middle value
+            return intval(($matches[1] + $matches[2]) / 2);
+        } elseif (preg_match('/(\d+)x(\d+)/', $reps, $matches)) {
+            // Format like "3x5" - use the second number (reps)
+            return intval($matches[2]);
+        } elseif (preg_match('/(\d+)/', $reps, $matches)) {
+            // Simple number
+            return intval($matches[1]);
+        }
+        
+        return 8; // Default fallback
+    }
+
+    private function calculateRepSuggestion(string $exerciseSlug, int $setNumber, int $plannedReps, PlannedExercise $exercise): int
+    {
+        // Start with planned reps
+        $suggestedReps = $plannedReps;
+        
+        // Adjust based on previous sets in this session
+        $completedSets = $this->completedSets[$exerciseSlug] ?? [];
+        $previousSets = array_filter($completedSets, fn($set, $key) => $key < $setNumber, ARRAY_FILTER_USE_BOTH);
+        
+        if (!empty($previousSets)) {
+            $lastSet = end($previousSets);
+            $lastRpe = $lastSet['rpe'] ?? null;
+            $lastReps = $lastSet['reps'] ?? null;
+            
+            if ($lastRpe && $lastReps) {
+                // Adjust based on RPE from last set
+                if ($lastRpe <= 6) {
+                    // Easy - could do more
+                    $suggestedReps = min($lastReps + 1, $plannedReps + 2);
+                } elseif ($lastRpe >= 9) {
+                    // Very hard - should reduce
+                    $suggestedReps = max($lastReps - 2, max(1, $plannedReps - 3));
+                } elseif ($lastRpe >= 8) {
+                    // Hard - reduce slightly
+                    $suggestedReps = max($lastReps - 1, max(1, $plannedReps - 1));
+                } else {
+                    // Moderate (7-8) - keep similar
+                    $suggestedReps = $lastReps;
+                }
+            }
+        }
+        
+        // For later sets, typically reduce reps slightly due to fatigue
+        if ($setNumber > 2) {
+            $fatigueReduction = min(2, $setNumber - 2);
+            $suggestedReps = max(1, $suggestedReps - $fatigueReduction);
+        }
+        
+        return $suggestedReps;
+    }
+
+    public function completeSet(string $exerciseSlug, int $setNumber, int $reps, float $weight, ?int $rpe = null, ?int $timeSpent = null): void
+    {
+        $explosiveness = null;
+        if ($timeSpent && $timeSpent > 0 && $reps > 0) {
+            // Calculate explosiveness as reps per second (higher = more explosive)
+            $explosiveness = round($reps / $timeSpent, 3);
+        }
+        
         $this->completedSets[$exerciseSlug][$setNumber] = [
             'reps' => $reps,
             'weight' => $weight,
             'rpe' => $rpe,
+            'time_spent' => $timeSpent,
+            'explosiveness' => $explosiveness,
             'notes' => $this->completedSets[$exerciseSlug][$setNumber]['notes'] ?? '',
         ];
 
         $this->saveCompletedSet($exerciseSlug, $setNumber);
         $this->checkForPersonalRecord($exerciseSlug, $weight, $reps);
+        
+        // Track explosiveness if available
+        if ($explosiveness) {
+            $this->trackExplosiveness($exerciseSlug, $explosiveness);
+        }
+    }
+    
+    /**
+     * Track explosiveness data for performance analysis
+     */
+    private function trackExplosiveness(string $exerciseSlug, float $explosiveness): void
+    {
+        if (!$this->training->athlete) {
+            return;
+        }
+        
+        $exerciseEnum = Exercise::from($exerciseSlug);
+        $canonicalExercise = $exerciseEnum->synonym();
+        
+        // Store explosiveness as a performance indicator using canonical exercise
+        PerformanceIndicator::create([
+            'athlete_id' => $this->training->athlete->id,
+            'exercise' => $canonicalExercise,
+            'type' => 'power',
+            'label' => 'explosiveness',
+            'value' => $explosiveness,
+            'unit' => 'reps/sec',
+        ]);
     }
 
     private function saveCompletedSet(string $exerciseSlug, int $setNumber): void
@@ -230,10 +409,12 @@ class Training extends Component
                 'set_number' => $setNumber,
             ],
             [
-                'reps' => $setData['reps'],
-                'weight' => $setData['weight'],
-                'rpe' => $setData['rpe'],
-                'notes' => $setData['notes'],
+                'reps' => $setData['reps'] ?? null,
+                'weight' => $setData['weight'] ?? null,
+                'rpe' => $setData['rpe'] ?? null,
+                'time_spent_seconds' => $setData['time_spent'] ?? null,
+                'explosiveness' => $setData['explosiveness'] ?? null,
+                'notes' => $setData['notes'] ?? null,
                 'completed_at' => now(),
             ]
         );
@@ -248,27 +429,41 @@ class Training extends Component
             return;
         }
 
-        // Calculate estimated 1RM
-        $estimatedOneRM = $this->calculateEstimatedOneRM($weight, $reps);
+        // Check for rep-specific PR (actual weight for this rep count)
+        $repLabel = $reps === 1 ? '1RM' : $reps . 'RM';
+        $this->checkRepSpecificPR($exerciseEnum, $weight, $reps, $repLabel);
         
-        // Get current 1RM
-        $currentOneRM = PerformanceIndicator::where('athlete_id', $this->training->athlete->id)
-            ->where('exercise', $exerciseEnum)
+        // Also update estimated 1RM if this is a new record
+        if ($reps > 1) {
+            $estimatedOneRM = $this->calculateEstimatedOneRM($weight, $reps);
+            $this->updateEstimated1RM($exerciseEnum, $estimatedOneRM);
+        }
+    }
+
+    private function checkRepSpecificPR(Exercise $exerciseEnum, float $weight, int $reps, string $repLabel): void
+    {
+        // Always use the canonical exercise for consistency
+        $canonicalExercise = $exerciseEnum->synonym();
+        
+        // Get current PR for this specific rep count (check both current and synonym)
+        $currentPR = PerformanceIndicator::where('athlete_id', $this->training->athlete->id)
+            ->whereIn('exercise', [$exerciseEnum, $canonicalExercise])
+            ->where('label', $repLabel)
             ->where('type', 'strength')
             ->latest()
             ->value('value') ?? 0;
 
-        if ($estimatedOneRM > $currentOneRM) {
-            // Update 1RM
+        if ($weight > $currentPR) {
+            // Always create/update using the canonical exercise
             PerformanceIndicator::updateOrCreate(
                 [
                     'athlete_id' => $this->training->athlete->id,
-                    'exercise' => $exerciseEnum,
+                    'exercise' => $canonicalExercise,
+                    'label' => $repLabel,
                     'type' => 'strength',
                 ],
                 [
-                    'label' => '1RM',
-                    'value' => $estimatedOneRM,
+                    'value' => $weight,
                     'unit' => 'kg',
                 ]
             );
@@ -276,8 +471,40 @@ class Training extends Component
             // Dispatch PR achieved event
             $this->dispatch('pr-achieved', [
                 'exercise' => $exerciseEnum->displayName(),
-                'weight' => $estimatedOneRM,
+                'weight' => $weight,
+                'reps' => $reps,
+                'type' => $repLabel,
             ]);
+        }
+    }
+
+    private function updateEstimated1RM(Exercise $exerciseEnum, float $estimatedOneRM): void
+    {
+        // Always use the canonical exercise for consistency
+        $canonicalExercise = $exerciseEnum->synonym();
+        
+        // Get current 1RM (check both current and synonym)
+        $current1RM = PerformanceIndicator::where('athlete_id', $this->training->athlete->id)
+            ->whereIn('exercise', [$exerciseEnum, $canonicalExercise])
+            ->where('label', '1RM')
+            ->where('type', 'strength')
+            ->latest()
+            ->value('value') ?? 0;
+
+        if ($estimatedOneRM > $current1RM) {
+            // Always create/update using the canonical exercise
+            PerformanceIndicator::updateOrCreate(
+                [
+                    'athlete_id' => $this->training->athlete->id,
+                    'exercise' => $canonicalExercise,
+                    'label' => '1RM',
+                    'type' => 'strength',
+                ],
+                [
+                    'value' => $estimatedOneRM,
+                    'unit' => 'kg',
+                ]
+            );
         }
     }
 
@@ -287,8 +514,56 @@ class Training extends Component
             return $weight;
         }
         
-        // Brzycki formula
-        return $weight * (36 / (37 - $reps));
+        // Brzycki formula with rounding to nearest whole number
+        $estimatedOneRM = $weight * (36 / (37 - $reps));
+        return round($estimatedOneRM);
+    }
+
+    /**
+     * Extend weight suggestions when sets are added without affecting original pattern
+     */
+    /** 
+     * @param array<int, float> $baseWeights
+     * @return array<int, float>
+     */
+    private function extendWeightSuggestions(array $baseWeights, int $targetSets, Exercise $exerciseEnum): array
+    {
+        if (count($baseWeights) >= $targetSets) {
+            return array_slice($baseWeights, 0, $targetSets);
+        }
+        
+        $extended = $baseWeights;
+        $lastWeight = end($baseWeights) ?: 0.0;
+        $minimumWeight = $this->getMinimumWeight($exerciseEnum);
+        
+        // For additional sets, suggest same weight as the last set or slightly reduced
+        for ($i = count($baseWeights); $i < $targetSets; $i++) {
+            // For strength exercises, use same weight or reduce by 5-10%
+            if ($exerciseEnum->category()->value === 'strength') {
+                $additionalWeight = max($minimumWeight, round($lastWeight * 0.95));
+            } else {
+                // For other exercises, keep same weight
+                $additionalWeight = $lastWeight;
+            }
+            $extended[] = $additionalWeight;
+        }
+        
+        return $extended;
+    }
+
+    /**
+     * Get minimum weight for an exercise (same logic as CalculateWeightProgression)
+     */
+    private function getMinimumWeight(Exercise $exerciseEnum): float
+    {
+        return match($exerciseEnum) {
+            Exercise::BarbellBackSquat,
+            Exercise::FlatBarbellBenchPress,
+            Exercise::BenchPress,
+            Exercise::Deadlift,
+            Exercise::RomanianDeadlift => 20.0,
+            default => 0.0,
+        };
     }
 
     public function addSet(string $exerciseSlug): void
@@ -296,6 +571,47 @@ class Training extends Component
         $currentCount = $this->exerciseSetsCount[$exerciseSlug] ?? 1;
         if ($currentCount < 10) {
             $this->exerciseSetsCount[$exerciseSlug] = $currentCount + 1;
+            
+            // Track set addition preference for future suggestions
+            $this->trackSetAddition($exerciseSlug, $currentCount + 1);
+        }
+    }
+    
+    /**
+     * Track when user adds sets for future training suggestions
+     */
+    private function trackSetAddition(string $exerciseSlug, int $newSetCount): void
+    {
+        if (!$this->training->athlete) {
+            return;
+        }
+        
+        $exerciseEnum = Exercise::from($exerciseSlug);
+        $canonicalExercise = $exerciseEnum->synonym();
+        $originalSets = null;
+        
+        // Find the original planned sets for this exercise
+        foreach ($this->plannedExercises as $exercise) {
+            if ($exercise->exerciseSlug === $exerciseSlug) {
+                $originalSets = $exercise->sets;
+                break;
+            }
+        }
+        
+        if ($originalSets && $newSetCount > $originalSets) {
+            // Store the preference as a performance indicator using canonical exercise
+            PerformanceIndicator::updateOrCreate(
+                [
+                    'athlete_id' => $this->training->athlete->id,
+                    'exercise' => $canonicalExercise,
+                    'type' => 'preference',
+                    'label' => 'preferred_sets',
+                ],
+                [
+                    'value' => $newSetCount,
+                    'unit' => 'sets',
+                ]
+            );
         }
     }
 
@@ -379,7 +695,7 @@ class Training extends Component
     /**
      * Handle updates to completedSets to trigger PR checks
      */
-    public function updated($propertyName): void
+    public function updated(string $propertyName): void
     {
         // Only handle completedSets updates
         if (!str_starts_with($propertyName, 'completedSets.')) {
@@ -482,7 +798,7 @@ class Training extends Component
         }
     }
 
-    public function render()
+    public function render(): \Illuminate\View\View
     {
         return view('livewire.training');
     }

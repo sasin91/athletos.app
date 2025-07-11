@@ -266,10 +266,13 @@ class OnboardingController extends Controller
                 'current_deadlift' => Exercise::Deadlift,
             };
 
+            // Always use canonical exercise for consistency
+            $canonicalExercise = $exercise->synonym();
+
             PerformanceIndicator::create([
                 'athlete_id' => $athlete->id,
-                'exercise' => $exercise,
-                'label' => $exercise->displayName() . ' 1RM',
+                'exercise' => $canonicalExercise,
+                'label' => '1RM',
                 'value' => $value,
                 'unit' => 'kg',
                 'type' => 'strength',
@@ -289,10 +292,13 @@ class OnboardingController extends Controller
                 'top_deadlift' => Exercise::Deadlift,
             };
 
+            // Always use canonical exercise for consistency
+            $canonicalExercise = $exercise->synonym();
+
             PerformanceIndicator::create([
                 'athlete_id' => $athlete->id,
-                'exercise' => $exercise,
-                'label' => $exercise->displayName() . ' 1RM',
+                'exercise' => $canonicalExercise,
+                'label' => '1RM',
                 'value' => $value,
                 'unit' => 'kg',
                 'type' => 'strength',

@@ -73,6 +73,42 @@
                 </div>
                 @endif
 
+                <!-- Exercise Cues -->
+                @php
+                    $cues = $exercise->getEffectiveCues();
+                    $hasCustomCues = !empty($exercise->cues);
+                @endphp
+                @if(!empty($cues))
+                <div class="mb-6" x-data="{ showCues: false }">
+                    <button @click="showCues = !showCues" 
+                        class="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors">
+                        <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showCues }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                        <span>{{ $hasCustomCues ? 'Phase-Specific' : 'General' }} Technique Tips</span>
+                    </button>
+                    <div x-show="showCues" x-collapse class="mt-3">
+                        <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                            @if($hasCustomCues)
+                            <div class="mb-3 text-xs font-medium text-green-700 dark:text-green-300 uppercase tracking-wide">
+                                {{ $this->training->trainingPhase->name ?? 'Current Phase' }} Focus
+                            </div>
+                            @endif
+                            <ul class="space-y-2 text-sm text-green-800 dark:text-green-200">
+                                @foreach($cues as $cue)
+                                <li class="flex items-start gap-2">
+                                    <svg class="w-4 h-4 mt-0.5 text-green-600 dark:text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4"></path>
+                                    </svg>
+                                    <span>{{ $cue }}</span>
+                                </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                @endif
+
                 <!-- Exercise Details -->
                 <div class="space-y-4 mb-8">
                     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
@@ -119,19 +155,39 @@
                                         </button>
                                     @endif
                                 </div>
-                                <!-- Set Timer -->
+                                <!-- Enhanced Set & Rest Timer -->
                                 <div x-data="{
+                                mode: 'set', // 'set' or 'rest'
                                 running: false,
                                 seconds: 0,
+                                restSeconds: 120, // 2 minutes default rest
                                 interval: null,
+                                isResting: false,
+                                
                                 start() {
                                     if (!this.running) {
                                         this.running = true;
-                                        this.interval = setInterval(() => { this.seconds++ }, 1000);
-                                        $wire.startTotalTimer();
+                                        this.interval = setInterval(() => { 
+                                            if (this.isResting) {
+                                                this.restSeconds--;
+                                                if (this.restSeconds <= 0) {
+                                                    this.completeRest();
+                                                }
+                                            } else {
+                                                this.seconds++;
+                                            }
+                                        }, 1000);
+                                        
+                                        // Ensure total timer starts when first set timer starts
+                                        if (!window.totalTimerStarted) {
+                                            $wire.startTotalTimer();
+                                            window.totalTimerStarted = true;
+                                        }
+                                        
                                         window.activeSetTimers = (window.activeSetTimers || 0) + 1;
                                     }
                                 },
+                                
                                 pause() {
                                     if (this.running) {
                                         this.running = false;
@@ -143,26 +199,86 @@
                                         }
                                     }
                                 },
-                                reset() { this.pause(); this.seconds = 0; }
-                            }" class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/30 px-3 py-2 rounded-lg">
-                                    <span class="text-xs text-blue-700 dark:text-blue-200">Timer</span>
-                                    <span class="font-mono text-xs" x-text="`${String(Math.floor(seconds/60)).padStart(2, '0')}:${String(seconds%60).padStart(2, '0')}`"></span>
-                                    <button type="button" @click="start()" x-show="!running" class="px-2 py-1 text-xs rounded bg-blue-600 text-white">▶</button>
-                                    <button type="button" @click="pause()" x-show="running" class="px-2 py-1 text-xs rounded bg-yellow-500 text-white">⏸</button>
-                                    <button type="button" @click="reset()" class="px-2 py-1 text-xs rounded bg-gray-400 text-white">⟲</button>
+                                
+                                reset() { 
+                                    this.pause(); 
+                                    this.seconds = 0; 
+                                    this.restSeconds = 120;
+                                    this.isResting = false;
+                                    this.mode = 'set';
+                                },
+                                
+                                startRest() {
+                                    this.isResting = true;
+                                    this.mode = 'rest';
+                                    this.restSeconds = 120; // Reset to 2 minutes
+                                    this.start();
+                                },
+                                
+                                completeRest() {
+                                    this.pause();
+                                    this.isResting = false;
+                                    this.mode = 'set';
+                                    this.seconds = 0;
+                                    // Optional: Play sound or vibration
+                                    if (navigator.vibrate) {
+                                        navigator.vibrate([200, 100, 200]);
+                                    }
+                                },
+                                
+                                skipRest() {
+                                    this.completeRest();
+                                }
+                            }" class="flex items-center gap-2 px-3 py-2 rounded-lg"
+                            :class="isResting ? 'bg-green-50 dark:bg-green-900/30' : 'bg-blue-50 dark:bg-blue-900/30'">
+                                    
+                                    <span class="text-xs font-medium" 
+                                        :class="isResting ? 'text-green-700 dark:text-green-200' : 'text-blue-700 dark:text-blue-200'"
+                                        x-text="isResting ? 'Rest' : 'Set'"></span>
+                                    
+                                    <span class="font-mono text-xs" 
+                                        :class="isResting ? 'text-green-700 dark:text-green-200' : 'text-blue-700 dark:text-blue-200'"
+                                        x-text="isResting 
+                                            ? `${String(Math.floor(restSeconds/60)).padStart(2, '0')}:${String(restSeconds%60).padStart(2, '0')}`
+                                            : `${String(Math.floor(seconds/60)).padStart(2, '0')}:${String(seconds%60).padStart(2, '0')}`"></span>
+                                    
+                                    <!-- Set Timer Controls -->
+                                    <div x-show="!isResting" class="flex items-center gap-1">
+                                        <button type="button" @click="start()" x-show="!running" class="px-2 py-1 text-xs rounded bg-blue-600 text-white">▶</button>
+                                        <button type="button" @click="pause()" x-show="running" class="px-2 py-1 text-xs rounded bg-yellow-500 text-white">⏸</button>
+                                        <button type="button" @click="startRest()" x-show="!running && seconds > 0" class="px-2 py-1 text-xs rounded bg-green-600 text-white">Rest</button>
+                                        <button type="button" @click="reset()" class="px-2 py-1 text-xs rounded bg-gray-400 text-white">⟲</button>
+                                    </div>
+                                    
+                                    <!-- Rest Timer Controls -->
+                                    <div x-show="isResting" class="flex items-center gap-1">
+                                        <button type="button" @click="pause()" x-show="running" class="px-2 py-1 text-xs rounded bg-yellow-500 text-white">⏸</button>
+                                        <button type="button" @click="start()" x-show="!running" class="px-2 py-1 text-xs rounded bg-green-600 text-white">▶</button>
+                                        <button type="button" @click="skipRest()" class="px-2 py-1 text-xs rounded bg-blue-600 text-white">Skip</button>
+                                    </div>
                                 </div>
                             </div>
 
                             <!-- Input Fields -->
                             <div class="space-y-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reps</label>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Reps</label>
+                                        @php
+                                            $suggestedReps = $this->suggestedReps[$exercise->exerciseSlug][$set] ?? null;
+                                        @endphp
+                                        @if($suggestedReps)
+                                            <span class="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                                Suggested: {{ $suggestedReps }}
+                                            </span>
+                                        @endif
+                                    </div>
                                     <input type="number"
                                         wire:model.live.debounce.500ms="completedSets.{{ $exercise->exerciseSlug }}.{{ $set }}.reps"
                                         min="0"
                                         max="50"
                                         class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100"
-                                        placeholder="0">
+                                        placeholder="{{ $suggestedReps ?? '0' }}">
                                 </div>
 
                                 <div>
@@ -211,7 +327,7 @@
                     <!-- Notes Section -->
                     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Exercise Notes</label>
-                        <textarea wire:model.live="exerciseNotes.{{ $exercise->exerciseSlug }}"
+                        <textarea wire:model.blur="exerciseNotes.{{ $exercise->exerciseSlug }}"
                             rows="3"
                             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100"
                             placeholder="How did this exercise feel? Any adjustments needed?"></textarea>
@@ -375,7 +491,7 @@
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Additional Notes (Optional)
                         </label>
-                        <textarea wire:model.live="notes"
+                        <textarea wire:model.blur="notes"
                             rows="3"
                             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100"
                             placeholder="How did the training feel? Any adjustments needed for next time?"></textarea>
@@ -431,30 +547,118 @@
                     seconds: $wire.entangle('totalTimerSeconds'),
                     started: $wire.entangle('totalTimerStarted'),
                     interval: null,
+                    lastUpdateTime: null,
+                    wakeLock: null,
                     debounceTimeout: null,
-                    start() { 
+                    
+                    async start() { 
                         if (!this.running) { 
                             this.running = true; 
+                            this.lastUpdateTime = Date.now();
                             this.interval = setInterval(() => { 
-                                this.seconds++; 
-                                this.debouncedSync(); 
+                                this.tick();
                             }, 1000); 
+                            
+                            // Try to acquire wake lock to prevent screen sleep
+                            try {
+                                if ('wakeLock' in navigator) {
+                                    this.wakeLock = await navigator.wakeLock.request('screen');
+                                }
+                            } catch (err) {
+                                console.log('Wake lock failed:', err);
+                            }
                         } 
                     },
+                    
+                    tick() {
+                        const now = Date.now();
+                        const expectedTime = this.lastUpdateTime + 1000;
+                        const drift = now - expectedTime;
+                        
+                        // If significant drift (more than 2 seconds), adjust for time lost
+                        if (Math.abs(drift) > 2000) {
+                            const missedSeconds = Math.floor(drift / 1000);
+                            this.seconds += missedSeconds;
+                        }
+                        
+                        this.seconds++;
+                        this.lastUpdateTime = now;
+                        this.debouncedSync();
+                    },
+                    
                     pause() {
                         if (this.running) {
                             this.running = false;
                             clearInterval(this.interval);
+                            
+                            // Release wake lock
+                            if (this.wakeLock) {
+                                this.wakeLock.release();
+                                this.wakeLock = null;
+                            }
                         }
                     },
+                    
                     debouncedSync() {
                         clearTimeout(this.debounceTimeout);
-                        this.debounceTimeout = setTimeout(() => { $wire.updateTotalTimer(this.seconds); }, 2000);
+                        this.debounceTimeout = setTimeout(() => { 
+                            $wire.updateTotalTimer(this.seconds); 
+                        }, 3000);
                     },
+                    
+                    handleVisibilityChange() {
+                        if (document.hidden) {
+                            // Page became hidden - store current time
+                            localStorage.setItem('timerHiddenTime', Date.now().toString());
+                        } else {
+                            // Page became visible - check for time passed
+                            const hiddenTime = localStorage.getItem('timerHiddenTime');
+                            if (hiddenTime && this.running) {
+                                const timePassed = Math.floor((Date.now() - parseInt(hiddenTime)) / 1000);
+                                if (timePassed > 0) {
+                                    this.seconds += timePassed;
+                                    this.debouncedSync();
+                                }
+                            }
+                            localStorage.removeItem('timerHiddenTime');
+                        }
+                    },
+                    
                     init() {
-                        if (this.started && !this.interval) { this.start(); }
-                        this.$watch('started', value => { if (value) this.start(); });
+                        window.totalTimerStarted = this.started;
+                        
+                        if (this.started && !this.running) { 
+                            this.start(); 
+                        }
+                        
+                        this.$watch('started', value => { 
+                            window.totalTimerStarted = value;
+                            if (value && !this.running) this.start(); 
+                        });
+                        
                         window.addEventListener('pause-total-timer', () => { this.pause(); });
+                        
+                        // Handle page visibility changes to maintain timer accuracy
+                        document.addEventListener('visibilitychange', () => {
+                            this.handleVisibilityChange();
+                        });
+                        
+                        // Handle page unload
+                        window.addEventListener('beforeunload', () => {
+                            if (this.running) {
+                                localStorage.setItem('timerSeconds', this.seconds.toString());
+                                localStorage.setItem('timerRunning', 'true');
+                            }
+                        });
+                        
+                        // Restore timer state on reload
+                        const savedSeconds = localStorage.getItem('timerSeconds');
+                        const wasRunning = localStorage.getItem('timerRunning');
+                        if (savedSeconds && wasRunning === 'true' && this.started) {
+                            this.seconds = parseInt(savedSeconds);
+                            localStorage.removeItem('timerSeconds');
+                            localStorage.removeItem('timerRunning');
+                        }
                     }
                 }"
                 x-init="init()"
@@ -479,12 +683,18 @@
     <script>
         $wire.on('pr-achieved', ([{
             exercise,
-            weight
+            weight,
+            reps,
+            type
         }]) => {
+            const message = reps === 1 ? 
+                `New ${type}! ${exercise}: ${weight} kg` : 
+                `New ${type}! ${exercise}: ${weight} kg for ${reps} reps`;
+                
             Livewire.dispatch('notify', {
                 type: 'success',
-                title: 'New PR!',
-                message: `New PR! ${exercise}: ${weight} kg`
+                title: 'Personal Record!',
+                message: message
             });
 
             window.confetti({

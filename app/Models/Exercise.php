@@ -61,6 +61,8 @@ class Exercise extends Model
         'reps',
         'weight',
         'rpe',
+        'time_spent_seconds',
+        'explosiveness',
         'notes',
         'skipped',
         'skip_reason',
@@ -77,6 +79,8 @@ class Exercise extends Model
             'reps' => 'integer',
             'weight' => 'decimal:2',
             'rpe' => 'decimal:1',
+            'time_spent_seconds' => 'integer',
+            'explosiveness' => 'decimal:3',
             'skipped' => 'boolean',
             'completed_at' => 'datetime',
         ];

@@ -20,6 +20,7 @@ class PlannedExercise implements Wireable
         public string $difficulty,
         public array $tags,
         public ?string $notes = null,
+        public ?array $cues = null,
     ) {
     }
 
@@ -44,6 +45,7 @@ class PlannedExercise implements Wireable
             'difficulty' => $this->difficulty,
             'tags' => $this->tags,
             'notes' => $this->notes,
+            'cues' => $this->cues,
         ];
     }
 
@@ -64,7 +66,23 @@ class PlannedExercise implements Wireable
             difficulty: $value['difficulty'],
             tags: $value['tags'],
             notes: $value['notes'] ?? null,
+            cues: $value['cues'] ?? null,
         );
+    }
+
+    /**
+     * Get effective cues for this exercise - phase-specific cues if available,
+     * otherwise fall back to exercise enum defaults
+     */
+    public function getEffectiveCues(): array
+    {
+        // Return phase-specific cues if available
+        if (!empty($this->cues)) {
+            return $this->cues;
+        }
+        
+        // Fall back to exercise enum defaults
+        return $this->exercise->cues();
     }
 
     /**

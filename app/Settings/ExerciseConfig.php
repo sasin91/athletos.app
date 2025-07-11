@@ -26,6 +26,12 @@ class ExerciseConfig implements Arrayable, Wireable
          * @var array<int, float>|null
          */
         public ?array $rampingPercentages = null,
+        /**
+         * Phase-specific exercise cues and technique tips
+         * 
+         * @var array<string>|null
+         */
+        public ?array $cues = null,
     ) {
     }
 
@@ -44,6 +50,7 @@ class ExerciseConfig implements Arrayable, Wireable
             metadata: $data['metadata'] ?? [],
             day: $data['day'] ?? 1,
             rampingPercentages: $data['ramping_percentages'] ?? null,
+            cues: $data['cues'] ?? null,
         );
     }
 
@@ -62,6 +69,7 @@ class ExerciseConfig implements Arrayable, Wireable
             'metadata' => $this->metadata,
             'day' => $this->day,
             'ramping_percentages' => $this->rampingPercentages,
+            'cues' => $this->cues,
         ];
     }
 
@@ -88,6 +96,7 @@ class ExerciseConfig implements Arrayable, Wireable
             metadata: $value['metadata'] ?? [],
             day: $value['day'] ?? 1,
             rampingPercentages: $value['ramping_percentages'] ?? null,
+            cues: $value['cues'] ?? null,
         );
     }
 
@@ -164,6 +173,34 @@ class ExerciseConfig implements Arrayable, Wireable
             5 => [0.60, 0.70, 0.80, 0.90, 1.00],
             default => $this->generateLinearRamping(0.50),
         };
+    }
+
+    /**
+     * Get effective cues for this exercise
+     * Uses override if available, otherwise gets default from exercise enum
+     * 
+     * @return array<string>
+     */
+    public function getEffectiveCues(): array
+    {
+        // If we have override cues, use them
+        if ($this->cues !== null && !empty($this->cues)) {
+            return $this->cues;
+        }
+        
+        // Otherwise get defaults from the exercise enum
+        $exercise = $this->getExercise();
+        if ($exercise) {
+            return $exercise->cues();
+        }
+        
+        // Final fallback - generic cues
+        return [
+            'Maintain proper form throughout the movement',
+            'Focus on controlled movement patterns',
+            'Breathe consistently during execution',
+            'Listen to your body and adjust as needed',
+        ];
     }
 
     /**

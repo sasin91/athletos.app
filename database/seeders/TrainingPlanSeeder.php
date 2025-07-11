@@ -47,11 +47,13 @@ class TrainingPlanSeeder extends Seeder
                 // Day 1: Chest & Back
                 $this->createExerciseConfigWithDefaults(
                     Exercise::InclineDumbbellPress->value,
-                    4, '12-15', '70-75% 1RM', 90, 'Focus on perfect form, feel the chest working', 1
+                    4, '12-15', '70-75% 1RM', 90, 'Focus on perfect form, feel the chest working', 1, null,
+                    ['Set bench to 45-degree angle', 'Focus on muscle-mind connection', 'Slow controlled movements', 'Feel the chest stretch and contraction', 'Light weight, perfect form']
                 ),
                 $this->createExerciseConfigWithDefaults(
                     Exercise::CableChestFly->value,
-                    3, '15-20', '60-70% 1RM', 60, 'Low to mid cable position, feel chest stretch', 1
+                    3, '15-20', '60-70% 1RM', 60, 'Low to mid cable position, feel chest stretch', 1, null,
+                    ['Start with arms wide, feel chest stretch', 'Focus on squeezing pecs together', 'Controlled movement, no swinging', 'Mind-muscle connection is key']
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::Deadlift->value,
@@ -91,7 +93,15 @@ class TrainingPlanSeeder extends Seeder
                     rest_seconds: 120,
                     notes: 'Focus on perfect form, feel the muscle working',
                     day: 2,
-                    rampingPercentages: Exercise::BarbellBackSquat->rampingPercentages(4), // Copy defaults from enum
+                    rampingPercentages: Exercise::BarbellBackSquat->rampingPercentages(4),
+                    cues: [
+                        'Light weight focus - build movement pattern',
+                        'Find focus point ahead, keep eyes there',
+                        'Feel weight balanced across mid-foot',
+                        'Slow descent, feel quads and glutes working',
+                        'Drive through floor on way up',
+                        'Perfect form over heavy weight'
+                    ]
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::RomanianDeadlift->value,
@@ -269,7 +279,16 @@ class TrainingPlanSeeder extends Seeder
                     weight: '75-80% 1RM',
                     rest_seconds: 150,
                     notes: '3-1-3 tempo: 3s down, 1s pause, 3s up',
-                    day: 2
+                    day: 2,
+                    rampingPercentages: Exercise::BarbellBackSquat->rampingPercentages(5),
+                    cues: [
+                        'Tempo focus - control the weight',
+                        '3 seconds down - count in your head',
+                        '1 second pause at bottom - stay tight',
+                        '3 seconds up - controlled power',
+                        'Keep tension throughout range of motion',
+                        'Feel muscles working under tension'
+                    ]
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::RomanianDeadlift->value,
@@ -578,7 +597,16 @@ class TrainingPlanSeeder extends Seeder
                     weight: '85-90% 1RM',
                     rest_seconds: 180,
                     notes: 'Focus on speed and power',
-                    day: 1
+                    day: 1,
+                    rampingPercentages: Exercise::BarbellBackSquat->rampingPercentages(5),
+                    cues: [
+                        'Heavy weight - neural efficiency focus',
+                        'Controlled descent, explosive ascent',
+                        'Drive through floor with maximum force',
+                        'Stay tight throughout core',
+                        'Speed and power on the way up',
+                        'Rest fully between sets for power'
+                    ]
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::BenchPress->value,
@@ -632,7 +660,16 @@ class TrainingPlanSeeder extends Seeder
                     weight: '90-95% 1RM',
                     rest_seconds: 240,
                     notes: 'Maximal effort, perfect form',
-                    day: 1
+                    day: 1,
+                    rampingPercentages: Exercise::BarbellBackSquat->rampingPercentages(3),
+                    cues: [
+                        'Maximal strength - near personal limits',
+                        'Perfect setup is critical with heavy weight',
+                        'Big breath, hold throughout rep',
+                        'Controlled descent, maintain tightness',
+                        'Explosive drive through floor',
+                        'Complete mental focus and commitment'
+                    ]
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::BenchPress->value,
@@ -733,12 +770,16 @@ class TrainingPlanSeeder extends Seeder
         int $rest_seconds = 120,
         ?string $notes = null,
         int $day = 1,
-        ?array $customRampingPercentages = null
+        ?array $customRampingPercentages = null,
+        ?array $cues = null
     ): ExerciseConfig {
         $exerciseEnum = Exercise::from($exercise);
         
         // Use custom ramping if provided, otherwise copy from enum defaults
         $rampingPercentages = $customRampingPercentages ?? $exerciseEnum->rampingPercentages($sets);
+        
+        // Use provided cues or fallback to enum defaults
+        $effectiveCues = $cues ?? $exerciseEnum->cues();
         
         return new ExerciseConfig(
             exercise: $exercise,
@@ -749,6 +790,7 @@ class TrainingPlanSeeder extends Seeder
             notes: $notes,
             day: $day,
             rampingPercentages: $rampingPercentages,
+            cues: $effectiveCues,
         );
     }
 }

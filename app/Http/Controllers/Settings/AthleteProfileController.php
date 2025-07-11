@@ -83,19 +83,23 @@ class AthleteProfileController extends Controller
             $value = $stats[$field] ?? null;
 
             if ($value !== null && $value > 0) {
-                // Delete any existing performance indicator for this exercise to avoid duplicates
+                // Always use canonical exercise for consistency
+                $canonicalExercise = $exerciseEnum->synonym();
+                
+                // Delete any existing performance indicator for this exercise (check both current and canonical)
                 \App\Models\PerformanceIndicator::where('athlete_id', $athlete->id)
-                    ->where('exercise', $exerciseEnum)
+                    ->whereIn('exercise', [$exerciseEnum, $canonicalExercise])
                     ->where('type', 'strength')
+                    ->where('label', '1RM')
                     ->delete();
 
-                // Create new performance indicator
+                // Create new performance indicator using canonical exercise
                 \App\Models\PerformanceIndicator::create([
                     'athlete_id' => $athlete->id,
-                    'exercise' => $exerciseEnum,
-                    'label' => $exerciseEnum->oneRepMaxDisplayName() . ' 1RM',
+                    'exercise' => $canonicalExercise,
+                    'label' => '1RM',
                     'value' => $value,
-                    'unit' => 'lbs',
+                    'unit' => 'kg',
                     'type' => 'strength',
                 ]);
             }

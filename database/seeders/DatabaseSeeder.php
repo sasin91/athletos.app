@@ -52,10 +52,13 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($performanceIndicators as $indicator) {
+            // Always use canonical exercise for consistency
+            $canonicalExercise = $indicator['exercise']->synonym();
+            
             PerformanceIndicator::create([
                 'athlete_id' => $athlete->id,
-                'exercise' => $indicator['exercise'],
-                'label' => $indicator['exercise']->oneRepMaxDisplayName() . ' 1RM',
+                'exercise' => $canonicalExercise,
+                'label' => '1RM',
                 'value' => $indicator['value'],
                 'unit' => 'kg',
                 'type' => 'strength',
