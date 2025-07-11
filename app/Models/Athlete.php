@@ -165,13 +165,13 @@ class Athlete extends Model
         return $this->hasManyThrough(
             related: Exercise::class,
             through: Training::class,
-            firstKey: 'id',
-            secondKey: 'training_id',
-            localKey: 'id',
-            secondLocalKey: 'athlete_id',
+            firstKey: 'athlete_id', // trainings.athlete_id
+            secondKey: 'training_id', // exercises.training_id  
+            localKey: 'id', // athletes.id
+            secondLocalKey: 'id', // trainings.id
         )
-            ->completed()
-            ->latest();
+            ->whereNotNull('exercises.completed_at')
+            ->latest('exercises.created_at');
     }
 
     /**

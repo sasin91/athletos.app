@@ -497,4 +497,153 @@ enum Exercise: string
             default => $this,
         };
     }
+
+    /**
+     * Get default ramping percentages for this exercise based on sets count
+     * Returns exercise-specific ramping patterns
+     * 
+     * @param int $sets Number of sets
+     * @return array<int, float> Ramping percentages for each set
+     */
+    public function rampingPercentages(int $sets): array
+    {
+        return match($this) {
+            // Main Compound Lifts - Conservative ramping for safety
+            self::BarbellBackSquat => match($sets) {
+                1 => [1.00],
+                2 => [0.85, 1.00],
+                3 => [0.75, 0.85, 1.00],
+                4 => [0.60, 0.70, 0.80, 1.00],
+                5 => [0.55, 0.65, 0.75, 0.85, 1.00],
+                default => $this->generateLinearRamping($sets, 0.50),
+            },
+            
+            self::BenchPress, self::FlatBarbellBenchPress => match($sets) {
+                1 => [1.00],
+                2 => [0.85, 1.00],
+                3 => [0.80, 0.90, 1.00],
+                4 => [0.70, 0.80, 0.90, 1.00],
+                5 => [0.60, 0.70, 0.80, 0.90, 1.00],
+                default => $this->generateLinearRamping($sets, 0.55),
+            },
+            
+            self::Deadlift => match($sets) {
+                1 => [1.00],
+                2 => [0.90, 1.00],
+                3 => [0.80, 0.90, 1.00],
+                4 => [0.70, 0.80, 0.90, 1.00],
+                5 => [0.65, 0.75, 0.85, 0.95, 1.00],
+                default => $this->generateLinearRamping($sets, 0.60),
+            },
+            
+            // Upper Body Isolation - Moderate ramping
+            self::InclineDumbbellPress, self::DeclineDumbbellPress => match($sets) {
+                1 => [1.00],
+                2 => [0.80, 1.00],
+                3 => [0.75, 0.85, 1.00],
+                4 => [0.70, 0.80, 0.90, 1.00],
+                5 => [0.65, 0.75, 0.85, 0.95, 1.00],
+                default => $this->generateLinearRamping($sets, 0.60),
+            },
+            
+            self::DumbbellCurls, self::SideLateralRaises => match($sets) {
+                1 => [1.00],
+                2 => [0.85, 1.00],
+                3 => [0.80, 0.90, 1.00],
+                4 => [0.75, 0.85, 0.95, 1.00],
+                5 => [0.70, 0.80, 0.90, 0.95, 1.00],
+                default => $this->generateLinearRamping($sets, 0.65),
+            },
+            
+            // Cable Exercises - Smooth progression
+            self::CableChestFly, self::LatPulldown, self::SeatedCableRow => match($sets) {
+                1 => [1.00],
+                2 => [0.85, 1.00],
+                3 => [0.80, 0.90, 1.00],
+                4 => [0.75, 0.85, 0.95, 1.00],
+                5 => [0.70, 0.80, 0.90, 0.95, 1.00],
+                default => $this->generateLinearRamping($sets, 0.65),
+            },
+            
+            // Machine Exercises - Moderate ramping
+            self::LegExtensions, self::SeatedHamstringCurls, self::LegPress => match($sets) {
+                1 => [1.00],
+                2 => [0.80, 1.00],
+                3 => [0.75, 0.90, 1.00],
+                4 => [0.70, 0.80, 0.90, 1.00],
+                5 => [0.65, 0.75, 0.85, 0.95, 1.00],
+                default => $this->generateLinearRamping($sets, 0.60),
+            },
+            
+            // Unilateral Exercises - Progressive ramping
+            self::OneArmDumbbellRow, self::DumbbellLunges => match($sets) {
+                1 => [1.00],
+                2 => [0.85, 1.00],
+                3 => [0.80, 0.90, 1.00],
+                4 => [0.75, 0.85, 0.95, 1.00],
+                5 => [0.70, 0.80, 0.90, 0.95, 1.00],
+                default => $this->generateLinearRamping($sets, 0.65),
+            },
+            
+            // Accessory Movements - Moderate ramping
+            self::RomanianDeadlift => match($sets) {
+                1 => [1.00],
+                2 => [0.80, 1.00],
+                3 => [0.75, 0.85, 1.00],
+                4 => [0.70, 0.80, 0.90, 1.00],
+                5 => [0.65, 0.75, 0.85, 0.95, 1.00],
+                default => $this->generateLinearRamping($sets, 0.60),
+            },
+            
+            // Bodyweight/Activation - Consistent intensity
+            self::GluteBridge, self::Plank, self::BirdDog => array_fill(0, $sets, 1.00),
+            
+            // Mobility/Yoga - Consistent intensity  
+            self::BretzelStretch, self::LungeStretch, self::ChildsPose, self::SeatedForwardFold,
+            self::CobraStretch, self::DownwardDog, self::PigeonPose, self::CatCowStretch,
+            self::BridgePose, self::ButterflyPose, self::FrogPose, self::HangingStretch,
+            self::LizardPose, self::SphinxPose, self::SupineTwist, self::WarriorPose => array_fill(0, $sets, 1.00),
+            
+            // Calves - Light ramping
+            self::StandingCalfRaise => match($sets) {
+                1 => [1.00],
+                2 => [0.90, 1.00],
+                3 => [0.85, 0.95, 1.00],
+                4 => [0.80, 0.90, 0.95, 1.00],
+                5 => [0.75, 0.85, 0.90, 0.95, 1.00],
+                default => $this->generateLinearRamping($sets, 0.70),
+            },
+            
+            // Default pattern for any missed exercises
+            default => match($sets) {
+                1 => [1.00],
+                2 => [0.85, 1.00], 
+                3 => [0.80, 0.90, 1.00],
+                4 => [0.70, 0.80, 0.90, 1.00],
+                5 => [0.60, 0.70, 0.80, 0.90, 1.00],
+                default => $this->generateLinearRamping($sets, 0.50),
+            },
+        };
+    }
+
+    /**
+     * Generate linear ramping from start percentage to 100%
+     * 
+     * @param int $sets Total number of sets
+     * @param float $startPercentage Starting percentage (0.0 to 1.0)
+     * @return array<int, float> Progressive percentages
+     */
+    private function generateLinearRamping(int $sets, float $startPercentage): array
+    {
+        if ($sets <= 1) {
+            return [1.00];
+        }
+        
+        $percentages = [];
+        for ($set = 1; $set <= $sets; $set++) {
+            $percentage = $startPercentage + ((1.0 - $startPercentage) * ($set / $sets));
+            $percentages[] = round($percentage, 2);
+        }
+        return $percentages;
+    }
 } 

@@ -17,6 +17,15 @@ class ExerciseConfig implements Arrayable, Wireable
         public ?string $notes = null,
         public array $metadata = [],
         public int $day = 1,
+        /**
+         * Ramping percentages for progressive weight loading across sets
+         * Format: [percentage1, percentage2, ...]
+         * Example: [0.80, 0.90, 1.00] for 3 sets
+         * If null, will use default ramping based on number of sets
+         * 
+         * @var array<int, float>|null
+         */
+        public ?array $rampingPercentages = null,
     ) {
     }
 
@@ -34,6 +43,7 @@ class ExerciseConfig implements Arrayable, Wireable
             notes: $data['notes'] ?? null,
             metadata: $data['metadata'] ?? [],
             day: $data['day'] ?? 1,
+            rampingPercentages: $data['ramping_percentages'] ?? null,
         );
     }
 
@@ -51,6 +61,7 @@ class ExerciseConfig implements Arrayable, Wireable
             'notes' => $this->notes,
             'metadata' => $this->metadata,
             'day' => $this->day,
+            'ramping_percentages' => $this->rampingPercentages,
         ];
     }
 
@@ -76,6 +87,7 @@ class ExerciseConfig implements Arrayable, Wireable
             notes: $value['notes'] ?? null,
             metadata: $value['metadata'] ?? [],
             day: $value['day'] ?? 1,
+            rampingPercentages: $value['ramping_percentages'] ?? null,
         );
     }
 
@@ -101,5 +113,69 @@ class ExerciseConfig implements Arrayable, Wireable
     public function setRestMinutes(float $minutes): void
     {
         $this->rest_seconds = (int) ($minutes * 60);
+    }
+
+    /**
+     * Get ramping percentages for this exercise
+     * Returns configured percentages or defaults based on exercise type
+     * 
+     * @return array<int, float>|null
+     */
+    public function getRampingPercentages(): ?array
+    {
+        return $this->rampingPercentages;
+    }
+
+    /**
+     * Set ramping percentages for this exercise
+     * 
+     * @param array<int, float>|null $percentages
+     */
+    public function setRampingPercentages(?array $percentages): void
+    {
+        $this->rampingPercentages = $percentages;
+    }
+
+    /**
+     * Get effective ramping percentages for this exercise
+     * Uses override if available, otherwise gets default from exercise enum
+     * 
+     * @return array<int, float>
+     */
+    public function getEffectiveRampingPercentages(): array
+    {
+        // If we have override percentages, use them
+        if ($this->rampingPercentages !== null) {
+            return $this->rampingPercentages;
+        }
+        
+        // Otherwise get defaults from the exercise enum
+        $exercise = $this->getExercise();
+        if ($exercise) {
+            return $exercise->rampingPercentages($this->sets);
+        }
+        
+        // Final fallback - basic ramping
+        return match($this->sets) {
+            1 => [1.00],
+            2 => [0.85, 1.00],
+            3 => [0.80, 0.90, 1.00],
+            4 => [0.70, 0.80, 0.90, 1.00],
+            5 => [0.60, 0.70, 0.80, 0.90, 1.00],
+            default => $this->generateLinearRamping(0.50),
+        };
+    }
+
+    /**
+     * Generate linear ramping from start percentage to 100%
+     */
+    private function generateLinearRamping(float $startPercentage): array
+    {
+        $percentages = [];
+        for ($set = 1; $set <= $this->sets; $set++) {
+            $percentage = $startPercentage + ((1.0 - $startPercentage) * ($set / $this->sets));
+            $percentages[] = round($percentage, 2);
+        }
+        return $percentages;
     }
 } 

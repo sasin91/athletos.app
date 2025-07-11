@@ -23,7 +23,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('trainings/{training}/complete', [TrainingCompleteController::class, 'show'])->name('trainings.complete.show');
         Route::post('trainings/{training}/complete', [TrainingCompleteController::class, 'store'])->name('trainings.complete');
         
-        Route::get('training-plans/{trainingPlan}', function() { return view('welcome'); })->name('training-plans.show');
+        Route::get('training-plans/create', [App\Http\Controllers\TrainingPlanController::class, 'create'])->name('training-plans.create');
+        Route::post('training-plans', [App\Http\Controllers\TrainingPlanController::class, 'store'])->name('training-plans.store');
+        Route::get('training-plans/{trainingPlan}', [App\Http\Controllers\TrainingPlanController::class, 'show'])->name('training-plans.show');
         Route::post('training-plans/{trainingPlan}/assign', [App\Http\Controllers\TrainingPlanController::class, 'assign'])->name('training-plans.assign');
 
         Route::get('exercises/{exercise:slug}', [App\Http\Controllers\ExerciseController::class, 'show'])->name('exercises.show');

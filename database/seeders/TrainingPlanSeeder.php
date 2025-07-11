@@ -45,23 +45,13 @@ class TrainingPlanSeeder extends Seeder
         $primingSettings = new TrainingPhaseSettings(
             exercises: [
                 // Day 1: Chest & Back
-                new ExerciseConfig(
-                    exercise: Exercise::InclineDumbbellPress->value,
-                    sets: 4,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
-                    rest_seconds: 90,
-                    notes: 'Focus on perfect form, feel the chest working',
-                    day: 1
+                $this->createExerciseConfigWithDefaults(
+                    Exercise::InclineDumbbellPress->value,
+                    4, '12-15', '70-75% 1RM', 90, 'Focus on perfect form, feel the chest working', 1
                 ),
-                new ExerciseConfig(
-                    exercise: Exercise::CableChestFly->value,
-                    sets: 3,
-                    reps: '15-20',
-                    weight: '60-70% 1RM',
-                    rest_seconds: 60,
-                    notes: 'Low to mid cable position, feel chest stretch',
-                    day: 1
+                $this->createExerciseConfigWithDefaults(
+                    Exercise::CableChestFly->value,
+                    3, '15-20', '60-70% 1RM', 60, 'Low to mid cable position, feel chest stretch', 1
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::Deadlift->value,
@@ -88,7 +78,8 @@ class TrainingPlanSeeder extends Seeder
                     weight: '70-75% 1RM',
                     rest_seconds: 60,
                     notes: 'Strict form, feel biceps working',
-                    day: 1
+                    day: 1,
+                    rampingPercentages: Exercise::DumbbellCurls->rampingPercentages(3), // Copy defaults from enum
                 ),
 
                 // Day 2: Legs
@@ -99,7 +90,8 @@ class TrainingPlanSeeder extends Seeder
                     weight: '70-75% 1RM',
                     rest_seconds: 120,
                     notes: 'Focus on perfect form, feel the muscle working',
-                    day: 2
+                    day: 2,
+                    rampingPercentages: Exercise::BarbellBackSquat->rampingPercentages(4), // Copy defaults from enum
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::RomanianDeadlift->value,
@@ -493,7 +485,8 @@ class TrainingPlanSeeder extends Seeder
                     weight: '80-85% 1RM',
                     rest_seconds: 180,
                     notes: 'Progressive overload focus',
-                    day: 3
+                    day: 3,
+                    rampingPercentages: Exercise::FlatBarbellBenchPress->rampingPercentages(4), // Copy defaults from enum
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::DeclineDumbbellPress->value,
@@ -657,7 +650,8 @@ class TrainingPlanSeeder extends Seeder
                     weight: '95-100% 1RM',
                     rest_seconds: 360,
                     notes: 'Maximal strength, perfect execution',
-                    day: 3
+                    day: 3,
+                    rampingPercentages: Exercise::Deadlift->rampingPercentages(2), // Copy defaults from enum
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::HangingStretch->value,
@@ -700,32 +694,17 @@ class TrainingPlanSeeder extends Seeder
 
         $powerSettings = new TrainingPhaseSettings(
             exercises: [
-                new ExerciseConfig(
-                    exercise: Exercise::BarbellBackSquat->value,
-                    sets: 5,
-                    reps: '3',
-                    weight: '80-85% 1RM',
-                    rest_seconds: 240,
-                    notes: 'Explosive concentric, controlled eccentric',
-                    day: 1
+                $this->createExerciseConfigWithDefaults(
+                    Exercise::BarbellBackSquat->value,
+                    5, '3', '80-85% 1RM', 240, 'Explosive concentric, controlled eccentric', 1
                 ),
-                new ExerciseConfig(
-                    exercise: Exercise::BenchPress->value,
-                    sets: 5,
-                    reps: '3',
-                    weight: '80-85% 1RM',
-                    rest_seconds: 240,
-                    notes: 'Focus on bar speed',
-                    day: 2
+                $this->createExerciseConfigWithDefaults(
+                    Exercise::BenchPress->value,
+                    5, '3', '80-85% 1RM', 240, 'Focus on bar speed', 2
                 ),
-                new ExerciseConfig(
-                    exercise: Exercise::Deadlift->value,
-                    sets: 3,
-                    reps: '3',
-                    weight: '85-90% 1RM',
-                    rest_seconds: 300,
-                    notes: 'Explosive pull from floor',
-                    day: 3
+                $this->createExerciseConfigWithDefaults(
+                    Exercise::Deadlift->value,
+                    3, '3', '85-90% 1RM', 300, 'Explosive pull from floor', 3
                 ),
             ]
         );
@@ -740,5 +719,36 @@ class TrainingPlanSeeder extends Seeder
             'progression_rate' => 1.5,
             'settings' => $powerSettings,
         ]);
+    }
+
+    /**
+     * Helper method to create ExerciseConfig with ramping percentages copied from enum defaults
+     * This protects training plans from future changes to enum defaults
+     */
+    private function createExerciseConfigWithDefaults(
+        string $exercise,
+        int $sets,
+        string $reps,
+        string $weight = 'Progressive',
+        int $rest_seconds = 120,
+        ?string $notes = null,
+        int $day = 1,
+        ?array $customRampingPercentages = null
+    ): ExerciseConfig {
+        $exerciseEnum = Exercise::from($exercise);
+        
+        // Use custom ramping if provided, otherwise copy from enum defaults
+        $rampingPercentages = $customRampingPercentages ?? $exerciseEnum->rampingPercentages($sets);
+        
+        return new ExerciseConfig(
+            exercise: $exercise,
+            sets: $sets,
+            reps: $reps,
+            weight: $weight,
+            rest_seconds: $rest_seconds,
+            notes: $notes,
+            day: $day,
+            rampingPercentages: $rampingPercentages,
+        );
     }
 }

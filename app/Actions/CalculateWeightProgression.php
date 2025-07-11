@@ -134,12 +134,28 @@ class CalculateWeightProgression
     }
 
     /**
-     * Suggest the next weight for an exercise, given athlete and previous weights
+     * Suggest progressive weights for an exercise across multiple sets
      */
     public function suggestWeight(\App\Models\Athlete $athlete, \App\Enums\Exercise $exerciseEnum, array $previousWeights = []): float
     {
+        // This method now returns the top set weight - use suggestProgressiveWeights for full progression
+        return $this->suggestProgressiveWeights($athlete, $exerciseEnum, 1, $previousWeights)[0] ?? 0.0;
+    }
+
+    /**
+     * Suggest progressive weights for multiple sets of an exercise
+     * 
+     * @param \App\Models\Athlete $athlete
+     * @param \App\Enums\Exercise $exerciseEnum  
+     * @param int $numberOfSets
+     * @param array $previousWeights
+     * @param \App\Settings\TrainingPhaseSettings|null $phaseSettings
+     * @return array Array of weights for each set
+     */
+    public function suggestProgressiveWeights(\App\Models\Athlete $athlete, \App\Enums\Exercise $exerciseEnum, int $numberOfSets = 3, array $previousWeights = [], ?\App\Settings\TrainingPhaseSettings $phaseSettings = null): array
+    {
         // 1. Try to get 1RM (with synonym fallback)
-        $performanceIndicators = $athlete->performanceIndicators->where('type', 'strength')->keyBy(fn($pi) => $pi->exercise);
+        $performanceIndicators = $athlete->performanceIndicators->where('type', 'strength')->keyBy(fn($pi) => $pi->exercise->value);
         $oneRM = $performanceIndicators[$exerciseEnum->value]->value ?? null;
         if (!$oneRM) {
             $synonymEnum = $exerciseEnum->synonym();
@@ -147,20 +163,83 @@ class CalculateWeightProgression
                 $oneRM = $performanceIndicators[$synonymEnum->value]->value;
             }
         }
-        // 2. If 1RM, use progression logic
+
+        // 2. If we have 1RM, calculate progressive weights
         if ($oneRM && $oneRM > 0) {
-            $progression = $this->calculateWeightProgression($athlete, $exerciseEnum, 1);
-            if ($progression && !empty($progression->dataPoints)) {
-                return $progression->dataPoints[0]['expected_weight'] ?? (float) $oneRM;
+            return $this->calculateProgressiveWeights((float) $oneRM, $numberOfSets, $exerciseEnum);
+        }
+
+        // 3. Fallback: use last logged weights with progression
+        if (!empty($previousWeights)) {
+            $lastWeight = (float) $previousWeights[0];
+            if ($lastWeight > 0) {
+                return $this->calculateProgressiveWeights($lastWeight + 2.5, $numberOfSets, $exerciseEnum);
             }
-            return (float) $oneRM;
         }
-        // 3. Fallback: last logged weight + increment
-        $lastWeight = !empty($previousWeights) ? (float) $previousWeights[0] : null;
-        if ($lastWeight && $lastWeight > 0) {
-            return round($lastWeight + 2.5, 1);
+
+        // 4. Default starting weights with progression
+        $baseWeight = $exerciseEnum->category()->value === 'strength' ? 20.0 : 
+                     ($exerciseEnum->category()->value === 'mobility' ? 0.0 : 10.0);
+        
+        return $this->calculateProgressiveWeights($baseWeight, $numberOfSets, $exerciseEnum);
+    }
+
+    /**
+     * Calculate progressive weights across sets using typical ramping pattern
+     * 
+     * @param float $topSetWeight The target weight for the heaviest set
+     * @param int $numberOfSets Total number of sets
+     * @param \App\Enums\Exercise $exerciseEnum The exercise to get ramping pattern for
+     * @return array Progressive weights for each set
+     */
+    private function calculateProgressiveWeights(float $topSetWeight, int $numberOfSets, \App\Enums\Exercise $exerciseEnum): array
+    {
+        if ($numberOfSets <= 1) {
+            return [round($topSetWeight, 1)];
         }
-        // 4. Default
-        return $exerciseEnum->category()->value === 'strength' ? 20.0 : ($exerciseEnum->category()->value === 'dumbbell' ? 10.0 : 0.0);
+
+        // Get ramping percentages directly from the exercise enum
+        $rampingPercentages = $exerciseEnum->rampingPercentages($numberOfSets);
+
+        // Calculate weights using the ramping percentages
+        $weights = [];
+        foreach ($rampingPercentages as $percentage) {
+            $weights[] = round($topSetWeight * $percentage, 1);
+        }
+
+        return $weights;
+    }
+
+    /**
+     * Get default ramping percentages for different set counts
+     * 
+     * @param int $numberOfSets
+     * @return array<int, float>
+     */
+    private function getDefaultRampingPercentages(int $numberOfSets): array
+    {
+        return match($numberOfSets) {
+            2 => [0.85, 1.00],
+            3 => [0.80, 0.90, 1.00],
+            4 => [0.70, 0.80, 0.90, 1.00],
+            5 => [0.60, 0.70, 0.80, 0.90, 1.00],
+            default => $this->generateLinearRamping($numberOfSets),
+        };
+    }
+
+    /**
+     * Generate linear ramping from 50% to 100% for higher set counts
+     * 
+     * @param int $numberOfSets
+     * @return array<int, float>
+     */
+    private function generateLinearRamping(int $numberOfSets): array
+    {
+        $percentages = [];
+        for ($set = 1; $set <= $numberOfSets; $set++) {
+            $percentage = 0.50 + (0.50 * ($set / $numberOfSets));
+            $percentages[] = round($percentage, 2);
+        }
+        return $percentages;
     }
 } 

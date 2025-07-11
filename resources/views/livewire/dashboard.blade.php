@@ -46,7 +46,10 @@
                         <span class="text-gray-500 dark:text-gray-400 text-xs sm:text-sm">Week {{ $this->selectedDateWeek ?? '—' }} - Day {{ $this->dayNumber ?? '—' }}</span>
                         <span class="text-gray-400 dark:text-gray-500 text-xs">{{ $this->formattedDate }}</span>
                     </div>
-                    <a href="{{ route('trainings.create') }}" class="bg-blue-600 dark:bg-blue-500 text-white px-4 py-2 rounded text-sm font-semibold shadow hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none text-center">Start Training</a>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <a href="{{ route('training-plans.create') }}" class="bg-gray-600 dark:bg-gray-500 text-white px-4 py-2 rounded text-sm font-semibold shadow hover:bg-gray-700 dark:hover:bg-gray-600 focus:outline-none text-center">Create Custom Plan</a>
+                        <a href="{{ route('trainings.create') }}" class="bg-blue-600 dark:bg-blue-500 text-white px-4 py-2 rounded text-sm font-semibold shadow hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none text-center">Start Training</a>
+                    </div>
                 </div>
             </div>
         </div>
