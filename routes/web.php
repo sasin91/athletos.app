@@ -4,7 +4,7 @@ use App\Http\Controllers\Settings;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\TrainingController;
-use App\Http\Controllers\TrainingCompleteController;
+
 use App\Http\Middleware\EnsureAthleteIsOnboarded;
 use Illuminate\Support\Facades\Auth;
 
@@ -19,9 +19,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('trainings', [TrainingController::class, 'index'])->name('trainings.index');
         Route::get('trainings/create', [TrainingController::class, 'create'])->name('trainings.create');
         Route::post('trainings', [TrainingController::class, 'store'])->name('trainings.store');
-        Route::get('trainings/{training}', [TrainingController::class, 'show'])->name('trainings.show');
-        Route::get('trainings/{training}/complete', [TrainingCompleteController::class, 'show'])->name('trainings.complete.show');
-        Route::post('trainings/{training}/complete', [TrainingCompleteController::class, 'store'])->name('trainings.complete');
+        Route::get('trainings/{training}', App\Livewire\Training::class)->name('trainings.show');
         
         Route::get('training-plans/create', [App\Http\Controllers\TrainingPlanController::class, 'create'])->name('training-plans.create');
         Route::post('training-plans', [App\Http\Controllers\TrainingPlanController::class, 'store'])->name('training-plans.store');

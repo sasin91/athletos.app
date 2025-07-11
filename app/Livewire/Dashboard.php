@@ -54,8 +54,10 @@ class Dashboard extends Component
     {
         // Instead of filtering by date or day of week, always show the next not completed workout
         // or the most recent uncompleted one, regardless of the day.
+        /** @var Collection<int, Training> $allTrainings */
         $allTrainings = $this->athlete->trainings()->orderBy('scheduled_at')->get();
-        $nextUncompleted = $allTrainings->first(function ($training) {
+        /** @var Training|null $nextUncompleted */
+        $nextUncompleted = $allTrainings->first(function (Training $training) {
             return $training->completed_at === null;
         });
 
@@ -65,6 +67,7 @@ class Dashboard extends Component
         }
 
         // If all trainings are completed, show the most recent one
+        /** @var Training|null $lastCompleted */
         $lastCompleted = $allTrainings->whereNotNull('completed_at')->last();
         if ($lastCompleted) {
             return collect([$lastCompleted->scheduled_at->format('Y-m-d') => $lastCompleted]);
@@ -100,7 +103,7 @@ class Dashboard extends Component
                 ->whereNotNull('completed_at')
                 ->count(),
             weeklyGoal: $trainingDaysPerWeek,
-            phaseProgress: $phaseProgress,
+            phaseProgress: (int) $phaseProgress,
             currentPhaseName: $currentPhaseName,
             currentPhaseWeek: $currentPhaseWeek,
             totalPhaseWeeks: $totalPhaseWeeks,
@@ -172,11 +175,43 @@ class Dashboard extends Component
             });
     }
 
+    #[Computed]
+    public function todaysCompletedTraining(): ?Training
+    {
+        /** @var Training|null $training */
+        $training = $this->athlete->trainings()
+            ->whereDate('scheduled_at', $this->date)
+            ->whereNotNull('completed_at')
+            ->first();
+            
+        return $training;
+    }
+
+    #[Computed]
+    public function hasTodaysWorkoutCompleted(): bool
+    {
+        return $this->todaysCompletedTraining() !== null;
+    }
+
+    #[Computed]
+    public function recoveryExercises(): Collection
+    {
+        $completedTraining = $this->todaysCompletedTraining();
+        
+        if (!$completedTraining) {
+            return new Collection();
+        }
+
+        // Get recovery suggestions based on completed exercises
+        return app(\App\Actions\SuggestRecoveryExercises::class)->execute($completedTraining);
+    }
+
     private function getTrainingDayNumber(Training $training): int
     {
         // Instead of using day of week, use the order of the training in the plan
+        /** @var Collection<int, Training> $allTrainings */
         $allTrainings = $this->athlete->trainings()->orderBy('scheduled_at')->get();
-        $index = $allTrainings->search(fn($t) => $t->id === $training->id);
+        $index = $allTrainings->search(fn(Training $t) => $t->id === $training->id);
         return $index !== false ? $index + 1 : 1;
     }
 

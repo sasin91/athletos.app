@@ -189,13 +189,7 @@ class ExerciseSuggestion extends Component
         $this->dispatch('exercise-selected', $exercise);
     }
 
-    public function swapExercise(string $alternativeValue): void
-    {
-        $this->dispatch('exercise-swapped', [
-            'originalExercise' => $this->currentExercise,
-            'alternativeValue' => $alternativeValue
-        ]);
-    }
+
 
     public function addMuscleGroup(string $muscleGroup): void
     {

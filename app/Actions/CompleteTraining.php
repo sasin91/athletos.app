@@ -13,9 +13,13 @@ class CompleteTraining
         Training $training,
         array $exercises,
         ?string $mood,
-        ?int $energyLevel
+        ?int $energyLevel,
+        ?string $difficulty = null,
+        ?int $overallRating = null,
+        ?int $difficultyLevel = null,
+        ?string $notes = null
     ): void {
-        DB::transaction(function () use ($training, $exercises, $mood, $energyLevel) {
+        DB::transaction(function () use ($training, $exercises, $mood, $energyLevel, $difficulty, $overallRating, $difficultyLevel, $notes) {
             // Record completed sets directly to the database
             foreach ($exercises as $exerciseSlug => $exerciseData) {
                 if (!is_array($exerciseData)) {
@@ -65,11 +69,19 @@ class CompleteTraining
             }
 
             // Update training with mood, energy level, and completion
-            $training->update([
+            // Note: Only saving mood and energy_level for now as other fields don't exist in database yet
+            $updateData = [
                 'mood' => $mood,
                 'energy_level' => $energyLevel,
                 'completed_at' => now(),
-            ]);
+            ];
+            
+            // Add notes if provided and if notes field exists
+            if ($notes) {
+                $updateData['notes'] = $notes;
+            }
+            
+            $training->update($updateData);
 
         });
     }

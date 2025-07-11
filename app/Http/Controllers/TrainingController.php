@@ -32,18 +32,7 @@ class TrainingController extends Controller
         return view('trainings.index', compact('trainings'));
     }
 
-    public function show(Training $training): \Illuminate\View\View
-    {
-        Gate::authorize('view', $training);
 
-        // Load the training with all necessary relationships
-        $training->load([
-            'trainingPlan',
-            'athlete.user'
-        ]);
-
-        return view('trainings.show', compact('training'));
-    }
 
     /**
      * Create a new training session form

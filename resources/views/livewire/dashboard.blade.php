@@ -30,15 +30,43 @@
                 </div>
                 <!-- Exercises list -->
                 <div class="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
-                    @forelse($this->plannedExercises as $exercise)
-                    <div class="h-10 bg-blue-100 dark:bg-blue-900/30 rounded flex items-center px-3 sm:px-4">
-                        <div class="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full mr-2 sm:mr-3"></div>
-                        <span class="text-sm sm:text-base text-gray-700 dark:text-gray-200">{{ $exercise->exercise->displayName() }}</span>
-                        <span class="ml-auto text-xs sm:text-sm text-gray-500 dark:text-gray-400">{{ $exercise->sets }} sets × {{ $exercise->reps }} reps</span>
-                    </div>
-                    @empty
-                    <div class="h-10 bg-gray-100 dark:bg-gray-700 rounded flex items-center px-3 sm:px-4 text-gray-400 dark:text-gray-500 text-sm">No exercises scheduled for today.</div>
-                    @endforelse
+                    @if($this->hasTodaysWorkoutCompleted)
+                        <!-- Show recovery message and exercises -->
+                        <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 sm:p-4 border border-green-200 dark:border-green-800">
+                            <div class="flex items-center gap-2 mb-3">
+                                <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                                </svg>
+                                <span class="text-sm sm:text-base font-medium text-green-800 dark:text-green-200">Great job! You've completed your workout today</span>
+                            </div>
+                            <p class="text-xs sm:text-sm text-green-700 dark:text-green-300 mb-3">Here are some recovery exercises to help you feel your best:</p>
+                            
+                            @if($this->recoveryExercises->isNotEmpty())
+                                <div class="space-y-2">
+                                    @foreach($this->recoveryExercises->flatten()->take(4) as $exercise)
+                                    <div class="flex items-center justify-between bg-white dark:bg-green-900/30 rounded px-2 py-1 border border-green-300 dark:border-green-700">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                                            <span class="text-xs sm:text-sm text-green-800 dark:text-green-200">{{ $exercise->displayName }}</span>
+                                        </div>
+                                        <span class="text-xs text-green-600 dark:text-green-400">{{ $exercise->sets }} set{{ $exercise->sets > 1 ? 's' : '' }}</span>
+                                    </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    @else
+                        <!-- Show planned exercises or empty message -->
+                        @forelse($this->plannedExercises as $exercise)
+                        <div class="h-10 bg-blue-100 dark:bg-blue-900/30 rounded flex items-center px-3 sm:px-4">
+                            <div class="w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full mr-2 sm:mr-3"></div>
+                            <span class="text-sm sm:text-base text-gray-700 dark:text-gray-200">{{ $exercise->exercise->displayName() }}</span>
+                            <span class="ml-auto text-xs sm:text-sm text-gray-500 dark:text-gray-400">{{ $exercise->sets }} sets × {{ $exercise->reps }} reps</span>
+                        </div>
+                        @empty
+                        <div class="h-10 bg-gray-100 dark:bg-gray-700 rounded flex items-center px-3 sm:px-4 text-gray-400 dark:text-gray-500 text-sm">No exercises scheduled for today.</div>
+                        @endforelse
+                    @endif
                 </div>
                 <!-- Bottom row -->
                 <div class="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center mt-4 sm:mt-6">

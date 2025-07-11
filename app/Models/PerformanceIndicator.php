@@ -72,7 +72,6 @@ class PerformanceIndicator extends Model
             'athlete_id' => 'integer',
             'exercise' => ExerciseEnum::class,
             'value' => 'decimal:2',
-            'recorded_at' => 'datetime',
         ];
     }
 
