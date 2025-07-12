@@ -184,13 +184,24 @@ class CalculateWeightProgression
 
         // 2. If we have 1RM, calculate progressive weights based on training percentage (not 1RM itself!)
         if ($oneRM && $oneRM > 0) {
-            // ULTRA CONSERVATIVE: Use only 50% of 1RM for working weight
-            // This ensures safe training loads well below maximum capacity
-            $workingWeight = (float) $oneRM * 0.50; // 50% of 1RM for working sets
-            
-            // Enhanced debug logging to track down high weight issues
-            \Log::warning("Weight calculation for {$exerciseEnum->value}: FOUND 1RM={$oneRM}kg, Using working weight={$workingWeight}kg (50% of 1RM). If 1RM seems too high, check performance indicators table.");
-            
+            // Use 70% of 1RM for main strength lifts, 65% for other strength, 55% for others
+            if ($exerciseEnum->category()->value === 'strength') {
+                // Main barbell lifts get 70%, others 65%
+                $mainLifts = [
+                    Exercise::BarbellBackSquat,
+                    Exercise::FlatBarbellBenchPress,
+                    Exercise::BenchPress,
+                    Exercise::Deadlift,
+                    Exercise::RomanianDeadlift,
+                ];
+                $workingPercent = in_array($exerciseEnum, $mainLifts, true) ? 0.70 : 0.65;
+                $workingWeight = (float) $oneRM * $workingPercent;
+            } else {
+                $workingPercent = 0.55;
+                $workingWeight = (float) $oneRM * $workingPercent;
+            }
+            // Enhanced debug logging
+            \Log::warning("Weight calculation for {$exerciseEnum->value}: FOUND 1RM={$oneRM}kg, Using working weight={$workingWeight}kg (" . ($workingPercent * 100) . "% of 1RM). If 1RM seems too high, check performance indicators table.");
             return $this->calculateProgressiveWeights($workingWeight, $numberOfSets, $exerciseEnum);
         }
 
@@ -203,9 +214,16 @@ class CalculateWeightProgression
         }
 
         // 4. Default starting weights with progression
-        $baseWeight = $exerciseEnum->category()->value === 'strength' ? 20.0 : 
-                     ($exerciseEnum->category()->value === 'mobility' ? 0.0 : 10.0);
-        
+        // Set more realistic minimums for accessories
+        if ($exerciseEnum === Exercise::CableChestFly) {
+            $baseWeight = 20.0;
+        } elseif (str_contains(strtolower($exerciseEnum->value), 'dumbbell')) {
+            $baseWeight = 7.5;
+        } elseif ($exerciseEnum->category()->value === 'strength') {
+            $baseWeight = 20.0;
+        } else {
+            $baseWeight = 12.5;
+        }
         return $this->calculateProgressiveWeights($baseWeight, $numberOfSets, $exerciseEnum);
     }
 
@@ -252,39 +270,6 @@ class CalculateWeightProgression
     }
 
     /**
-     * Get default ramping percentages for different set counts
-     * 
-     * @param int $numberOfSets
-     * @return array<int, float>
-     */
-    private function getDefaultRampingPercentages(int $numberOfSets): array
-    {
-        return match($numberOfSets) {
-            2 => [0.85, 1.00],
-            3 => [0.80, 0.90, 1.00],
-            4 => [0.70, 0.80, 0.90, 1.00],
-            5 => [0.60, 0.70, 0.80, 0.90, 1.00],
-            default => $this->generateLinearRamping($numberOfSets),
-        };
-    }
-
-    /**
-     * Generate linear ramping from 50% to 100% for higher set counts
-     * 
-     * @param int $numberOfSets
-     * @return array<int, float>
-     */
-    private function generateLinearRamping(int $numberOfSets): array
-    {
-        $percentages = [];
-        for ($set = 1; $set <= $numberOfSets; $set++) {
-            $percentage = 0.50 + (0.50 * ($set / $numberOfSets));
-            $percentages[] = round($percentage, 2);
-        }
-        return $percentages;
-    }
-
-    /**
      * Get minimum weight for an exercise (e.g., barbell weight)
      * 
      * @param \App\Enums\Exercise $exerciseEnum
@@ -301,7 +286,7 @@ class CalculateWeightProgression
             \App\Enums\Exercise::RomanianDeadlift => 20.0,
             
             // Dumbbell and other exercises can start lower
-            default => 0.0,
+            default => 12.5
         };
     }
 } 
