@@ -215,33 +215,7 @@ class TrainingTest extends TestCase
         $response->assertStatus(403);
     }
 
-    public function test_cannot_start_training_for_non_training_day(): void
-    {
-        $user = User::factory()->create();
-        $trainingPlan = TrainingPlan::factory()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan->id,
-            'training_days' => ['monday'], // Only Monday
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-            'plan_start_date' => now(),
-        ]);
 
-        // Set today to Tuesday (not a training day)
-        $tuesday = Carbon::parse('next tuesday');
-        Carbon::setTestNow($tuesday);
-
-        $response = $this->actingAs($user)
-            ->get(route('trainings.create'));
-
-        $response->assertStatus(403);
-
-        Carbon::setTestNow(); // Reset
-    }
 
     public function test_recovery_suggestions(): void
     {

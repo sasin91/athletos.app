@@ -20,26 +20,48 @@ class ComputePlannedTrainings
     {
         $plannedTrainings = new Collection();
 
-        // Find the next uncompleted training for the athlete
-        $nextUncompleted = $athlete->trainings()->orderBy('scheduled_at')->get()->first(function ($training) {
-            return $training->completed_at === null;
-        });
+        // Check if athlete should train on this date based on training offset
+        $startDate = $athlete->plan_start_date ? Carbon::instance($athlete->plan_start_date) : Carbon::now();
+        if (!$this->calculateTrainingOffset->shouldTrainOnDate($athlete->training_frequency, $date, $startDate)) {
+            return $plannedTrainings; // No training planned for this date
+        }
 
-        if ($nextUncompleted) {
-            $dateKey = $nextUncompleted->scheduled_at->format('Y-m-d');
-            $plannedTrainings[$dateKey] = $nextUncompleted;
+        // Check if this date is a training day for the athlete
+        $dayOfWeek = strtolower($date->format('l'));
+        if (!in_array($dayOfWeek, $athlete->training_days)) {
+            return $plannedTrainings; // Not a training day
+        }
+
+        // Check if a training already exists for this date
+        $existingTraining = Training::where('athlete_id', $athlete->id)
+            ->whereDate('scheduled_at', $date)
+            ->first();
+
+        if ($existingTraining) {
+            $dateKey = $existingTraining->scheduled_at->format('Y-m-d');
+            $plannedTrainings[$dateKey] = $existingTraining;
             return $plannedTrainings;
         }
 
-        // If all trainings are completed, return the most recent one
-        $lastCompleted = $athlete->trainings()->orderBy('scheduled_at')->get()->whereNotNull('completed_at')->last();
-        if ($lastCompleted) {
-            $dateKey = $lastCompleted->scheduled_at->format('Y-m-d');
-            $plannedTrainings[$dateKey] = $lastCompleted;
-            return $plannedTrainings;
+        // Create a virtual planned training for this date
+        $trainingPhase = $this->determineTrainingPhase->execute($athlete, $date);
+        if (!$trainingPhase) {
+            return $plannedTrainings; // No training phase for this date
         }
 
-        // Fallback: empty collection
+        // Create a virtual training object for planning purposes
+        $virtualTraining = new Training([
+            'athlete_id' => $athlete->id,
+            'training_plan_id' => $athlete->current_plan_id,
+            'training_phase_id' => $trainingPhase->id,
+            'scheduled_at' => $date->setTime(9, 0), // Default to 9 AM
+            'postponed' => false,
+            'reschedule_reason' => null,
+        ]);
+
+        $dateKey = $date->format('Y-m-d');
+        $plannedTrainings[$dateKey] = $virtualTraining;
+
         return $plannedTrainings;
     }
 }

@@ -80,10 +80,14 @@ class CalculateWeightProgression
         $canonicalExercise = $exerciseEnum->synonym();
         
         // Try to get 1RM from performance indicators (check both current and canonical)
+        // Look for both '1RM' and exercise-specific labels like 'Barbell Back Squat 1RM'
         $indicator = PerformanceIndicator::where('athlete_id', $athlete->id)
             ->whereIn('exercise', [$exerciseEnum, $canonicalExercise])
             ->where('type', 'strength')
-            ->where('label', '1RM')
+            ->where(function($query) use ($exerciseEnum) {
+                $query->where('label', '1RM')
+                      ->orWhere('label', 'like', '%1RM%');
+            })
             ->latest()
             ->first();
 
