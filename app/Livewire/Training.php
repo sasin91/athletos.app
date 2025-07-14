@@ -112,7 +112,7 @@ class Training extends Component
 
             // Load timer state
             $this->totalTimerSeconds = $this->training->total_timer_seconds ?? 0;
-            $this->totalTimerStarted = $this->training->timer_started ?? false;
+            $this->totalTimerStarted = false;
 
             $this->isLoading = false;
         } catch (\Exception $e) {
@@ -729,15 +729,6 @@ class Training extends Component
         
         // Now we can safely check for PR with validated data
         $this->checkForPersonalRecord($exerciseSlug, (float) $weight, (int) $reps);
-    }
-
-
-    public function startTotalTimer(): void
-    {
-        if (!$this->totalTimerStarted) {
-            $this->totalTimerStarted = true;
-            $this->training->update(['timer_started' => true]);
-        }
     }
 
     public function updateTotalTimer(int $seconds): void

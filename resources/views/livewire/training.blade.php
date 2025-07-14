@@ -180,7 +180,6 @@
                                         
                                         // Ensure total timer starts when first set timer starts
                                         if (!window.totalTimerStarted) {
-                                            $wire.startTotalTimer();
                                             window.totalTimerStarted = true;
                                         }
                                         
