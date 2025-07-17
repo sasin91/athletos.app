@@ -71,12 +71,14 @@
                 <!-- Bottom row -->
                 <div class="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center mt-4 sm:mt-6">
                     <div class="flex flex-col gap-1">
-                        <span class="text-gray-500 dark:text-gray-400 text-xs sm:text-sm">Week {{ $this->selectedDateWeek ?? '—' }} - Day {{ $this->dayNumber ?? '—' }}</span>
+                        <span class="text-gray-500 dark:text-gray-400 text-xs sm:text-sm">Week {{ $this->selectedDateWeek ?? '—' }} - Day {{ $this->trainingDay ?? '—' }}</span>
                         <span class="text-gray-400 dark:text-gray-500 text-xs">{{ $this->formattedDate }}</span>
                     </div>
                     <div class="flex flex-col sm:flex-row gap-2">
                         <a href="{{ route('training-plans.create') }}" class="bg-gray-600 dark:bg-gray-500 text-white px-4 py-2 rounded text-sm font-semibold shadow hover:bg-gray-700 dark:hover:bg-gray-600 focus:outline-none text-center">Create Custom Plan</a>
-                        <a href="{{ route('trainings.create') }}" class="bg-blue-600 dark:bg-blue-500 text-white px-4 py-2 rounded text-sm font-semibold shadow hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none text-center">Start Training</a>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-2 mt-2">
+                        <button wire:click="startTraining" class="bg-blue-600 dark:bg-blue-500 text-white px-4 py-2 rounded text-sm font-semibold shadow hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none text-center">Start Training</button>
                     </div>
                 </div>
             </div>
@@ -143,7 +145,8 @@
                                 </div>
 
                                 <div class="w-full bg-gray-700 rounded-full h-2" role="progressbar" aria-valuenow="{{ $this->metrics->getPhaseProgressPercentage() }}" aria-valuemin="0" aria-valuemax="100">
-                                    <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: {{ $this->metrics->getPhaseProgressPercentage() }}%"></div>
+                                    @php $progress = $this->metrics->getPhaseProgressPercentage(); @endphp
+                                    <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: {{ $progress }}%"></div>
                                 </div>
 
                                 <p class="text-xs text-gray-400">
@@ -204,7 +207,21 @@
                 </div>
             </div>
 
-            <livewire:exercise-summary :athlete="$athlete" :trainings="$this->training" />
+            <!-- Exercise Summary Section -->
+            <div class="mt-8">
+                <h3 class="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Exercise Summary</h3>
+                <div class="space-y-2">
+                    @forelse($this->plannedExercises as $exercise)
+                        <div class="flex items-center bg-blue-100 dark:bg-gray-700 rounded px-3 py-2">
+                            <span class="font-medium text-gray-800 dark:text-gray-100">{{ $exercise->exercise->displayName() }}</span>
+                            <span class="ml-auto text-xs text-gray-500 dark:text-gray-300">{{ $exercise->sets }} sets × {{ $exercise->reps }} reps</span>
+                            <span class="ml-4 text-xs text-gray-500 dark:text-gray-400">{{ $exercise->weight ?? 'Body weight' }}</span>
+                        </div>
+                    @empty
+                        <div class="text-gray-400 dark:text-gray-500 text-sm">No exercise summary available.</div>
+                    @endforelse
+                </div>
+            </div>
         </div>
     </div>
 </div>

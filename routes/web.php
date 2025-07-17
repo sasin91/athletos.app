@@ -17,7 +17,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
         
         Route::get('trainings', [TrainingController::class, 'index'])->name('trainings.index');
-        Route::get('trainings/create', [TrainingController::class, 'create'])->name('trainings.create');
         Route::post('trainings', [TrainingController::class, 'store'])->name('trainings.store');
         Route::get('trainings/{training}', App\Livewire\Training::class)->name('trainings.show');
         
