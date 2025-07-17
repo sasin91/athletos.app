@@ -36,7 +36,9 @@ class TrainingPolicy
      */
     public function viewComplete(User $user, Training $training): bool
     {
-        return $user->isAthlete() && $user->id === $training->athlete->user_id;
+        return $user->isAthlete() && 
+               $user->id === $training->athlete->user_id &&
+               $training->completed_at !== null;
     }
 
     /**

@@ -38,10 +38,18 @@
                     </div>
                     <div class="text-center">
                         <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                            {{ $training->completed_at->format('M j') }}
+                            {{ $training->completed_at ? $training->completed_at->format('M j') : 'N/A' }}
                         </div>
                         <div class="text-sm text-gray-500 dark:text-gray-400">Date</div>
                     </div>
+                    @if($training->total_timer_seconds)
+                    <div class="text-center">
+                        <div class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                            {{ sprintf('%02d:%02d', floor($training->total_timer_seconds / 60), $training->total_timer_seconds % 60) }}
+                        </div>
+                        <div class="text-sm text-gray-500 dark:text-gray-400">Duration</div>
+                    </div>
+                    @endif
                     @if($training->mood)
                     <div class="text-center">
                         <div class="text-2xl">

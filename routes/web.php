@@ -20,7 +20,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('trainings', [TrainingController::class, 'index'])->name('trainings.index');
         Route::post('trainings', [TrainingController::class, 'store'])->name('trainings.store');
         Route::get('trainings/{training}', App\Livewire\Training::class)->name('trainings.show');
-        
+        Route::get('trainings/{training}/complete', [TrainingController::class, 'complete'])->name('trainings.complete');
         Route::get('training-plans/create', [App\Http\Controllers\TrainingPlanController::class, 'create'])->name('training-plans.create');
         Route::post('training-plans', [App\Http\Controllers\TrainingPlanController::class, 'store'])->name('training-plans.store');
         Route::get('training-plans/{trainingPlan}', [App\Http\Controllers\TrainingPlanController::class, 'show'])->name('training-plans.show');

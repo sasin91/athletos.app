@@ -386,4 +386,131 @@ class TrainingTest extends TestCase
             'current_plan_id' => $trainingPlan->id,
         ]);
     }
+
+    public function test_user_can_view_training_complete_page(): void
+    {
+        $user = User::factory()->create();
+        $trainingPlan = TrainingPlan::factory()->create();
+        $athlete = Athlete::factory()->create([
+            'user_id' => $user->id,
+            'experience_level' => 'intermediate',
+            'primary_goal' => 'strength',
+            'current_plan_id' => $trainingPlan->id,
+            'training_days' => ['monday', 'wednesday', 'friday'],
+            'preferred_time' => 'evening',
+            'session_duration' => 60,
+            'difficulty_preference' => 'challenging',
+            'plan_start_date' => now(),
+        ]);
+
+        $training = Training::factory()->create([
+            'athlete_id' => $athlete->id,
+            'training_plan_id' => $trainingPlan->id,
+            'scheduled_at' => Carbon::today()->setTime(9, 0),
+            'completed_at' => now(),
+            'mood' => 'good',
+            'energy_level' => 8,
+            'total_timer_seconds' => 3600,
+        ]);
+
+        // Add some completed exercises
+        $training->exercises()->create([
+            'exercise_enum' => Exercise::BarbellBackSquat,
+            'set_number' => 1,
+            'reps' => 5,
+            'weight' => 100,
+            'rpe' => 7,
+            'completed_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('trainings.complete', $training))
+            ->assertStatus(200)
+            ->assertViewIs('trainings.complete')
+            ->assertViewHas('training', $training)
+            ->assertSee('Training Complete!')
+            ->assertSee('1')
+            ->assertSee('Exercises')
+            ->assertSee('Sets')
+            ->assertSee('60:00') // Timer duration - 3600 seconds = 60 minutes
+            ->assertSee('Recovery Suggestions');
+    }
+
+    public function test_guest_cannot_access_training_complete_page(): void
+    {
+        $training = Training::factory()->create(['completed_at' => now()]);
+
+        $this->get(route('trainings.complete', $training))
+            ->assertRedirect('/login');
+    }
+
+    public function test_user_cannot_access_other_users_training_complete_page(): void
+    {
+        $user1 = User::factory()->create();
+        $trainingPlan1 = TrainingPlan::factory()->create();
+        $athlete1 = Athlete::factory()->create([
+            'user_id' => $user1->id,
+            'experience_level' => 'intermediate',
+            'primary_goal' => 'strength',
+            'current_plan_id' => $trainingPlan1->id,
+            'training_days' => ['monday', 'wednesday', 'friday'],
+            'preferred_time' => 'evening',
+            'session_duration' => 60,
+            'difficulty_preference' => 'challenging',
+            'plan_start_date' => now(),
+        ]);
+
+        $training = Training::factory()->create([
+            'athlete_id' => $athlete1->id,
+            'training_plan_id' => $trainingPlan1->id,
+            'scheduled_at' => Carbon::today()->setTime(9, 0),
+            'completed_at' => now(),
+        ]);
+
+        $user2 = User::factory()->create();
+        $trainingPlan2 = TrainingPlan::factory()->create();
+        $athlete2 = Athlete::factory()->create([
+            'user_id' => $user2->id,
+            'experience_level' => 'beginner',
+            'primary_goal' => 'general_fitness',
+            'current_plan_id' => $trainingPlan2->id,
+            'training_days' => ['tuesday', 'thursday'],
+            'preferred_time' => 'morning',
+            'session_duration' => 45,
+            'difficulty_preference' => 'moderate',
+            'plan_start_date' => now(),
+        ]);
+
+        $this->actingAs($user2)
+            ->get(route('trainings.complete', $training))
+            ->assertStatus(403);
+    }
+
+    public function test_user_cannot_access_incomplete_training_complete_page(): void
+    {
+        $user = User::factory()->create();
+        $trainingPlan = TrainingPlan::factory()->create();
+        $athlete = Athlete::factory()->create([
+            'user_id' => $user->id,
+            'experience_level' => 'intermediate',
+            'primary_goal' => 'strength',
+            'current_plan_id' => $trainingPlan->id,
+            'training_days' => ['monday', 'wednesday', 'friday'],
+            'preferred_time' => 'evening',
+            'session_duration' => 60,
+            'difficulty_preference' => 'challenging',
+            'plan_start_date' => now(),
+        ]);
+
+        $training = Training::factory()->create([
+            'athlete_id' => $athlete->id,
+            'training_plan_id' => $trainingPlan->id,
+            'scheduled_at' => Carbon::today()->setTime(9, 0),
+            'completed_at' => null, // Not completed
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('trainings.complete', $training))
+            ->assertStatus(403);
+    }
 } 

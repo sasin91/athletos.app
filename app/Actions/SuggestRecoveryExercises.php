@@ -70,7 +70,7 @@ class SuggestRecoveryExercises
                     priority: $numOverlap,
                     sets: 1,
                     reps: 1,
-                    weight: 'Body weight',
+                    weight: 0, // 0 indicates bodyweight
                     restSeconds: 120,
                     displayName: $recoveryExercise->displayName(),
                     category: $recoveryExercise->category()->value,

@@ -6,11 +6,13 @@ use App\Actions\DetermineTrainingPhase;
 use App\Models\Training;
 use App\Models\User;
 use App\Actions\CalculateTrainingOffset;
+use App\Actions\SuggestRecoveryExercises;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Illuminate\Container\Attributes\CurrentUser;
+use Illuminate\View\View;
 
 class TrainingController extends Controller
 {
@@ -55,5 +57,17 @@ class TrainingController extends Controller
         ]);
 
         return redirect()->route('trainings.show', $training);
+    }
+
+    public function complete(
+        Training $training, 
+        SuggestRecoveryExercises $suggestRecoveryExercises
+    ): View {
+        Gate::authorize('viewComplete', $training);
+
+        return view('trainings.complete', [
+            'training' => $training,
+            'recoveryExercises' => $suggestRecoveryExercises->execute($training)
+        ]);
     }
 }
