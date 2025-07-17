@@ -4,7 +4,30 @@
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 dark:text-gray-100">
                     <div class="mb-8">
-                        <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Create Custom Training Plan</h2>
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Create Custom Training Plan</h2>
+                            <a href="{{ route('training-plans.ai.create') }}" class="inline-flex items-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors">
+                                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                Create with AI Assistant
+                            </a>
+                        </div>
+                        
+                        <div class="mb-6 p-4 bg-blue-50 dark:bg-blue-900 rounded-lg">
+                            <h3 class="font-medium text-blue-900 dark:text-blue-100 mb-2">Two Ways to Create Training Plans</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <h4 class="font-medium text-blue-800 dark:text-blue-200">Manual Creation</h4>
+                                    <p class="text-blue-700 dark:text-blue-300">Full control over every detail. Create phases, exercises, and progressions manually.</p>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium text-blue-800 dark:text-blue-200">AI Assistant</h4>
+                                    <p class="text-blue-700 dark:text-blue-300">Chat with AI to generate customized plans based on your goals and preferences.</p>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <p class="text-gray-600 dark:text-gray-400 mt-2">Design your own training program with multiple phases and exercises.</p>
                     </div>
 

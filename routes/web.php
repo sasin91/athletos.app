@@ -4,6 +4,7 @@ use App\Http\Controllers\Settings;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\TrainingController;
+use App\Http\Controllers\TrainingPlanChatController;
 
 use App\Http\Middleware\EnsureAthleteIsOnboarded;
 use Illuminate\Support\Facades\Auth;
@@ -24,6 +25,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('training-plans', [App\Http\Controllers\TrainingPlanController::class, 'store'])->name('training-plans.store');
         Route::get('training-plans/{trainingPlan}', [App\Http\Controllers\TrainingPlanController::class, 'show'])->name('training-plans.show');
         Route::post('training-plans/{trainingPlan}/assign', [App\Http\Controllers\TrainingPlanController::class, 'assign'])->name('training-plans.assign');
+        
+        // AI Chat routes for training plans
+        Route::get('training-plans/ai/create', [TrainingPlanChatController::class, 'create'])->name('training-plans.ai.create');
+        Route::get('training-plans/{trainingPlan}/ai/adjust', [TrainingPlanChatController::class, 'adjust'])->name('training-plans.ai.adjust');
+        Route::post('training-plans/ai/validate', [TrainingPlanChatController::class, 'validatePlan'])->name('training-plans.ai.validate');
 
         Route::get('exercises/{exercise:slug}', [App\Http\Controllers\ExerciseController::class, 'show'])->name('exercises.show');
         

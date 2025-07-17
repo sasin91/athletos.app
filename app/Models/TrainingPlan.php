@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -85,6 +86,7 @@ class TrainingPlan extends Model
         'easy_progression_rate',
         'medium_progression_rate',
         'hard_progression_rate',
+        'user_id',
     ];
 
     /**
@@ -119,6 +121,11 @@ class TrainingPlan extends Model
     public function phases(): HasMany
     {
         return $this->hasMany(TrainingPhase::class)->orderBy('order');
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     /**

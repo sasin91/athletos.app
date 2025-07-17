@@ -37,7 +37,7 @@ class TrainingPlanPolicy
      */
     public function update(User $user, TrainingPlan $trainingPlan): bool
     {
-        return $user->isAthlete();
+        return $user->isAthlete() && $trainingPlan->user_id === $user->id;
     }
 
     /**
@@ -45,7 +45,7 @@ class TrainingPlanPolicy
      */
     public function delete(User $user, TrainingPlan $trainingPlan): bool
     {
-        return $user->isAthlete();
+        return $user->isAthlete() && $trainingPlan->user_id === $user->id;
     }
 
     /**
