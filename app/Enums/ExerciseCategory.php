@@ -13,4 +13,6 @@ enum ExerciseCategory: string
     case Yoga = 'yoga';
     case Cardio = 'cardio';
     case Recovery = 'recovery';
+    case Hypertrophy = 'hypertrophy';
+    case Endurance = 'endurance';
 }

@@ -20,14 +20,14 @@ class CalculateWeightProgression
     /**
      * Calculate weight progression for an athlete
      */
-    public function execute(Athlete $athlete, int $weeks = 12): WeightProgressions
+    public function execute(Athlete $athlete, int $weeks = 12, ?array $exercises = null): WeightProgressions
     {
         $progressions = [];
         
-        // Get the main compound lifts using the enum
-        $mainLifts = Exercise::mainLifts();
+        // Use provided exercises or fallback to main lifts
+        $exercisesToCalculate = $exercises ?? Exercise::mainLifts();
         
-        foreach ($mainLifts as $exerciseEnum) {
+        foreach ($exercisesToCalculate as $exerciseEnum) {
             $progression = $this->calculateWeightProgression($athlete, $exerciseEnum, $weeks);
             if ($progression) {
                 $progressions[] = $progression;
@@ -65,9 +65,15 @@ class CalculateWeightProgression
             ];
         }
         
+        // Calculate current expected weight (for current week/training day)
+        $currentExpectedWeight = $this->calculateExpectedWeight($currentOneRM, $progressionSettings, 1);
+        
         return new WeightProgression(
             exercise: $exerciseEnum,
             dataPoints: $dataPoints,
+            currentWeight: $currentOneRM,
+            expectedWeight: round($currentExpectedWeight, 1),
+            startingWeight: $currentOneRM,
         );
     }
 
@@ -163,7 +169,7 @@ class CalculateWeightProgression
     public function suggestProgressiveWeights(\App\Models\Athlete $athlete, \App\Enums\Exercise $exerciseEnum, int $numberOfSets = 3, array $previousWeights = [], ?\App\Settings\TrainingPhaseSettings $phaseSettings = null): array
     {
         // 1. Try to get 1RM (with synonym fallback)
-        $performanceIndicators = $athlete->performanceIndicators->where('type', 'strength')->where('label', '1RM')->keyBy(fn($pi) => $pi->exercise->value);
+        $performanceIndicators = $athlete->performanceIndicators->where('type', 'strength')->keyBy(fn($pi) => $pi->exercise->value);
         $oneRM = $performanceIndicators[$exerciseEnum->value]->value ?? null;
         $source = "direct";
         if (!$oneRM) {
@@ -289,4 +295,5 @@ class CalculateWeightProgression
             default => 12.5
         };
     }
+
 } 

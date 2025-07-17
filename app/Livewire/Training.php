@@ -75,13 +75,20 @@ class Training extends Component
 
         $this->sets = [];
 
+        // Get weight progressions for all exercises
+        $calculator = app(CalculateWeightProgression::class);
+
         foreach ($this->plannedExercises as $exercise) {
             $this->sets[$exercise->exerciseSlug] = [];
+
+            // Get suggested progressive weights for training sets
+            $suggestedWeights = $calculator->suggestProgressiveWeights($this->athlete, $exercise->exercise, $exercise->sets);
+
             for ($i = 1; $i <= $exercise->sets; $i++) {
                 $this->sets[$exercise->exerciseSlug][] = new PlannedSet(
                     setNumber: $i,
-                    reps: 0,
-                    weight: 0,
+                    reps: $exercise->reps,
+                    weight: $suggestedWeights[$i - 1] ?? $suggestedWeights[0] ?? 0,
                     rpe: 0,
                     timeSpent: 0,
                     explosiveness: 0,
@@ -223,10 +230,15 @@ class Training extends Component
         $currentCount = count($this->sets[$exerciseSlug] ?? []);
         if ($currentCount < 10) {
             $exercise = $this->sets[$exerciseSlug][0]->meta;
+
+            // Get suggested working weight for training sets
+            $calculator = app(CalculateWeightProgression::class);
+            $suggestedWeight = $calculator->suggestWeight($this->athlete, $exercise->exercise);
+
             $this->sets[$exerciseSlug][] = new PlannedSet(
                 setNumber: $currentCount + 1,
                 reps: $exercise->reps,
-                weight: $exercise->weight,
+                weight: $suggestedWeight,
                 rpe: 0,
                 timeSpent: 0,
                 explosiveness: 0,
@@ -255,6 +267,14 @@ class Training extends Component
 
         $exercise = Exercise::from($exerciseSlug);
 
+        // Get suggested working weight for training sets
+        $calculator = app(CalculateWeightProgression::class);
+        $suggestedWeight = $calculator->suggestWeight($this->athlete, $exercise);
+        
+        // Get suggested rep count for new exercise
+        $repSuggester = app(\App\Actions\SuggestRepCounts::class);
+        $suggestedReps = $repSuggester->execute($this->athlete, $exercise, 1);
+
         $planned = new PlannedExercise(
             exercise: $exercise,
             sets: 1,
@@ -267,8 +287,8 @@ class Training extends Component
             cues: [],
             priority: 0,
             restSeconds: 0,
-            weight: 0,
-            reps: 0,
+            weight: $suggestedWeight,
+            reps: $suggestedReps[0] ?? 0,
         );
 
         $this->sets[$exerciseSlug] = [];
@@ -276,7 +296,7 @@ class Training extends Component
             $this->sets[$exerciseSlug][] = new PlannedSet(
                 setNumber: $i,
                 reps: $planned->reps,
-                weight: $planned->weight,
+                weight: $suggestedWeight,
                 rpe: 0,
                 timeSpent: 0,
                 explosiveness: 0,
@@ -311,7 +331,7 @@ class Training extends Component
             return;
         }
 
-        [$prefix, $exerciseSlug, $setIndex, $field] = $parts;
+        [, $exerciseSlug, $setIndex, $field] = $parts;
 
         // Only check for PRs when weight or reps are updated and both have values
         if (!in_array($field, ['weight', 'reps'])) {

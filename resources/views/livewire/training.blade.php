@@ -91,9 +91,11 @@ $exerciseOptions[] = [
                         <label for="weight-{{ $exerciseSlug }}-{{ $set->setNumber }}" class="absolute -top-2 left-2 inline-block rounded-lg bg-white dark:bg-gray-800 px-1 text-xs font-medium text-gray-900 dark:text-gray-100">Weight</label>
                         <input type="text" name="weight-{{ $exerciseSlug }}-{{ $set->setNumber }}" id="weight-{{ $exerciseSlug }}-{{ $set->setNumber }}"
                             class="block w-full rounded-md bg-white dark:bg-gray-900 px-3 py-1.5 text-base text-gray-900 dark:text-gray-100 outline-1 -outline-offset-1 outline-gray-300 dark:outline-gray-700 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
-                            placeholder="Weight"
-                            @focus="focused = true" @blur="focused = false"
-                            wire:model.defer="sets.{{ $exerciseSlug }}.{{ $loop->index }}.weight" value="{{ $set->weight }}" />
+                            placeholder="Weight (kg)"
+                            @focus="focused = true"
+                            @blur="focused = false"
+                            wire:model.defer="sets.{{ $exerciseSlug }}.{{ $loop->index }}.weight"
+                            value="{{ $set->weight }}" />
                     </div>
                     <div class="relative">
                         <label for="rpe-{{ $exerciseSlug }}-{{ $set->setNumber }}" class="absolute -top-2 left-2 inline-block rounded-lg bg-white dark:bg-gray-800 px-1 text-xs font-medium text-gray-900 dark:text-gray-100">RPE</label>

@@ -46,12 +46,17 @@ class ComputePlannedExercises
 
             $exercise = Exercise::from($exerciseConfig->exercise);
 
+            // Get suggested rep count for this exercise
+            $suggestRepCounts = app(SuggestRepCounts::class);
+            $suggestedReps = $suggestRepCounts->execute($training->athlete, $exercise, 1);
+            $targetReps = $suggestedReps[0] ?? $exerciseConfig->reps;
+
             $plannedExercises[] = new PlannedExercise(
                 exercise: $exercise,
                 exerciseSlug: $exerciseConfig->exercise,
                 priority: $order++,
                 sets: $exerciseConfig->sets,
-                reps: $exerciseConfig->reps,
+                reps: $targetReps,
                 weight: $exerciseConfig->weight,
                 restSeconds: $exerciseConfig->rest_seconds,
                 displayName: $exercise->displayName(),
