@@ -11,8 +11,8 @@ class ExerciseConfig implements Arrayable, Wireable
     public function __construct(
         public string $exercise,
         public int $sets,
-        public string $reps,
-        public string $weight = 'Progressive',
+        public int $reps,
+        public float $weight = 0.0,
         public int $rest_seconds = 120,
         public ?string $notes = null,
         public array $metadata = [],
@@ -42,9 +42,9 @@ class ExerciseConfig implements Arrayable, Wireable
     {
         return new self(
             exercise: $data['exercise'] ?? $data['exercise_slug'] ?? $data['exercise_id'] ?? '', // Backward compatibility
-            sets: $data['sets'],
-            reps: $data['reps'],
-            weight: $data['weight'] ?? 'Progressive',
+            sets: (int)$data['sets'],
+            reps: (int)$data['reps'],
+            weight: (float)$data['weight'],
             rest_seconds: $data['rest_seconds'] ?? 120,
             notes: $data['notes'] ?? null,
             metadata: $data['metadata'] ?? [],
@@ -88,9 +88,9 @@ class ExerciseConfig implements Arrayable, Wireable
     {
         return new self(
             exercise: $value['exercise'] ?? $value['exercise_slug'] ?? $value['exercise_id'] ?? '', // Backward compatibility
-            sets: $value['sets'],
-            reps: $value['reps'],
-            weight: $value['weight'] ?? 'Progressive',
+            sets: (int)$value['sets'],
+            reps: (int)$value['reps'],
+            weight: (float)$value['weight'],
             rest_seconds: $value['rest_seconds'] ?? 120,
             notes: $value['notes'] ?? null,
             metadata: $value['metadata'] ?? [],

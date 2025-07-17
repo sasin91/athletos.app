@@ -34,7 +34,7 @@ class TrainingPhaseFactory extends Factory
                         'day' => 1,
                         'sets' => 4,
                         'reps' => '6-8',
-                        'weight' => 'Progressive',
+                        'weight' => 0.0,
                         'rest_seconds' => 180
                     ],
                     [
@@ -42,7 +42,7 @@ class TrainingPhaseFactory extends Factory
                         'day' => 1,
                         'sets' => 4,
                         'reps' => '6-8',
-                        'weight' => 'Progressive',
+                        'weight' => 0.0,
                         'rest_seconds' => 180
                     ]
                 ]

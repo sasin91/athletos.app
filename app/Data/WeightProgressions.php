@@ -33,7 +33,7 @@ class WeightProgressions implements Wireable
     public function get(string $exerciseSlug): ?WeightProgression
     {
         foreach ($this->progressions as $progression) {
-            if ($progression->exercise->slug === $exerciseSlug) {
+            if ($progression->exercise->value === $exerciseSlug) {
                 return $progression;
             }
         }

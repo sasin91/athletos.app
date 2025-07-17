@@ -29,7 +29,7 @@ class WeightProgressionChart extends Component
         
         // Set default selected exercise
         if ($this->weightProgressions && $this->weightProgressions->hasData()) {
-            $this->selectedExercise = $this->weightProgressions->progressions[0]->exercise->slug ?? null;
+            $this->selectedExercise = $this->weightProgressions->progressions[0]->exercise->value ?? null;
         }
     }
 
@@ -53,7 +53,7 @@ class WeightProgressionChart extends Component
 
         $progressions = $this->weightProgressions->progressions ?? [];
         return collect($progressions)
-            ->firstWhere('exercise.slug', $this->selectedExercise);
+            ->firstWhere('exercise.value', $this->selectedExercise);
     }
 
     public function getExercisesWithDataProperty()

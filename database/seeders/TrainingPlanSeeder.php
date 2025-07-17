@@ -766,7 +766,7 @@ class TrainingPlanSeeder extends Seeder
         string $exercise,
         int $sets,
         string $reps,
-        string $weight = 'Progressive',
+        int $weight = 0,
         int $rest_seconds = 120,
         ?string $notes = null,
         int $day = 1,
