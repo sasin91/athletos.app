@@ -60,7 +60,7 @@ class Training extends Component
         $this->athlete = $training->athlete;
 
         $this->totalTimerSeconds = 0;
-        $this->totalTimerStarted = false;
+        $this->totalTimerStarted = true;
         $this->isLoading = false;
 
         // Initialize sets after training is set
@@ -230,21 +230,37 @@ class Training extends Component
         $currentCount = count($this->sets[$exerciseSlug] ?? []);
         if ($currentCount < 10) {
             $exercise = $this->sets[$exerciseSlug][0]->meta;
-
-            // Get suggested working weight for training sets
-            $calculator = app(CalculateWeightProgression::class);
-            $suggestedWeight = $calculator->suggestWeight($this->athlete, $exercise->exercise);
-
-            $this->sets[$exerciseSlug][] = new PlannedSet(
-                setNumber: $currentCount + 1,
-                reps: $exercise->reps,
-                weight: $suggestedWeight,
-                rpe: 0,
-                timeSpent: 0,
-                explosiveness: 0,
-                notes: $exercise->notes,
-                meta: $exercise
-            );
+            
+            // Get the last set to copy its data
+            $lastSet = $this->sets[$exerciseSlug][$currentCount - 1] ?? null;
+            
+            // If there's a last set, copy its data; otherwise use defaults
+            if ($lastSet) {
+                $this->sets[$exerciseSlug][] = new PlannedSet(
+                    setNumber: $currentCount + 1,
+                    reps: $lastSet->reps,
+                    weight: $lastSet->weight,
+                    rpe: $lastSet->rpe,
+                    timeSpent: 0,
+                    explosiveness: $lastSet->explosiveness,
+                    notes: $lastSet->notes,
+                    meta: $exercise
+                );
+            } else {
+                // Fallback to suggested weight for first set
+                $calculator = app(CalculateWeightProgression::class);
+                $suggestedWeight = $calculator->suggestWeight($this->athlete, $exercise->exercise);
+                $this->sets[$exerciseSlug][] = new PlannedSet(
+                    setNumber: $currentCount + 1,
+                    reps: $exercise->reps,
+                    weight: $suggestedWeight,
+                    rpe: 0,
+                    timeSpent: 0,
+                    explosiveness: 0,
+                    notes: $exercise->notes,
+                    meta: $exercise
+                );
+            }
         }
     }
 
@@ -397,7 +413,7 @@ class Training extends Component
         });
 
         session()->flash('success', 'Training completed successfully! Great work!');
-        $this->redirect(route('dashboard'), navigate: true);
+        $this->redirect(route('trainings.complete', $this->training), navigate: true);
     }
 
     public function render(): \Illuminate\View\View

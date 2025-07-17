@@ -78,7 +78,7 @@ $exerciseOptions[] = [
                 :class="focused ? 'bg-blue-50 dark:bg-blue-900/30 shadow-lg ring-2 ring-blue-400' : 'bg-white dark:bg-gray-800 shadow-sm'"
                 class="mb-4 flex items-center gap-4 rounded-lg transition-all duration-200 p-4">
                 <div class="w-16 text-gray-700 dark:text-gray-300">Set {{ $set->setNumber }}</div>
-                <div class="flex-1 grid grid-cols-3 gap-2">
+                <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
                     <div class="relative">
                         <label for="reps-{{ $exerciseSlug }}-{{ $set->setNumber }}" class="absolute -top-2 left-2 inline-block rounded-lg bg-white dark:bg-gray-800 px-1 text-xs font-medium text-gray-900 dark:text-gray-100">Reps</label>
                         <input type="number" name="reps-{{ $exerciseSlug }}-{{ $set->setNumber }}" id="reps-{{ $exerciseSlug }}-{{ $set->setNumber }}"
@@ -106,6 +106,38 @@ $exerciseOptions[] = [
                             wire:model.defer="sets.{{ $exerciseSlug }}.{{ $loop->index }}.rpe" value="{{ $set->rpe }}" />
                     </div>
                 </div>
+                <!-- Rest Timer -->
+                <div class="flex items-center gap-2" x-data="{ 
+                    restSeconds: 0, 
+                    restRunning: false,
+                    restInterval: null,
+                    startRest() {
+                        this.restSeconds = 0;
+                        this.restRunning = true;
+                        this.restInterval = setInterval(() => {
+                            this.restSeconds++;
+                        }, 1000);
+                    },
+                    stopRest() {
+                        this.restRunning = false;
+                        clearInterval(this.restInterval);
+                    },
+                    resetRest() {
+                        this.restSeconds = 0;
+                        this.restRunning = false;
+                        clearInterval(this.restInterval);
+                    }
+                }">
+                    <div class="text-center">
+                        <div class="text-xs text-gray-600 dark:text-gray-400">Rest</div>
+                        <div class="font-mono text-sm" x-text="`${String(Math.floor(restSeconds/60)).padStart(2, '0')}:${String(restSeconds%60).padStart(2, '0')}`"></div>
+                        <div class="flex gap-1 mt-1">
+                            <button type="button" @click="startRest()" x-show="!restRunning" class="px-2 py-1 text-xs bg-green-500 text-white rounded">Start</button>
+                            <button type="button" @click="stopRest()" x-show="restRunning" class="px-2 py-1 text-xs bg-red-500 text-white rounded">Stop</button>
+                            <button type="button" @click="resetRest()" class="px-2 py-1 text-xs bg-gray-500 text-white rounded">Reset</button>
+                        </div>
+                    </div>
+                </div>
                 <button type="button"
                     wire:click="removeSet('{{ $exerciseSlug }}', {{ $set->setNumber }})"
                     class="ml-2 text-red-500 hover:text-red-700">Remove</button>
@@ -113,7 +145,13 @@ $exerciseOptions[] = [
             @endforeach
             <button type="button"
                 wire:click="addSet('{{ $exerciseSlug }}')"
-                class="mt-2 px-3 py-1 bg-blue-500 text-white rounded">Add Set</button>
+                wire:loading.attr="disabled"
+                wire:loading.class="opacity-50 cursor-not-allowed"
+                wire:target="addSet('{{ $exerciseSlug }}')"
+                class="mt-2 px-3 py-1 bg-blue-500 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                <span wire:loading.remove wire:target="addSet('{{ $exerciseSlug }}')">Add Set</span>
+                <span wire:loading wire:target="addSet('{{ $exerciseSlug }}')">Adding...</span>
+            </button>
         </fieldset>
         @endforeach
 
@@ -224,6 +262,10 @@ $exerciseOptions[] = [
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                         Difficulty Level (1-10) <span class="text-red-500">*</span>
                     </label>
+                    <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-2">
+                        <span>Very Easy</span>
+                        <span>Very Hard</span>
+                    </div>
                     <div class="grid grid-cols-5 md:grid-cols-10 gap-2">
                         @for($level = 1; $level <= 10; $level++)
                             <button type="button"
@@ -232,10 +274,6 @@ $exerciseOptions[] = [
                             <span class="font-semibold">{{ $level }}</span>
                             </button>
                             @endfor
-                    </div>
-                    <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
-                        <span>Very Easy</span>
-                        <span>Very Hard</span>
                     </div>
                 </div>
 
@@ -368,14 +406,16 @@ $exerciseOptions[] = [
             <div class="fixed bottom-0 left-0 w-full z-50 bg-gray-900/95 text-white py-3 shadow-lg">
                 <div class="max-w-4xl mx-auto flex items-center justify-between px-4">
                     <!-- Back to Dashboard -->
-                    <div>
+                    <div class="relative group">
                         <a href="{{ route('dashboard') }}"
-                            class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-100 bg-gray-800 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                            <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            class="inline-flex items-center justify-center w-12 h-12 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-gray-100 bg-gray-800 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                             </svg>
-                            Back to Dashboard
                         </a>
+                        <div class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+                            Back to Dashboard
+                        </div>
                     </div>
                     <!-- Total Timer -->
                     <div
@@ -386,13 +426,15 @@ $exerciseOptions[] = [
                         <span class="font-mono text-lg" x-text="`${String(Math.floor(seconds/60)).padStart(2, '0')}:${String(seconds%60).padStart(2, '0')}`"></span>
                     </div>
                     <!-- Add Exercise -->
-                    <div>
-                        <button type="button" wire:click="$set('addingExercise', true)" class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
-                            <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div class="relative group">
+                        <button type="button" wire:click="$set('addingExercise', true)" class="inline-flex items-center justify-center w-12 h-12 rounded-md bg-indigo-600 text-white shadow-xs hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                             </svg>
-                            Add Exercise
                         </button>
+                        <div class="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+                            Add Exercise
+                        </div>
                     </div>
                 </div>
             </div>
