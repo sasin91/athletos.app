@@ -6,6 +6,7 @@ use App\Enums\Exercise;
 use App\Enums\ExperienceLevel;
 use App\Enums\ProgressionType;
 use App\Enums\TrainingGoal;
+use App\Enums\WeightType;
 use App\Models\TrainingPhase;
 use App\Models\TrainingPlan;
 use App\Settings\ExerciseConfig;
@@ -46,50 +47,73 @@ class TrainingPlanSeeder extends Seeder
             exercises: [
                 // Day 1: Chest & Back
                 $this->createExerciseConfigWithDefaults(
-                    Exercise::InclineDumbbellPress->value,
-                    4, '12-15', '70-75% 1RM', 90, 'Focus on perfect form, feel the chest working', 1, null,
-                    ['Set bench to 45-degree angle', 'Focus on muscle-mind connection', 'Slow controlled movements', 'Feel the chest stretch and contraction', 'Light weight, perfect form']
+                    exercise: Exercise::InclineDumbbellPress->value,
+                    sets: 4,
+                    reps: 12,
+                    weight: 70,
+                    rest_seconds: 90,
+                    notes: 'Focus on perfect form, feel the chest working',
+                    day: 1,
+                    customRampingPercentages: null,
+                    cues: [
+                        'Set bench to 45-degree angle',
+                        'Focus on muscle-mind connection',
+                        'Slow controlled movements',
+                        'Feel the chest stretch and contraction',
+                        'Light weight, perfect form',
+                    ],
+                    weight_type: WeightType::Static
                 ),
                 $this->createExerciseConfigWithDefaults(
                     Exercise::CableChestFly->value,
-                    3, '15-20', '60-70% 1RM', 60, 'Low to mid cable position, feel chest stretch', 1, null,
-                    ['Start with arms wide, feel chest stretch', 'Focus on squeezing pecs together', 'Controlled movement, no swinging', 'Mind-muscle connection is key']
+                    3,
+                    18, // average of 15-20
+                    65, // average of 60-70% 1RM, now as float/int
+                    60,
+                    'Low to mid cable position, feel chest stretch',
+                    1,
+                    null,
+                    ['Start with arms wide, feel chest stretch', 'Focus on squeezing pecs together', 'Controlled movement, no swinging', 'Mind-muscle connection is key'],
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::Deadlift->value,
                     sets: 3,
-                    reps: '10-12',
-                    weight: '70-75% 1RM',
+                    reps: 11, // average of 10-12
+                    weight: 72.5, // average of 70-75% 1RM
                     rest_seconds: 120,
                     notes: 'Perfect form, feel hamstrings and glutes',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::LatPulldown->value,
                     sets: 3,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13, // average of 12-15
+                    weight: 72.5, // average of 70-75% 1RM
                     rest_seconds: 90,
                     notes: 'Focus on lat activation, controlled movement',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::DumbbellCurls->value,
                     sets: 3,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13, // average of 12-15
+                    weight: 72.5, // average of 70-75% 1RM
                     rest_seconds: 60,
                     notes: 'Strict form, feel biceps working',
                     day: 1,
                     rampingPercentages: Exercise::DumbbellCurls->rampingPercentages(3), // Copy defaults from enum
+                    weight_type: WeightType::Percentage
                 ),
 
                 // Day 2: Legs
                 new ExerciseConfig(
                     exercise: Exercise::BarbellBackSquat->value,
                     sets: 4,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13, // average of 12-15
+                    weight: 72.5, // average of 70-75% 1RM
                     rest_seconds: 120,
                     notes: 'Focus on perfect form, feel the muscle working',
                     day: 2,
@@ -100,35 +124,39 @@ class TrainingPlanSeeder extends Seeder
                         'Feel weight balanced across mid-foot',
                         'Slow descent, feel quads and glutes working',
                         'Drive through floor on way up',
-                        'Perfect form over heavy weight'
-                    ]
+                        'Perfect form over heavy weight',
+                    ],
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::RomanianDeadlift->value,
                     sets: 3,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13, // average of 12-15
+                    weight: 72.5, // average of 70-75% 1RM
                     rest_seconds: 90,
                     notes: 'Feel hamstrings stretch and contract',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::LegExtensions->value,
                     sets: 3,
-                    reps: '15-20',
-                    weight: '60-70% 1RM',
+                    reps: 18, // average of 15-20
+                    weight: 65, // average of 60-70% 1RM
                     rest_seconds: 60,
                     notes: 'Quad isolation, feel the burn',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::SeatedHamstringCurls->value,
                     sets: 3,
-                    reps: '15-20',
-                    weight: '60-70% 1RM',
+                    reps: 18, // average of 15-20
+                    weight: 65, // average of 60-70% 1RM
                     rest_seconds: 60,
                     notes: 'Hamstring isolation, controlled movement',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
 
                 // Day 3: Chest & Back
@@ -287,7 +315,7 @@ class TrainingPlanSeeder extends Seeder
                         '1 second pause at bottom - stay tight',
                         '3 seconds up - controlled power',
                         'Keep tension throughout range of motion',
-                        'Feel muscles working under tension'
+                        'Feel muscles working under tension',
                     ]
                 ),
                 new ExerciseConfig(
@@ -605,7 +633,7 @@ class TrainingPlanSeeder extends Seeder
                         'Drive through floor with maximum force',
                         'Stay tight throughout core',
                         'Speed and power on the way up',
-                        'Rest fully between sets for power'
+                        'Rest fully between sets for power',
                     ]
                 ),
                 new ExerciseConfig(
@@ -668,7 +696,7 @@ class TrainingPlanSeeder extends Seeder
                         'Big breath, hold throughout rep',
                         'Controlled descent, maintain tightness',
                         'Explosive drive through floor',
-                        'Complete mental focus and commitment'
+                        'Complete mental focus and commitment',
                     ]
                 ),
                 new ExerciseConfig(
@@ -733,15 +761,30 @@ class TrainingPlanSeeder extends Seeder
             exercises: [
                 $this->createExerciseConfigWithDefaults(
                     Exercise::BarbellBackSquat->value,
-                    5, '3', '80-85% 1RM', 240, 'Explosive concentric, controlled eccentric', 1
+                    5,
+                    '3',
+                    '80-85% 1RM',
+                    240,
+                    'Explosive concentric, controlled eccentric',
+                    1
                 ),
                 $this->createExerciseConfigWithDefaults(
                     Exercise::BenchPress->value,
-                    5, '3', '80-85% 1RM', 240, 'Focus on bar speed', 2
+                    5,
+                    '3',
+                    '80-85% 1RM',
+                    240,
+                    'Focus on bar speed',
+                    2
                 ),
                 $this->createExerciseConfigWithDefaults(
                     Exercise::Deadlift->value,
-                    3, '3', '85-90% 1RM', 300, 'Explosive pull from floor', 3
+                    3,
+                    '3',
+                    '85-90% 1RM',
+                    300,
+                    'Explosive pull from floor',
+                    3
                 ),
             ]
         );
@@ -765,22 +808,23 @@ class TrainingPlanSeeder extends Seeder
     private function createExerciseConfigWithDefaults(
         string $exercise,
         int $sets,
-        string $reps,
-        int $weight = 0,
+        int $reps,
+        float $weight = 0.0,
         int $rest_seconds = 120,
         ?string $notes = null,
         int $day = 1,
         ?array $customRampingPercentages = null,
-        ?array $cues = null
+        ?array $cues = null,
+        WeightType $weight_type = WeightType::Static
     ): ExerciseConfig {
         $exerciseEnum = Exercise::from($exercise);
-        
+
         // Use custom ramping if provided, otherwise copy from enum defaults
         $rampingPercentages = $customRampingPercentages ?? $exerciseEnum->rampingPercentages($sets);
-        
+
         // Use provided cues or fallback to enum defaults
         $effectiveCues = $cues ?? $exerciseEnum->cues();
-        
+
         return new ExerciseConfig(
             exercise: $exercise,
             sets: $sets,
@@ -791,6 +835,7 @@ class TrainingPlanSeeder extends Seeder
             day: $day,
             rampingPercentages: $rampingPercentages,
             cues: $effectiveCues,
+            weight_type: $weight_type,
         );
     }
 }
