@@ -3,13 +3,12 @@
 namespace App\Providers;
 
 use App\Enums\UserRole;
+use App\Managers\TrainingPlanManager;
 use App\Models\Athlete;
 use App\Models\Training;
-use App\Models\TrainingPlan;
 use App\Models\User;
 use App\Policies\AthletePolicy;
 use App\Policies\TrainingPolicy;
-use App\Policies\TrainingPlanPolicy;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -22,7 +21,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Register Training Plan Manager
+        $this->app->singleton(TrainingPlanManager::class, function ($app) {
+            return new TrainingPlanManager($app);
+        });
     }
 
     /**
@@ -33,7 +35,6 @@ class AppServiceProvider extends ServiceProvider
         // Register policies
         Gate::policy(Training::class, TrainingPolicy::class);
         Gate::policy(Athlete::class, AthletePolicy::class);
-        Gate::policy(TrainingPlan::class, TrainingPlanPolicy::class);
 
         // Define a gate for athlete dashboard access
         Gate::define('isAthlete', function (User $user) {
@@ -65,7 +66,7 @@ class AppServiceProvider extends ServiceProvider
             ->link('/onboarding/plan')  
             ->cta('Select Plan')
             ->completeIf(function (User $model) {
-                return $model->athlete && $model->athlete->current_plan_id;
+                return $model->athlete && $model->athlete->current_plan;
             });
 
         Onboard::addStep('Set Training Schedule')

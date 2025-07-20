@@ -18,7 +18,7 @@ use App\Enums\ExerciseCategory;
  *
  * @property int $id
  * @property int $athlete_id
- * @property int $training_plan_id
+ * @property string $plan
  * @property \Illuminate\Support\Carbon $scheduled_at
  * @property bool $postponed
  * @property string|null $reschedule_reason
@@ -84,8 +84,8 @@ class Training extends Model
      */
     protected $fillable = [
         'athlete_id',
-        'training_plan_id',
-        'training_phase_id',
+        'plan',
+
         'scheduled_at',
         'postponed',
         'reschedule_reason',
@@ -107,7 +107,7 @@ class Training extends Model
         return [
             'id' => 'integer',
             'athlete_id' => 'integer',
-            'training_plan_id' => 'integer',
+            'plan' => 'string',
             'scheduled_at' => 'datetime',
             'postponed' => 'boolean',
             'completed_at' => 'datetime',
@@ -121,9 +121,16 @@ class Training extends Model
         return $this->belongsTo(Athlete::class);
     }
 
-    public function trainingPlan(): BelongsTo
+    /**
+     * Get the training plan driver instance
+     */
+    public function plan(): ?\App\Contracts\TrainingPlan
     {
-        return $this->belongsTo(TrainingPlan::class);
+        if (!$this->plan) {
+            return null;
+        }
+
+        return app(\App\Managers\TrainingPlanManager::class)->driver($this->plan);
     }
 
     /**
@@ -134,10 +141,7 @@ class Training extends Model
         return $this->hasMany(Exercise::class);
     }
 
-    public function trainingPhase(): BelongsTo
-    {
-        return $this->belongsTo(TrainingPhase::class);
-    }
+
 
     
     public function plannedExercises(): Attribute

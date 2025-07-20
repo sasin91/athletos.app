@@ -52,8 +52,7 @@ class ComputePlannedTrainings
         // Create a virtual training object for planning purposes
         $virtualTraining = new Training([
             'athlete_id' => $athlete->id,
-            'training_plan_id' => $athlete->current_plan_id,
-            'training_phase_id' => $trainingPhase->id,
+            'plan' => $athlete->current_plan,
             'scheduled_at' => $date->setTime(9, 0), // Default to 9 AM
             'postponed' => false,
             'reschedule_reason' => null,

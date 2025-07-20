@@ -9,7 +9,6 @@ use App\Enums\TrainingTime;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 use App\Models\Athlete;
-use App\Models\TrainingPlan;
 use App\Models\User;
 
 /**
@@ -31,7 +30,8 @@ class AthleteFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
-            'current_plan_id' => TrainingPlan::factory(),
+            'current_plan_id' => null, // Keep for now until we fully migrate
+            'current_plan' => $this->faker->randomElement(['hypertrophy', 'powerlifting']),
             'training_days' => ['monday', 'wednesday', 'friday'],
             'experience_level' => $this->faker->randomElement(ExperienceLevel::values()),
             'primary_goal' => $this->faker->randomElement(TrainingGoal::values()),

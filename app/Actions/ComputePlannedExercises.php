@@ -23,8 +23,16 @@ class ComputePlannedExercises
      */
     public function execute(Training $training, ?int $day = null)
     {
+        // Get the current training phase for this training
+        $determinePhaseAction = app(DetermineTrainingPhase::class);
+        $trainingPhase = $determinePhaseAction->execute($training->athlete, $training->scheduled_at);
+        
+        if (!$trainingPhase) {
+            return collect();
+        }
+
         /** @var array<int, ExerciseConfig> $exercises */
-        $exercises = $training->trainingPhase->settings->exercises;
+        $exercises = $trainingPhase->settings->exercises;
 
         if (empty($exercises)) {
             return collect();

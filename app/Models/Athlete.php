@@ -24,7 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasManyThrough;
  * @property int $id
  * @property int $user_id
  * @property int|null $current_plan_id
- * @property int|null $training_plan_id
+ * @property string|null $current_plan
  * @property array<array-key, mixed>|null $training_days
  * @property ExperienceLevel $experience_level
  * @property TrainingGoal $primary_goal
@@ -89,7 +89,7 @@ class Athlete extends Model
         'current_plan_id',
         'training_days',
         'training_frequency',
-        'training_plan_id',
+        'current_plan',
         'experience_level',
         'primary_goal',
         'bio',
@@ -113,7 +113,7 @@ class Athlete extends Model
             'user_id' => 'integer',
             'current_plan_id' => 'integer',
             'training_days' => 'array',
-            'training_plan_id' => 'integer',
+            'current_plan' => 'string',
             'session_duration' => 'integer',
             'notification_preferences' => 'array',
             'muscle_groups' => 'array',
@@ -130,14 +130,16 @@ class Athlete extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function trainingPlan(): BelongsTo
+    /**
+     * Get the current training plan driver instance
+     */
+    public function plan(): ?\App\Contracts\TrainingPlan
     {
-        return $this->belongsTo(TrainingPlan::class);
-    }
+        if (!$this->current_plan) {
+            return null;
+        }
 
-    public function currentPlan(): BelongsTo
-    {
-        return $this->belongsTo(TrainingPlan::class, 'current_plan_id');
+        return app(\App\Managers\TrainingPlanManager::class)->driver($this->current_plan);
     }
 
     public function trainings(): HasMany
