@@ -14,9 +14,37 @@
             @csrf
             
             <div class="space-y-6">
-                @livewire('training-plan', ['currentPlanId' => old('selected_plan_id', $athlete?->current_plan_id)])
+                <div class="grid gap-6 md:grid-cols-2">
+                    @foreach($availablePlans as $plan)
+                        <div class="relative">
+                            <input type="radio" id="plan_{{ $plan['type'] }}" name="selected_plan_type" value="{{ $plan['type'] }}" 
+                                   class="peer sr-only" {{ old('selected_plan_type', $athlete?->current_plan) === $plan['type'] ? 'checked' : '' }}>
+                            <label for="plan_{{ $plan['type'] }}" class="flex cursor-pointer flex-col rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 p-6 hover:bg-gray-50 dark:hover:bg-gray-600 peer-checked:border-blue-600 peer-checked:ring-2 peer-checked:ring-blue-600">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ $plan['name'] }}</h3>
+                                    @if($plan['suitable'])
+                                        <span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/20 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:text-green-400">
+                                            Recommended
+                                        </span>
+                                    @endif
+                                </div>
+                                <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">{{ $plan['description'] }}</p>
+                                <div class="mt-4">
+                                    <h4 class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Training Phases:</h4>
+                                    <ul class="space-y-1">
+                                        @foreach($plan['phases'] as $phase)
+                                            <li class="text-xs text-gray-600 dark:text-gray-400">
+                                                • {{ $phase['name'] }} ({{ $phase['duration_weeks'] }} weeks)
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            </label>
+                        </div>
+                    @endforeach
+                </div>
                 
-                @error('selected_plan_id')
+                @error('selected_plan_type')
                     <p class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                 @enderror
             </div>
@@ -39,26 +67,23 @@
     </div>
 
     <script>
-        document.addEventListener('livewire:init', () => {
-            // Listen for plan selection to enable/disable continue button
-            Livewire.on('plan-selected', (event) => {
-                const continueBtn = document.getElementById('continueBtn');
-                continueBtn.disabled = !event[0]?.planId; // Livewire v3 event structure
+        document.addEventListener('DOMContentLoaded', function() {
+            const continueBtn = document.getElementById('continueBtn');
+            const planRadios = document.querySelectorAll('input[name="selected_plan_type"]');
+            
+            // Function to update continue button state
+            function updateContinueButton() {
+                const selectedPlan = document.querySelector('input[name="selected_plan_type"]:checked');
+                continueBtn.disabled = !selectedPlan;
+            }
+            
+            // Listen for plan selection changes
+            planRadios.forEach(radio => {
+                radio.addEventListener('change', updateContinueButton);
             });
             
             // Check initial state
             updateContinueButton();
         });
-
-        // Function to update continue button state
-        function updateContinueButton() {
-            const continueBtn = document.getElementById('continueBtn');
-            const hiddenInput = document.querySelector('input[name="selected_plan_id"]');
-            continueBtn.disabled = !hiddenInput || !hiddenInput.value;
-        }
-
-        // Also listen for DOM changes to catch when the hidden input is added/updated
-        const observer = new MutationObserver(updateContinueButton);
-        observer.observe(document.body, { childList: true, subtree: true });
     </script>
 </x-onboarding.layout> 

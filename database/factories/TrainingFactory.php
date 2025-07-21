@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
+use App\Enums\TrainingPlan;
 use App\Models\Athlete;
 use App\Models\Training;
 
@@ -27,7 +28,7 @@ class TrainingFactory extends Factory
     {
         return [
             'athlete_id' => Athlete::factory(),
-            'plan' => fake()->randomElement(['hypertrophy', 'powerlifting']),
+            'plan' => fake()->randomElement(TrainingPlan::values()),
 
             'scheduled_at' => fake()->dateTimeBetween('-30 days', '+30 days'),
             'postponed' => fake()->boolean(),

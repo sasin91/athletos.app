@@ -3,7 +3,6 @@
 namespace App\Providers;
 
 use App\Enums\UserRole;
-use App\Managers\TrainingPlanManager;
 use App\Models\Athlete;
 use App\Models\Training;
 use App\Models\User;
@@ -21,10 +20,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Register Training Plan Manager
-        $this->app->singleton(TrainingPlanManager::class, function ($app) {
-            return new TrainingPlanManager($app);
-        });
+        //
     }
 
     /**

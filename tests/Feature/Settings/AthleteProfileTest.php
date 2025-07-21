@@ -4,11 +4,11 @@ namespace Tests\Feature\Settings;
 
 use App\Models\User;
 use App\Models\Athlete;
-use App\Models\TrainingPlan;
 use App\Enums\UserRole;
 use App\Enums\ExperienceLevel;
 use App\Enums\TrainingGoal;
 use App\Enums\TrainingTime;
+use App\Enums\TrainingPlan;
 use App\Enums\Difficulty;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -44,9 +44,6 @@ class AthleteProfileTest extends TestCase
     {
         $user = User::factory()->create(['roles' => [UserRole::Athlete]]);
         
-        // Create a training plan first to satisfy foreign key constraint
-        $trainingPlan = TrainingPlan::factory()->create();
-        
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
             'experience_level' => 'intermediate',
@@ -55,7 +52,7 @@ class AthleteProfileTest extends TestCase
             'session_duration' => 60,
             'difficulty_preference' => 'challenging',
             'training_days' => ['monday', 'wednesday', 'friday'],
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
         ]);
 
         $this->actingAs($user)
@@ -69,9 +66,6 @@ class AthleteProfileTest extends TestCase
     {
         $user = User::factory()->create(['roles' => [UserRole::Athlete]]);
         
-        // Create a training plan first to satisfy foreign key constraint
-        $trainingPlan = TrainingPlan::factory()->create();
-        
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
             'experience_level' => 'beginner',
@@ -81,7 +75,7 @@ class AthleteProfileTest extends TestCase
             'session_duration' => 45,
             'difficulty_preference' => 'moderate',
             'training_days' => ['monday', 'friday'],
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::POWERLIFTING->value,
         ]);
 
         $updateData = [
@@ -116,12 +110,9 @@ class AthleteProfileTest extends TestCase
     {
         $user = User::factory()->create(['roles' => [UserRole::Athlete]]);
         
-        // Create a training plan first to satisfy foreign key constraint
-        $trainingPlan = TrainingPlan::factory()->create();
-        
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,
@@ -144,12 +135,9 @@ class AthleteProfileTest extends TestCase
     {
         $user = User::factory()->create(['roles' => [UserRole::Athlete]]);
         
-        // Create a training plan first to satisfy foreign key constraint
-        $trainingPlan = TrainingPlan::factory()->create();
-        
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::POWERLIFTING->value,
             'training_days' => ['monday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,

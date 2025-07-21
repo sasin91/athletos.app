@@ -4,8 +4,8 @@ namespace Tests\Feature\Actions;
 
 use App\Actions\CalculateTrainingOffset;
 use App\Actions\ComputePlannedTrainings;
+use App\Enums\TrainingPlan;
 use App\Models\Athlete;
-use App\Models\TrainingPlan;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -51,17 +51,10 @@ class CalculateTrainingOffsetTest extends TestCase
     {
         // Create a user and athlete with 2w training offset
         $user = User::factory()->create();
-        $trainingPlan = TrainingPlan::factory()->create();
-        
-        // Create a training phase for the plan
-        $trainingPhase = \App\Models\TrainingPhase::factory()->create([
-            'training_plan_id' => $trainingPlan->id,
-            'duration_weeks' => 4,
-        ]);
         
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday'],
             'training_frequency' => '2w',
             'plan_start_date' => Carbon::parse('2024-01-01'),

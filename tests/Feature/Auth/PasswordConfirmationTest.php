@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use App\Models\Athlete;
+use App\Enums\TrainingPlan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -18,7 +19,7 @@ class PasswordConfirmationTest extends TestCase
             'user_id' => $user->id,
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
-            'current_plan_id' => 1,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday', 'wednesday', 'friday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,
@@ -49,7 +50,7 @@ class PasswordConfirmationTest extends TestCase
             'user_id' => $user->id,
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
-            'current_plan_id' => 1,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday', 'wednesday', 'friday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,

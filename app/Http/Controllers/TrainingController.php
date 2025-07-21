@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\DetermineTrainingPhase;
+use App\Enums\TrainingPlan;
 use App\Models\Training;
 use App\Models\User;
 use App\Actions\CalculateTrainingOffset;
@@ -27,7 +28,6 @@ class TrainingController extends Controller
 
         // Get all trainings for the athlete, paginated
         $trainings = Training::where('athlete_id', $athlete->id)
-            ->with(['trainingPlan'])
             ->orderBy('scheduled_at', 'desc')
             ->paginate(20);
 
@@ -39,20 +39,16 @@ class TrainingController extends Controller
         Gate::authorize('create', Training::class);
         
         $request->validate([
-            'training_plan_id' => 'required|exists:training_plans,id',
+            'plan' => ['required', 'string', TrainingPlan::validationRule()],
             'scheduled_at' => 'required|date',
         ]);
 
         $athlete = $user->athlete;
         $scheduledAt = Carbon::parse($request->scheduled_at);
         
-        // Determine the training phase for this athlete
-        $trainingPhase = app(DetermineTrainingPhase::class)->execute($athlete, $scheduledAt);
-
         $training = Training::create([
             'athlete_id' => $athlete->id,
-            'training_plan_id' => $request->training_plan_id,
-            'training_phase_id' => $trainingPhase->id,
+            'plan' => $request->plan,
             'scheduled_at' => $request->scheduled_at,
         ]);
 

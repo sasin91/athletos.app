@@ -5,8 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ExperienceLevel;
 use App\Enums\ProgressionType;
 use App\Enums\TrainingGoal;
-use App\Managers\TrainingPlanManager;
-
+use App\Enums\TrainingPlan;
 use App\Models\User;
 use App\Settings\ExerciseConfig;
 use App\Settings\TrainingPhaseSettings;
@@ -37,20 +36,20 @@ class TrainingPlanController extends Controller
         return view('training-plans.create');
     }
 
-    public function store(Request $request, TrainingPlanManager $trainingPlanManager, #[CurrentUser] User $user)
+    public function store(Request $request, #[CurrentUser] User $user)
     {
         Gate::authorize('update', $user->athlete);
 
         $validated = $request->validate([
-            'plan' => ['required', 'string', 'in:hypertrophy,powerlifting'],
+            'plan' => ['required', 'string', TrainingPlan::validationRule()],
             'experience_level' => ['required', Rule::enum(ExperienceLevel::class)],
         ]);
 
-        $planDriver = $trainingPlanManager->driver($validated['plan']);
+        $trainingPlan = TrainingPlan::from($validated['plan']);
         $experienceLevel = ExperienceLevel::from($validated['experience_level']);
         
-        // Build the plan with the driver
-        $planData = $planDriver->buildPlan($experienceLevel);
+        // Get plan implementation
+        $planImplementation = $trainingPlan->getImplementation();
 
         // Assign to athlete
         $athlete = $user->athlete;
@@ -62,13 +61,13 @@ class TrainingPlanController extends Controller
             ->with('status', 'Training plan assigned successfully!');
     }
 
-    public function show(string $plan, TrainingPlanManager $trainingPlanManager)
+    public function show(string $plan)
     {
-        $planDriver = $trainingPlanManager->driver($plan);
-        $phases = $planDriver->getPhases();
+        $trainingPlan = TrainingPlan::from($plan);
+        $phases = $trainingPlan->getPhases();
         
         return view('training-plans.show', [
-            'planDriver' => $planDriver,
+            'trainingPlan' => $trainingPlan,
             'phases' => $phases,
             'plan' => $plan,
         ]);

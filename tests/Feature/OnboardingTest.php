@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\TrainingPlan;
 use App\Enums\UserRole;
 use App\Models\Training;
-use App\Models\TrainingPlan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Session;
@@ -79,12 +79,9 @@ class OnboardingTest extends TestCase
             'bio' => 'I love lifting heavy weights',
         ]);
 
-        // Create a training plan to select
-        $trainingPlan = TrainingPlan::factory()->create();
-
         $response = $this->actingAs($user)
             ->post('/onboarding/plan', [
-                'selected_plan_id' => $trainingPlan->id,
+                'selected_plan_type' => TrainingPlan::HYPERTROPHY->value,
             ]);
 
         // Should redirect to next incomplete step (schedule)
@@ -92,16 +89,13 @@ class OnboardingTest extends TestCase
 
         $this->assertDatabaseHas('athletes', [
             'user_id' => $user->id,
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
         ]);
     }
 
     public function test_athlete_can_complete_schedule_step(): void
     {
         $user = User::factory()->athlete()->create();
-        
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
         
         // Complete previous steps
         $user->athlete()->updateOrCreate(
@@ -110,7 +104,7 @@ class OnboardingTest extends TestCase
                 'experience_level' => 'intermediate',
                 'primary_goal' => 'strength',
                 'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
+                'current_plan' => TrainingPlan::POWERLIFTING->value,
             ]
         );
 
@@ -136,9 +130,6 @@ class OnboardingTest extends TestCase
     {
         $user = User::factory()->athlete()->create();
         
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
-        
         // Complete previous steps
         $user->athlete()->updateOrCreate(
             ['user_id' => $user->id],
@@ -146,7 +137,7 @@ class OnboardingTest extends TestCase
                 'experience_level' => 'intermediate',
                 'primary_goal' => 'strength',
                 'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
+                'current_plan' => TrainingPlan::POWERLIFTING->value,
                 'training_days' => ['monday', 'wednesday', 'friday'],
                 'preferred_time' => 'evening',
                 'session_duration' => 60,
@@ -168,9 +159,6 @@ class OnboardingTest extends TestCase
     {
         $user = User::factory()->athlete()->create();
         
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
-        
         // Complete previous steps
         $user->athlete()->updateOrCreate(
             ['user_id' => $user->id],
@@ -178,7 +166,7 @@ class OnboardingTest extends TestCase
                 'experience_level' => 'intermediate',
                 'primary_goal' => 'strength',
                 'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
+                'current_plan' => TrainingPlan::POWERLIFTING->value,
                 'training_days' => ['monday', 'wednesday', 'friday'],
                 'preferred_time' => 'evening',
                 'session_duration' => 60,
@@ -205,8 +193,7 @@ class OnboardingTest extends TestCase
     {
         $user = User::factory()->athlete()->create();
 
-        // Create a training plan to select
-        $trainingPlan = TrainingPlan::factory()->create();
+        // Use plan type string instead of model
 
         // Complete all steps in sequence
         $this->actingAs($user)
@@ -221,7 +208,7 @@ class OnboardingTest extends TestCase
 
         $this->actingAs($user)
             ->post('/onboarding/plan', [
-                'selected_plan_id' => $trainingPlan->id,
+                'selected_plan_type' => TrainingPlan::HYPERTROPHY->value,
             ]);
 
         $this->actingAs($user)
@@ -251,7 +238,7 @@ class OnboardingTest extends TestCase
             'user_id' => $user->id,
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => json_encode(['monday', 'wednesday', 'friday']),
             'preferred_time' => 'evening',
             'session_duration' => 60,
@@ -265,9 +252,6 @@ class OnboardingTest extends TestCase
             'roles' => [UserRole::Athlete]
         ]);
 
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
-
         // Complete full onboarding
         $user->athlete()->updateOrCreate(
             ['user_id' => $user->id],
@@ -275,7 +259,7 @@ class OnboardingTest extends TestCase
                 'experience_level' => 'intermediate',
                 'primary_goal' => 'strength',
                 'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
+                'current_plan' => TrainingPlan::POWERLIFTING->value,
                 'training_days' => ['monday', 'wednesday', 'friday'],
                 'preferred_time' => 'evening',
                 'session_duration' => 60,
@@ -298,7 +282,7 @@ class OnboardingTest extends TestCase
         // Verify that the athlete has been properly set up
         $athlete = $user->fresh()->athlete;
         $this->assertNotNull($athlete);
-        $this->assertEquals($trainingPlan->id, $athlete->current_plan_id);
+        $this->assertEquals(TrainingPlan::POWERLIFTING->value, $athlete->current_plan);
         $this->assertEquals(['monday', 'wednesday', 'friday'], $athlete->training_days);
     }
 
@@ -316,7 +300,7 @@ class OnboardingTest extends TestCase
         $response = $this->actingAs($user)
             ->post('/onboarding/plan', []);
 
-        $response->assertSessionHasErrors(['selected_plan_id']);
+        $response->assertSessionHasErrors(['selected_plan_type']);
     }
 
     public function test_onboarding_validates_training_days_array(): void
@@ -343,7 +327,7 @@ class OnboardingTest extends TestCase
             [
                 'experience_level' => 'beginner',
                 'primary_goal' => 'general_fitness',
-                'current_plan_id' => 1,
+                'current_plan' => TrainingPlan::HYPERTROPHY->value,
                 'training_days' => ['monday', 'wednesday', 'friday'],
                 'preferred_time' => 'morning',
                 'session_duration' => 45,
@@ -360,15 +344,12 @@ class OnboardingTest extends TestCase
 
         $athlete = $user->fresh()->athlete;
         $this->assertNotNull($athlete);
-        $this->assertNotNull($athlete->current_plan_id);
+        $this->assertNotNull($athlete->current_plan);
     }
 
     public function test_onboarding_assigns_appropriate_training_plan(): void
     {
         $user = User::factory()->athlete()->create();
-
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
 
         // Complete onboarding with specific plan
         $user->athlete()->updateOrCreate(
@@ -376,7 +357,7 @@ class OnboardingTest extends TestCase
             [
                 'experience_level' => 'intermediate',
                 'primary_goal' => 'strength',
-                'current_plan_id' => $trainingPlan->id,
+                'current_plan' => TrainingPlan::POWERLIFTING->value,
                 'training_days' => ['monday', 'wednesday', 'friday'],
                 'preferred_time' => 'evening',
                 'session_duration' => 60,
@@ -391,15 +372,12 @@ class OnboardingTest extends TestCase
 
         $athlete = $user->fresh()->athlete;
         $this->assertNotNull($athlete);
-        $this->assertEquals($trainingPlan->id, $athlete->current_plan_id);
+        $this->assertEquals(TrainingPlan::POWERLIFTING->value, $athlete->current_plan);
     }
 
     public function test_athlete_can_complete_preferences_step_with_no_notifications(): void
     {
         $user = User::factory()->athlete()->create();
-        
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
         
         // Complete previous steps
         $user->athlete()->updateOrCreate(
@@ -408,7 +386,7 @@ class OnboardingTest extends TestCase
                 'experience_level' => 'intermediate',
                 'primary_goal' => 'strength',
                 'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
+                'current_plan' => TrainingPlan::POWERLIFTING->value,
                 'training_days' => ['monday', 'wednesday', 'friday'],
                 'preferred_time' => 'evening',
                 'session_duration' => 60,
@@ -438,6 +416,6 @@ class OnboardingTest extends TestCase
         $response = $this->actingAs($user)
             ->post('/onboarding/plan', []);
 
-        $response->assertSessionHasErrors(['selected_plan_id']);
+        $response->assertSessionHasErrors(['selected_plan_type']);
     }
 } 

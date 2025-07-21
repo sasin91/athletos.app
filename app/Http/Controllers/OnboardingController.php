@@ -6,10 +6,10 @@ use App\Enums\Difficulty;
 use App\Enums\Exercise;
 use App\Enums\ExperienceLevel;
 use App\Enums\TrainingGoal;
+use App\Enums\TrainingPlan;
 use App\Enums\TrainingTime;
 use App\Models\Athlete;
 use App\Models\PerformanceIndicator;
-use App\Models\TrainingPlan;
 use App\Models\User;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Request;
@@ -79,16 +79,23 @@ class OnboardingController extends Controller
         Gate::authorize('isAthlete');
 
         $athlete = Auth::user()->athlete;
-        $allTrainingPlans = TrainingPlan::with('phases')->get();
-
-        // Filter training plans based on athlete preferences (experience level, goal, muscle groups)
-        $trainingPlans = $allTrainingPlans->filter(fn(TrainingPlan $plan) => $plan->isSuitableForAthlete($athlete));
+        
+        // Get available plan types from enum
+        $availablePlans = collect(TrainingPlan::all())->map(function (TrainingPlan $plan) use ($athlete) {
+            return [
+                'type' => $plan->value,
+                'name' => $plan->getName(),
+                'description' => $plan->getDescription(),
+                'suitable' => $plan->isSuitableForAthlete($athlete),
+                'phases' => $plan->getPhases(),
+            ];
+        });
 
         return view('onboarding.plan', [
             'user' => Auth::user(),
             'athlete' => $athlete,
             'onboarding' => Auth::user()->onboarding(),
-            'trainingPlans' => $trainingPlans
+            'availablePlans' => $availablePlans
         ]);
     }
 
@@ -102,12 +109,12 @@ class OnboardingController extends Controller
         Gate::authorize('isAthlete');
 
         $validated = $request->validate([
-            'selected_plan_id' => 'required|exists:training_plans,id',
+            'selected_plan_type' => ['required', 'string', TrainingPlan::validationRule()],
         ]);
 
         $user->athlete()->update(
             [
-                'current_plan_id' => $validated['selected_plan_id'],
+                'current_plan' => $validated['selected_plan_type'],
                 'plan_start_date' => now(),
             ]
         );
@@ -305,4 +312,5 @@ class OnboardingController extends Controller
             ]);
         }
     }
+
 }

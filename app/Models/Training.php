@@ -34,7 +34,6 @@ use App\Enums\ExerciseCategory;
  * @property-read mixed $is_completed
  * @property-read mixed $progress
  * @property-read mixed $recovery_suggestions
- * @property-read \App\Models\TrainingPlan $trainingPlan
  * @property-read \App\Models\TrainingPhase $trainingPhase
  * @method static \Database\Factories\TrainingFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Training newModelQuery()
@@ -52,7 +51,6 @@ use App\Enums\ExerciseCategory;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Training wherePostponed($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Training whereRescheduleReason($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Training whereScheduledAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Training whereTrainingPlanId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Training whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Training withTrashed()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Training withoutTrashed()
@@ -122,15 +120,15 @@ class Training extends Model
     }
 
     /**
-     * Get the training plan driver instance
+     * Get the training plan enum instance
      */
-    public function plan(): ?\App\Contracts\TrainingPlan
+    public function trainingPlan(): ?\App\Enums\TrainingPlan
     {
         if (!$this->plan) {
             return null;
         }
 
-        return app(\App\Managers\TrainingPlanManager::class)->driver($this->plan);
+        return \App\Enums\TrainingPlan::tryFrom($this->plan);
     }
 
     /**

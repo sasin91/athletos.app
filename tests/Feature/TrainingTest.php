@@ -4,10 +4,10 @@ namespace Tests\Feature;
 
 use App\Actions\SuggestRecoveryExercises;
 use App\Enums\Exercise;
+use App\Enums\TrainingPlan;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Training;
-use App\Models\TrainingPlan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -22,12 +22,11 @@ class TrainingTest extends TestCase
     public function test_user_can_view_training_page(): void
     {
         $user = User::factory()->create();
-        $trainingPlan = TrainingPlan::factory()->create();
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday', 'wednesday', 'friday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,
@@ -38,7 +37,7 @@ class TrainingTest extends TestCase
         // Create a training session manually (simulating user starting a session)
         $training = Training::factory()->create([
             'athlete_id' => $athlete->id,
-            'training_plan_id' => $trainingPlan->id,
+            'plan' => TrainingPlan::HYPERTROPHY->value,
             'scheduled_at' => Carbon::today()->setTime(9, 0),
         ]);
 
@@ -56,12 +55,11 @@ class TrainingTest extends TestCase
     ): void
     {
         $user = User::factory()->create();
-        $trainingPlan = TrainingPlan::factory()->create();
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday', 'wednesday', 'friday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,
@@ -70,7 +68,7 @@ class TrainingTest extends TestCase
         ]);
         $training = Training::factory()->create([
             'athlete_id' => $athlete->id,
-            'training_plan_id' => $trainingPlan->id,
+            'plan' => TrainingPlan::HYPERTROPHY->value,
             'scheduled_at' => now()->setTime(9, 0),
         ]);
 
@@ -212,12 +210,11 @@ class TrainingTest extends TestCase
     public function test_user_cannot_access_other_users_training(): void
     {
         $user1 = User::factory()->create();
-        $trainingPlan1 = TrainingPlan::factory()->create();
         $athlete1 = Athlete::factory()->create([
             'user_id' => $user1->id,
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan1->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday', 'wednesday', 'friday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,
@@ -228,17 +225,16 @@ class TrainingTest extends TestCase
         // Create a training session for user1
         $training = Training::factory()->create([
             'athlete_id' => $athlete1->id,
-            'training_plan_id' => $trainingPlan1->id,
+            'plan' => TrainingPlan::HYPERTROPHY->value,
             'scheduled_at' => Carbon::today()->setTime(9, 0),
         ]);
 
         $user2 = User::factory()->create();
-        $trainingPlan2 = TrainingPlan::factory()->create();
         $athlete2 = Athlete::factory()->create([
             'user_id' => $user2->id,
             'experience_level' => 'beginner',
             'primary_goal' => 'general_fitness',
-            'current_plan_id' => $trainingPlan2->id,
+            'current_plan' => TrainingPlan::POWERLIFTING->value,
             'training_days' => ['tuesday', 'thursday'],
             'preferred_time' => 'morning',
             'session_duration' => 45,
@@ -257,16 +253,15 @@ class TrainingTest extends TestCase
     public function test_recovery_suggestions(): void
     {
         $user = User::factory()->create();
-        $trainingPlan = TrainingPlan::factory()->create();
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'plan_start_date' => now(),
         ]);
 
         $training = Training::factory()->create([
             'athlete_id' => $athlete->id,
-            'training_plan_id' => $trainingPlan->id,
+            'plan' => TrainingPlan::HYPERTROPHY->value,
         ]);
         
         $exercises = [
@@ -351,22 +346,21 @@ class TrainingTest extends TestCase
 
     public function test_user_can_start_training(): void
     {
-        $trainingPlan = TrainingPlan::factory()->create();
-        $user = User::factory()->athlete($trainingPlan)->create();
+        $user = User::factory()->athlete(TrainingPlan::HYPERTROPHY->value)->create();
 
         $scheduledAt = now()->setTime(9, 0);
 
         $this->actingAs($user);
 
         $response = $this->post(route('trainings.store'), [
-            'training_plan_id' => $trainingPlan->id,
+            'plan' => TrainingPlan::HYPERTROPHY->value,
             'scheduled_at' => $scheduledAt->format('Y-m-d H:i:s'),
         ]);
 
         $response->assertRedirect();
         $this->assertDatabaseHas('trainings', [
             'athlete_id' => $user->athlete->id,
-            'training_plan_id' => $trainingPlan->id,
+            'plan' => TrainingPlan::HYPERTROPHY->value,
             'scheduled_at' => $scheduledAt->format('Y-m-d H:i:s'),
         ]);
     }
@@ -374,28 +368,26 @@ class TrainingTest extends TestCase
     public function test_can_assign_training_plan(): void
     {
         $user = User::factory()->athlete()->create();    
-        $trainingPlan = TrainingPlan::factory()->create();
 
         $this->actingAs($user)
-            ->post(route('training-plans.assign', $trainingPlan))
+            ->post(route('training-plans.assign', TrainingPlan::POWERLIFTING->value))
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('dashboard'));
 
         $this->assertDatabaseHas('athletes', [
             'user_id' => $user->id,
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::POWERLIFTING->value,
         ]);
     }
 
     public function test_user_can_view_training_complete_page(): void
     {
         $user = User::factory()->create();
-        $trainingPlan = TrainingPlan::factory()->create();
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday', 'wednesday', 'friday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,
@@ -405,7 +397,7 @@ class TrainingTest extends TestCase
 
         $training = Training::factory()->create([
             'athlete_id' => $athlete->id,
-            'training_plan_id' => $trainingPlan->id,
+            'plan' => TrainingPlan::HYPERTROPHY->value,
             'scheduled_at' => Carbon::today()->setTime(9, 0),
             'completed_at' => now(),
             'mood' => 'good',
@@ -447,12 +439,11 @@ class TrainingTest extends TestCase
     public function test_user_cannot_access_other_users_training_complete_page(): void
     {
         $user1 = User::factory()->create();
-        $trainingPlan1 = TrainingPlan::factory()->create();
         $athlete1 = Athlete::factory()->create([
             'user_id' => $user1->id,
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan1->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday', 'wednesday', 'friday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,
@@ -462,18 +453,17 @@ class TrainingTest extends TestCase
 
         $training = Training::factory()->create([
             'athlete_id' => $athlete1->id,
-            'training_plan_id' => $trainingPlan1->id,
+            'plan' => TrainingPlan::HYPERTROPHY->value,
             'scheduled_at' => Carbon::today()->setTime(9, 0),
             'completed_at' => now(),
         ]);
 
         $user2 = User::factory()->create();
-        $trainingPlan2 = TrainingPlan::factory()->create();
         $athlete2 = Athlete::factory()->create([
             'user_id' => $user2->id,
             'experience_level' => 'beginner',
             'primary_goal' => 'general_fitness',
-            'current_plan_id' => $trainingPlan2->id,
+            'current_plan' => TrainingPlan::POWERLIFTING->value,
             'training_days' => ['tuesday', 'thursday'],
             'preferred_time' => 'morning',
             'session_duration' => 45,
@@ -489,12 +479,11 @@ class TrainingTest extends TestCase
     public function test_user_cannot_access_incomplete_training_complete_page(): void
     {
         $user = User::factory()->create();
-        $trainingPlan = TrainingPlan::factory()->create();
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'training_days' => ['monday', 'wednesday', 'friday'],
             'preferred_time' => 'evening',
             'session_duration' => 60,
@@ -504,7 +493,7 @@ class TrainingTest extends TestCase
 
         $training = Training::factory()->create([
             'athlete_id' => $athlete->id,
-            'training_plan_id' => $trainingPlan->id,
+            'plan' => TrainingPlan::HYPERTROPHY->value,
             'scheduled_at' => Carbon::today()->setTime(9, 0),
             'completed_at' => null, // Not completed
         ]);

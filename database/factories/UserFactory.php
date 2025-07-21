@@ -2,10 +2,10 @@
 
 namespace Database\Factories;
 
+use App\Enums\TrainingPlan;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\Training;
-use App\Models\TrainingPlan;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -48,22 +48,22 @@ class UserFactory extends Factory
         ]);
     }
 
-    public function athlete(?TrainingPlan $trainingPlan = null): static
+    public function athlete(string $planType = null): static
     {
-        $trainingPlan = $trainingPlan ?? TrainingPlan::factory()->create();
-
         return $this
             ->state(fn (array $attributes) => [
                 'roles' => [UserRole::Athlete]
             ])
-            ->afterCreating(function (User $user) use ($trainingPlan) {
+            ->afterCreating(function (User $user) use ($planType) {
+                $planValue = $planType ?? TrainingPlan::HYPERTROPHY->value;
+                
                 $athlete = Athlete::factory()
                     ->for($user)
-                    ->for($trainingPlan)
+                    ->state(['current_plan' => $planValue])
                     ->create();
 
                 $training = Training::factory()
-                    ->for($trainingPlan)
+                    ->state(['plan' => $planValue])
                     ->for($athlete)
                     ->create();
 

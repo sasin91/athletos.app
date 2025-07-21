@@ -38,12 +38,10 @@ use Illuminate\Database\Eloquent\Relations\HasManyThrough;
  * @property \Illuminate\Support\Carbon|null $deleted_at
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\BonusActivity> $bonusActivities
  * @property-read int|null $bonus_activities_count
- * @property-read \App\Models\TrainingPlan|null $currentPlan
  * @property-read \Illuminate\Database\Eloquent\Collection<int, PerformanceIndicator> $performanceIndicators
  * @property-read int|null $performance_indicators_count
  * @property-read mixed $progression_rate
  * @property-read \App\Models\Training|null $training
- * @property-read \App\Models\TrainingPlan|null $trainingPlan
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Training> $trainings
  * @property-read int|null $trainings_count
  * @property-read \App\Models\User $user
@@ -64,7 +62,6 @@ use Illuminate\Database\Eloquent\Relations\HasManyThrough;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Athlete wherePrimaryGoal($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Athlete whereSessionDuration($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Athlete whereTrainingDays($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Athlete whereTrainingPlanId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Athlete whereUpdatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Athlete whereUserId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Athlete withTrashed()
@@ -131,15 +128,15 @@ class Athlete extends Model
     }
 
     /**
-     * Get the current training plan driver instance
+     * Get the current training plan enum instance
      */
-    public function plan(): ?\App\Contracts\TrainingPlan
+    public function trainingPlan(): ?\App\Enums\TrainingPlan
     {
         if (!$this->current_plan) {
             return null;
         }
 
-        return app(\App\Managers\TrainingPlanManager::class)->driver($this->current_plan);
+        return \App\Enums\TrainingPlan::tryFrom($this->current_plan);
     }
 
     public function trainings(): HasMany

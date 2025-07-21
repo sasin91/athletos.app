@@ -4,8 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Models\Athlete;
-use App\Models\TrainingPlan;
 use App\Enums\UserRole;
+use App\Enums\TrainingPlan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -31,15 +31,7 @@ class DashboardTest extends TestCase
     {
         $user = User::factory()->create(['roles' => [UserRole::Athlete]]);
         
-        // Create a training plan first to satisfy foreign key constraint
-        $trainingPlan = TrainingPlan::factory()->create();
-        
-        // Ensure the plan has at least one phase
-        \App\Models\TrainingPhase::factory()->create([
-            'training_plan_id' => $trainingPlan->id,
-            'order' => 0,
-            'duration_weeks' => 4,
-        ]);
+        // Note: Training phases are now handled by the Driver/Manager pattern
         
         $athlete = Athlete::factory()->create([
             'user_id' => $user->id,
@@ -49,7 +41,7 @@ class DashboardTest extends TestCase
             'preferred_time' => 'evening',
             'session_duration' => 60,
             'difficulty_preference' => 'challenging',
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan' => TrainingPlan::HYPERTROPHY->value,
             'plan_start_date' => now(),
         ]);
 
