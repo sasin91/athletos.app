@@ -13,7 +13,7 @@ class GenerateChatResponse
 {
     public function execute(ChatSession $session, string $userPrompt)
     {
-        $systemMessage = app(BuildSystemMessage::class)->execute($session->athlete->trainingPlan);
+        $systemMessage = app(BuildSystemMessage::class)->execute($session->athlete->currentPlan);
         $conversationHistory = app(BuildConversationHistory::class)->execute($session);
 
         // Convert conversation history to Prism messages
