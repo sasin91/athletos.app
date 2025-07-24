@@ -37,7 +37,7 @@ class TrainingController extends Controller
     public function store(Request $request, #[CurrentUser] User $user): \Illuminate\Http\RedirectResponse
     {
         Gate::authorize('create', Training::class);
-        
+
         $request->validate([
             'training_plan_id' => 'required|exists:training_plans,id',
             'scheduled_at' => 'required|date',
@@ -45,14 +45,14 @@ class TrainingController extends Controller
 
         $athlete = $user->athlete;
         $scheduledAt = Carbon::parse($request->scheduled_at);
-        
+
         // Determine the training phase for this athlete
         $trainingPhase = app(DetermineTrainingPhase::class)->execute($athlete, $scheduledAt);
 
         $training = Training::create([
             'athlete_id' => $athlete->id,
             'training_plan_id' => $request->training_plan_id,
-            'training_phase_id' => $trainingPhase->id,
+            'training_phase_id' => $trainingPhase?->id,
             'scheduled_at' => $request->scheduled_at,
         ]);
 
@@ -60,7 +60,7 @@ class TrainingController extends Controller
     }
 
     public function complete(
-        Training $training, 
+        Training $training,
         SuggestRecoveryExercises $suggestRecoveryExercises
     ): View {
         Gate::authorize('viewComplete', $training);

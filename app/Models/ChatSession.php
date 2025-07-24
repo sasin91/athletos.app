@@ -6,30 +6,28 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Enums\ChatSessionType;
 
 class ChatSession extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'user_id',
+        'athlete_id',
         'title',
-        'type',
+        'subject',
         'training_plan_id',
         'context',
         'last_activity_at',
     ];
 
     protected $casts = [
-        'type' => ChatSessionType::class,
         'context' => 'array',
         'last_activity_at' => 'datetime',
     ];
 
-    public function user(): BelongsTo
+    public function athlete(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Athlete::class);
     }
 
     public function messages(): HasMany

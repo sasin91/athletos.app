@@ -151,7 +151,7 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::SeatedHamstringCurls->value,
                     sets: 3,
-                    reps: 18, // average of 15-20
+                    reps: 10,
                     weight: 65, // average of 60-70% 1RM
                     rest_seconds: 60,
                     notes: 'Hamstring isolation, controlled movement',
@@ -163,76 +163,84 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::FlatBarbellBenchPress->value,
                     sets: 4,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 10,
+                    weight: 70,
                     rest_seconds: 90,
                     notes: 'Control the descent, explosive concentric',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::DeclineDumbbellPress->value,
                     sets: 3,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13,
+                    weight: 72,
                     rest_seconds: 90,
                     notes: 'Lower chest focus, feel the muscle',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::OneArmDumbbellRow->value,
                     sets: 3,
-                    reps: '12-15 each side',
-                    weight: '70-75% 1RM',
+                    reps: 13,
+                    weight: 72,
                     rest_seconds: 90,
                     notes: 'Unilateral work, focus on lat activation',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::SeatedCableRow->value,
                     sets: 3,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13,
+                    weight: 72,
                     rest_seconds: 90,
                     notes: 'Handle below sternum, feel mid-back',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::SideLateralRaises->value,
                     sets: 3,
-                    reps: '15-20',
-                    weight: '60-70% 1RM',
+                    reps: 17,
+                    weight: 65,
                     rest_seconds: 60,
                     notes: 'Shoulder isolation, controlled movement',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
 
                 // Day 4: Legs
                 new ExerciseConfig(
                     exercise: Exercise::LegPress->value,
                     sets: 4,
-                    reps: '15-20',
-                    weight: '70-75% 1RM',
+                    reps: 17,
+                    weight: 72,
                     rest_seconds: 90,
                     notes: 'Full range of motion, feel quads',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::GluteBridge->value,
                     sets: 3,
-                    reps: '15-20',
-                    weight: 'Bodyweight',
+                    reps: 17,
+                    weight: 0,
                     rest_seconds: 60,
                     notes: 'Pre-activate glutes, perfect form',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Static
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::DumbbellLunges->value,
                     sets: 3,
-                    reps: '12-15 each leg',
-                    weight: '70-75% 1RM',
+                    reps: 13,
+                    weight: 72,
                     rest_seconds: 90,
                     notes: 'Unilateral work, balance and stability',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
             ]
         );
@@ -256,55 +264,60 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::InclineDumbbellPress->value,
                     sets: 5,
-                    reps: '8-10',
-                    weight: '75-80% 1RM',
+                    reps: 9,
+                    weight: 77,
                     rest_seconds: 120,
                     notes: '2-1-2 tempo, feel chest activation',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::CableChestFly->value,
                     sets: 4,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13,
+                    weight: 72,
                     rest_seconds: 90,
                     notes: 'Controlled movement, feel chest stretch',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::Deadlift->value,
                     sets: 4,
-                    reps: '8-10',
-                    weight: '75-80% 1RM',
+                    reps: 9,
+                    weight: 77,
                     rest_seconds: 180,
                     notes: 'Perfect form, controlled descent',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::LatPulldown->value,
                     sets: 4,
-                    reps: '10-12',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 120,
                     notes: 'Focus on lat activation, controlled movement',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::DumbbellCurls->value,
                     sets: 4,
-                    reps: '10-12',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 90,
                     notes: 'Strict form, feel biceps working',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
 
                 // Day 2: Legs
                 new ExerciseConfig(
                     exercise: Exercise::BarbellBackSquat->value,
                     sets: 5,
-                    reps: '8-10',
-                    weight: '75-80% 1RM',
+                    reps: 9,
+                    weight: 77,
                     rest_seconds: 150,
                     notes: '3-1-3 tempo: 3s down, 1s pause, 3s up',
                     day: 2,
@@ -321,105 +334,116 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::RomanianDeadlift->value,
                     sets: 4,
-                    reps: '10-12',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 120,
                     notes: 'Feel hamstrings stretch and contract',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::LegExtensions->value,
                     sets: 4,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13,
+                    weight: 72,
                     rest_seconds: 90,
                     notes: 'Quad isolation, feel the burn',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::SeatedHamstringCurls->value,
                     sets: 4,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13,
+                    weight: 72,
                     rest_seconds: 90,
                     notes: 'Hamstring isolation, controlled movement',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
 
                 // Day 3: Chest & Back
                 new ExerciseConfig(
                     exercise: Exercise::FlatBarbellBenchPress->value,
                     sets: 5,
-                    reps: '8-10',
-                    weight: '75-80% 1RM',
+                    reps: 9,
+                    weight: 77,
                     rest_seconds: 150,
                     notes: '2-1-2 tempo, feel chest activation',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::DeclineDumbbellPress->value,
                     sets: 4,
-                    reps: '10-12',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 120,
                     notes: 'Lower chest focus, feel the muscle',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::OneArmDumbbellRow->value,
                     sets: 4,
-                    reps: '10-12 each side',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 120,
                     notes: 'Unilateral work, focus on lat activation',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::SeatedCableRow->value,
                     sets: 4,
-                    reps: '10-12',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 120,
                     notes: 'Handle below sternum, feel mid-back',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::SideLateralRaises->value,
                     sets: 4,
-                    reps: '12-15',
-                    weight: '70-75% 1RM',
+                    reps: 13,
+                    weight: 72,
                     rest_seconds: 90,
                     notes: 'Shoulder isolation, controlled movement',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
 
                 // Day 4: Legs
                 new ExerciseConfig(
                     exercise: Exercise::LegPress->value,
                     sets: 5,
-                    reps: '12-15',
-                    weight: '75-80% 1RM',
+                    reps: 13,
+                    weight: 77,
                     rest_seconds: 120,
                     notes: 'Full range of motion, feel quads',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::GluteBridge->value,
                     sets: 4,
-                    reps: '15-20',
-                    weight: 'Bodyweight',
+                    reps: 17,
+                    weight: 0,
                     rest_seconds: 90,
                     notes: 'Pre-activate glutes, perfect form',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::DumbbellLunges->value,
                     sets: 4,
-                    reps: '10-12 each leg',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 120,
                     notes: 'Unilateral work, balance and stability',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
             ]
         );
@@ -443,93 +467,102 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::InclineDumbbellPress->value,
                     sets: 4,
-                    reps: '6-8',
-                    weight: '80-85% 1RM',
+                    reps: 7,
+                    weight: 82,
                     rest_seconds: 150,
                     notes: 'Heavy but controlled, maintain form',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::CableChestFly->value,
                     sets: 3,
-                    reps: '10-12',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 90,
                     notes: 'Controlled movement, feel chest stretch',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::Deadlift->value,
                     sets: 3,
-                    reps: '6-8',
-                    weight: '80-85% 1RM',
+                    reps: 7,
+                    weight: 82,
                     rest_seconds: 240,
                     notes: 'Heavy but perfect form',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::LatPulldown->value,
                     sets: 3,
-                    reps: '8-10',
-                    weight: '80-85% 1RM',
+                    reps: 9,
+                    weight: 82,
                     rest_seconds: 120,
                     notes: 'Focus on lat activation, controlled movement',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::DumbbellCurls->value,
                     sets: 3,
-                    reps: '8-10',
-                    weight: '80-85% 1RM',
+                    reps: 9,
+                    weight: 82,
                     rest_seconds: 90,
                     notes: 'Strict form, feel biceps working',
-                    day: 1
+                    day: 1,
+                    weight_type: WeightType::Percentage
                 ),
 
                 // Day 2: Legs
                 new ExerciseConfig(
                     exercise: Exercise::BarbellBackSquat->value,
                     sets: 4,
-                    reps: '6-8',
-                    weight: '80-85% 1RM',
+                    reps: 7,
+                    weight: 82,
                     rest_seconds: 180,
                     notes: 'Heavy but controlled, maintain form',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::RomanianDeadlift->value,
                     sets: 3,
-                    reps: '8-10',
-                    weight: '80-85% 1RM',
+                    reps: 9,
+                    weight: 82,
                     rest_seconds: 150,
                     notes: 'Feel hamstrings stretch and contract',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::LegExtensions->value,
                     sets: 3,
-                    reps: '10-12',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 90,
                     notes: 'Quad isolation, feel the burn',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::SeatedHamstringCurls->value,
                     sets: 3,
-                    reps: '10-12',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 90,
                     notes: 'Hamstring isolation, controlled movement',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
 
                 // Day 3: Chest & Back
                 new ExerciseConfig(
                     exercise: Exercise::FlatBarbellBenchPress->value,
                     sets: 4,
-                    reps: '6-8',
-                    weight: '80-85% 1RM',
+                    reps: 7,
+                    weight: 82,
                     rest_seconds: 180,
                     notes: 'Progressive overload focus',
                     day: 3,
@@ -538,67 +571,74 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::DeclineDumbbellPress->value,
                     sets: 3,
-                    reps: '8-10',
-                    weight: '80-85% 1RM',
+                    reps: 9,
+                    weight: 82,
                     rest_seconds: 120,
                     notes: 'Lower chest focus, feel the muscle',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::OneArmDumbbellRow->value,
                     sets: 3,
-                    reps: '8-10 each side',
-                    weight: '80-85% 1RM',
+                    reps: 9,
+                    weight: 82,
                     rest_seconds: 120,
                     notes: 'Unilateral work, focus on lat activation',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::SeatedCableRow->value,
                     sets: 3,
-                    reps: '8-10',
-                    weight: '80-85% 1RM',
+                    reps: 9,
+                    weight: 82,
                     rest_seconds: 120,
                     notes: 'Handle below sternum, feel mid-back',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::SideLateralRaises->value,
                     sets: 3,
-                    reps: '10-12',
-                    weight: '75-80% 1RM',
+                    reps: 11,
+                    weight: 77,
                     rest_seconds: 90,
                     notes: 'Shoulder isolation, controlled movement',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
 
                 // Day 4: Legs
                 new ExerciseConfig(
                     exercise: Exercise::LegPress->value,
                     sets: 4,
-                    reps: '10-12',
-                    weight: '80-85% 1RM',
+                    reps: 11,
+                    weight: 82,
                     rest_seconds: 150,
                     notes: 'Full range of motion, feel quads',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::GluteBridge->value,
                     sets: 3,
-                    reps: '12-15',
-                    weight: 'Bodyweight',
+                    reps: 13,
+                    weight: 0,
                     rest_seconds: 90,
                     notes: 'Pre-activate glutes, perfect form',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::DumbbellLunges->value,
                     sets: 3,
-                    reps: '8-10 each leg',
-                    weight: '80-85% 1RM',
+                    reps: 9,
+                    weight: 82,
                     rest_seconds: 120,
                     notes: 'Unilateral work, balance and stability',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
             ]
         );
@@ -621,8 +661,8 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::BarbellBackSquat->value,
                     sets: 5,
-                    reps: '5',
-                    weight: '85-90% 1RM',
+                    reps: 5,
+                    weight: 87,
                     rest_seconds: 180,
                     notes: 'Focus on speed and power',
                     day: 1,
@@ -639,29 +679,32 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::BenchPress->value,
                     sets: 5,
-                    reps: '5',
-                    weight: '85-90% 1RM',
+                    reps: 5,
+                    weight: 87,
                     rest_seconds: 180,
                     notes: 'Explosive concentric, controlled eccentric',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::Deadlift->value,
                     sets: 3,
-                    reps: '3-5',
-                    weight: '90-95% 1RM',
+                    reps: 4,
+                    weight: 92,
                     rest_seconds: 300,
                     notes: 'Maximal effort, perfect form',
-                    day: 3
+                    day: 3,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::StandingCalfRaise->value,
                     sets: 4,
-                    reps: '12-15',
-                    weight: 'Bodyweight',
+                    reps: 13,
+                    weight: 0,
                     rest_seconds: 60,
                     notes: 'Recovery and mobility work',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
             ]
         );
@@ -684,8 +727,8 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::BarbellBackSquat->value,
                     sets: 3,
-                    reps: '3',
-                    weight: '90-95% 1RM',
+                    reps: 3,
+                    weight: 92,
                     rest_seconds: 240,
                     notes: 'Maximal effort, perfect form',
                     day: 1,
@@ -702,17 +745,18 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::BenchPress->value,
                     sets: 3,
-                    reps: '3',
-                    weight: '90-95% 1RM',
+                    reps: 3,
+                    weight: 92,
                     rest_seconds: 240,
                     notes: 'Focus on bar speed and power',
-                    day: 2
+                    day: 2,
+                    weight_type: WeightType::Percentage
                 ),
                 new ExerciseConfig(
                     exercise: Exercise::Deadlift->value,
                     sets: 2,
-                    reps: '1-3',
-                    weight: '95-100% 1RM',
+                    reps: 2,
+                    weight: 97,
                     rest_seconds: 360,
                     notes: 'Maximal strength, perfect execution',
                     day: 3,
@@ -721,11 +765,12 @@ class TrainingPlanSeeder extends Seeder
                 new ExerciseConfig(
                     exercise: Exercise::HangingStretch->value,
                     sets: 2,
-                    reps: '30-60 seconds',
-                    weight: 'Bodyweight',
+                    reps: 45,
+                    weight: 0,
                     rest_seconds: 60,
                     notes: 'Spinal decompression and recovery',
-                    day: 4
+                    day: 4,
+                    weight_type: WeightType::Percentage
                 ),
             ]
         );
@@ -762,29 +807,32 @@ class TrainingPlanSeeder extends Seeder
                 $this->createExerciseConfigWithDefaults(
                     Exercise::BarbellBackSquat->value,
                     5,
-                    '3',
-                    '80-85% 1RM',
+                    3,
+                    82,
                     240,
                     'Explosive concentric, controlled eccentric',
-                    1
+                    1,
+                    weight_type: WeightType::Percentage
                 ),
                 $this->createExerciseConfigWithDefaults(
                     Exercise::BenchPress->value,
                     5,
-                    '3',
-                    '80-85% 1RM',
+                    3,
+                    82,
                     240,
                     'Focus on bar speed',
-                    2
+                    2,
+                    weight_type: WeightType::Percentage
                 ),
                 $this->createExerciseConfigWithDefaults(
                     Exercise::Deadlift->value,
                     3,
-                    '3',
-                    '85-90% 1RM',
+                    3,
+                    87,
                     300,
                     'Explosive pull from floor',
-                    3
+                    3,
+                    weight_type: WeightType::Percentage
                 ),
             ]
         );

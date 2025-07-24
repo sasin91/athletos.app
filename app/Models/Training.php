@@ -70,14 +70,6 @@ class Training extends Model
     use HasFactory, SoftDeletes;
 
     /**
-     * Get the policy for the model.
-     */
-    protected static function policy(): string
-    {
-        return TrainingPolicy::class;
-    }
-
-    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -139,7 +131,7 @@ class Training extends Model
         return $this->belongsTo(TrainingPhase::class);
     }
 
-    
+
     public function plannedExercises(): Attribute
     {
         return Attribute::get(
@@ -165,25 +157,25 @@ class Training extends Model
         return Attribute::get(function () {
             try {
                 $plannedExercises = $this->plannedExercises;
-                
+
                 if (empty($plannedExercises)) {
                     return 0;
                 }
-                
+
                 $completedCount = 0;
-                
+
                 foreach ($plannedExercises as $exercise) {
                     $completedSets = $this->exercises()
                         ->forExercise($exercise->exercise)
                         ->completed()
                         ->count();
                     $plannedSets = $exercise->sets;
-                    
+
                     if ($completedSets >= $plannedSets) {
                         $completedCount++;
                     }
                 }
-                
+
                 return ($completedCount / count($plannedExercises)) * 100;
             } catch (\Exception $e) {
                 return 0;

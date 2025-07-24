@@ -4,19 +4,19 @@
         <!-- Left side: Logo and navigation -->
         <div class="flex items-center space-x-8">
             <div class="font-semibold text-xl text-blue-600 dark:text-blue-400">{{ config('app.name') }}</div>
-            
+
             <!-- Navigation Links -->
             <nav class="hidden md:flex items-center space-x-6">
-                <a href="{{ route('dashboard') }}" 
-                   class="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('dashboard*') ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : '' }}">
+                <a href="{{ route('dashboard') }}"
+                    class="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('dashboard*') ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : '' }}">
                     Dashboard
                 </a>
-                
-                @if(Auth::user() && Auth::user()->athlete)
-                <a href="{{ route('trainings.index') }}" 
-                   class="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('trainings*') ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : '' }}">
-                    Trainings
-                </a>
+
+                @if (Auth::user() && Auth::user()->athlete)
+                    <a href="{{ route('trainings.index') }}"
+                        class="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('trainings*') ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : '' }}">
+                        Trainings
+                    </a>
                 @endif
             </nav>
         </div>
@@ -24,7 +24,7 @@
         <!-- Center: Theme Toggle -->
         <div class="flex items-center space-x-4">
             <!-- Theme Toggle -->
-            <div x-data="{ 
+            <div x-data="{
                 theme: localStorage.getItem('appearance') || 'system',
                 toggleTheme() {
                     if (this.theme === 'light') {
@@ -39,27 +39,41 @@
                     }
                 }
             }" class="flex items-center">
-                <button @click="toggleTheme()" 
-                        class="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
-                        :title="theme === 'light' ? 'Light Mode' : theme === 'dark' ? 'Dark Mode' : 'System Mode'">
+                <button @click="toggleTheme()"
+                    class="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+                    :title="theme === 'light' ? 'Light Mode' : theme === 'dark' ? 'Dark Mode' : 'System Mode'">
                     <!-- Sun icon for light mode -->
-                    <svg x-show="theme === 'light'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    <svg x-show="theme === 'light'" class="w-5 h-5" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
                     <!-- Moon icon for dark mode -->
-                    <svg x-show="theme === 'dark'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    <svg x-show="theme === 'dark'" class="w-5 h-5" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                     </svg>
                     <!-- Computer icon for system mode -->
-                    <svg x-show="theme === 'system'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    <svg x-show="theme === 'system'" class="w-5 h-5" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                 </button>
             </div>
         </div>
 
-        <!-- Right side: Profile -->
+        <!-- Right side: Chat & Profile -->
         <div class="flex items-center space-x-4">
+            <!-- AI Chat Button -->
+            <button @click="$dispatch('open-chat', ['training_plan'])"
+                class="p-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 relative"
+                title="AI Training Coach">
+                <x-heroicon-o-chat-bubble-left-right class="w-5 h-5" />
+                <!-- Optional: Add notification badge -->
+                <span class="absolute -top-1 -right-1 h-3 w-3 bg-blue-500 rounded-full animate-pulse"></span>
+            </button>
             <!-- Profile -->
             <div x-data="{ open: false }" class="relative">
                 <button @click="open = !open" class="flex items-center focus:outline-none">
@@ -67,7 +81,7 @@
                         <span
                             class="flex h-full w-full items-center justify-center rounded-lg bg-gray-200 text-black dark:bg-gray-700 dark:text-white">
                             @php $user = Auth::user(); @endphp
-                            @if($user)
+                            @if ($user)
                                 {{ $user->initials }}
                             @else
                                 --
@@ -75,7 +89,7 @@
                         </span>
                     </span>
                     <span class="ml-2 hidden md:block">
-                        @if($user)
+                        @if ($user)
                             {{ $user->name }}
                         @endif
                     </span>

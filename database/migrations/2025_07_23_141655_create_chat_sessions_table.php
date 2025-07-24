@@ -13,15 +13,15 @@ return new class extends Migration
     {
         Schema::create('chat_sessions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('athlete_id')->constrained()->cascadeOnDelete();
             $table->string('title')->nullable();
-            $table->string('type')->default('training_plan'); // training_plan, general_chat, etc.
+            $table->string('subject')->nullable();
             $table->foreignId('training_plan_id')->nullable()->constrained()->nullOnDelete();
             $table->json('context')->nullable(); // Store session context/metadata
             $table->timestamp('last_activity_at')->nullable();
             $table->timestamps();
 
-            $table->index(['user_id', 'type']);
+            $table->index('athlete_id');
             $table->index('last_activity_at');
         });
     }

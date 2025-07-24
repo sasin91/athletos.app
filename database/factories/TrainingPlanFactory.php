@@ -44,15 +44,4 @@ class TrainingPlanFactory extends Factory
             'hard_progression_rate' => fake()->randomFloat(2, 2.5, 5.0),
         ];
     }
-
-    public function configure()
-    {
-        return $this->afterCreating(function (\App\Models\TrainingPlan $plan) {
-            \App\Models\TrainingPhase::factory()->create([
-                'training_plan_id' => $plan->id,
-                'order' => 0,
-                'duration_weeks' => 4,
-            ]);
-        });
-    }
 }

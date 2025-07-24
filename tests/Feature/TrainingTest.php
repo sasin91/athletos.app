@@ -53,8 +53,7 @@ class TrainingTest extends TestCase
         array $exercises,
         array $expectedExerciseNotes,
         array $expectedTraining,
-    ): void
-    {
+    ): void {
         $user = User::factory()->create();
         $trainingPlan = TrainingPlan::factory()->create();
         $athlete = Athlete::factory()->create([
@@ -82,7 +81,7 @@ class TrainingTest extends TestCase
 
         // Since training completion is now handled via Livewire,
         // we'll test the action directly
-        
+
         \DB::transaction(function () use ($training, $exercises, $expectedTraining) {
             foreach ($exercises as $exerciseSlug => $exerciseData) {
                 $exerciseEnum = \App\Enums\Exercise::from($exerciseSlug);
@@ -268,7 +267,7 @@ class TrainingTest extends TestCase
             'athlete_id' => $athlete->id,
             'training_plan_id' => $trainingPlan->id,
         ]);
-        
+
         $exercises = [
             Exercise::BarbellBackSquat->value => [
                 '1' => ['reps' => 8, 'weight' => 70, 'rpe' => 5],
@@ -289,7 +288,7 @@ class TrainingTest extends TestCase
                 '4' => ['reps' => 8, 'weight' => 160, 'rpe' => 8],
             ],
         ];
-        
+
         \DB::transaction(function () use ($training, $exercises) {
             foreach ($exercises as $exerciseSlug => $exerciseData) {
                 $exerciseEnum = Exercise::from($exerciseSlug);
@@ -373,7 +372,7 @@ class TrainingTest extends TestCase
 
     public function test_can_assign_training_plan(): void
     {
-        $user = User::factory()->athlete()->create();    
+        $user = User::factory()->athlete()->create();
         $trainingPlan = TrainingPlan::factory()->create();
 
         $this->actingAs($user)
@@ -513,4 +512,4 @@ class TrainingTest extends TestCase
             ->get(route('trainings.complete', $training))
             ->assertStatus(403);
     }
-} 
+}
