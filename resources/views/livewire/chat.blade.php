@@ -65,51 +65,53 @@
         @endforeach
 
         <!-- Current streaming response -->
-        <div class="flex justify-start">
-            <div class="max-w-xs lg:max-w-2xl group">
-                <div class="flex items-center mb-1">
-                    <x-heroicon-o-cpu-chip class="w-4 h-4 mr-2" />
-                    <span class="text-xs font-medium text-gray-600">AI Coach</span>
-                </div>
-                <div class="px-4 py-3 rounded-lg bg-gray-50 text-gray-800 shadow-sm">
-                    <div class="prose prose-sm max-w-none text-sm" wire:stream="currentResponse">
-                        {!! Str::markdown($this->currentResponse) !!}
+        @if ($question)
+            <div class="flex justify-start">
+                <div class="max-w-xs lg:max-w-2xl group">
+                    <div class="flex items-center mb-1">
+                        <x-heroicon-o-cpu-chip class="w-4 h-4 mr-2" />
+                        <span class="text-xs font-medium text-gray-600">AI Coach</span>
+                    </div>
+                    <div class="px-4 py-3 rounded-lg bg-gray-50 text-gray-800 shadow-sm">
+                        <p class="prose prose-sm max-w-none text-sm" wire:stream="answer">
+                            {{ $answer }}
+                        </p>
                     </div>
                 </div>
             </div>
-        </div>
+        @endif
     </div>
 
     <!-- Input Area -->
     <div class="border-t border-gray-200 p-4 bg-white sticky bottom-0">
-        <form wire:submit="sendMessage" class="flex space-x-3">
+        <form wire:submit="submitPrompt" class="flex space-x-3">
             <div class="flex-1">
                 <div class="relative">
-                    <textarea wire:model="message"
+                    <textarea wire:model="prompt"
                         placeholder="Ask me to create a training plan, adjust exercises, explain techniques, or anything fitness-related..."
                         class="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all duration-200"
-                        rows="1" x-ref="messageInput" x-data="{
+                        rows="1" x-ref="promptInput" x-data="{
                             resize() {
-                                const textarea = this.$refs.messageInput;
+                                const textarea = this.$refs.promptInput;
                                 textarea.style.height = 'auto';
                                 textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
                             }
                         }" x-init="resize()"
-                        @keydown.ctrl.enter="$wire.sendMessage()" @keydown.meta.enter="$wire.sendMessage()" @input="resize()"></textarea>
+                        @keydown.ctrl.enter="$wire.submitPrompt()" @keydown.meta.enter="$wire.submitPrompt()" @input="resize()"></textarea>
 
                     <!-- Character count -->
                     <div class="absolute bottom-2 right-2 text-xs text-gray-400">
-                        <span x-text="$wire.message.length"></span>/1000
+                        <span x-text="$wire.prompt.length"></span>/1000
                     </div>
                 </div>
-                @error('message')
-                    <span class="text-red-500 text-sm mt-1 block">{{ $message }}</span>
+                @error('prompt')
+                    <span class="text-red-500 text-sm mt-1 block">{{ $prompt }}</span>
                 @enderror
             </div>
 
             <button type="submit"
                 class="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg transition-colors duration-200 flex items-center"
-                :disabled="!$wire.message.trim()">
+                :disabled="!$wire.prompt.trim()">
                 <x-heroicon-o-paper-airplane class="w-4 h-4 mr-2" />
                 Send
             </button>

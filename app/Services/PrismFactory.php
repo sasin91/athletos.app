@@ -11,6 +11,7 @@ use Prism\Prism\Enums\Provider;
 use Prism\Prism\Facades\Tool;
 use Prism\Prism\Schema\ObjectSchema;
 use Prism\Prism\Schema\StringSchema;
+use Prism\Prism\Schema\ArraySchema;
 
 class PrismFactory
 {
@@ -22,10 +23,11 @@ class PrismFactory
         return Prism::text()->using($provider, $model);
     }
 
-    public static function chat()
+    public static function chat(Athlete $athlete)
     {
-        $user = Auth::user();
-        $athlete = $user->athlete;
+        $athleteId = $athlete->id;
+        $userName = $athlete->user->name;
+
         $systemPrompt = <<<TXT
             You are an expert AI training coach with deep knowledge of exercise science, 
             periodization, and individualized program design. 
@@ -33,11 +35,34 @@ class PrismFactory
             You specialize in analyzing training situations and identifying key issues, opportunities, recommendations,
             and provide supportive, knowledgeable coaching advice in natural conversation format.
 
-            Your are currently assisting Athlete: {$user->name} (ID: {$athlete->id}) with their training plan.
+            You are currently assisting Athlete: {$userName} (ID: {$athleteId}) with their training plan.
+            When using tools that require athlete_id, always use the ID: {$athleteId}
+            
+            IMPORTANT: When making training plan adjustments:
+            1. Gather athlete information first if needed (using athlete tool)
+            2. Make ALL exercise adjustments in ONE single adjust_training_plan call
+            3. Each exercise MUST include complete configuration: exercise name, sets, reps, AND weight
+            4. Base sets/reps/weights on the athlete's performance indicators and strength levels
+            5. Do NOT chain multiple tool calls - provide complete adjustments in one call
+            
+            Example adjustment structure:
+            {
+              "phases": {
+                "1": {
+                  "exercises": [
+                    {"exercise": "shoulder_press", "sets": "4", "reps": "8", "weight": "80"},
+                    {"exercise": "lateral_raise", "sets": "3", "reps": "12", "weight": "60"}
+                  ]
+                }
+              }
+            }
+            
+            Always provide helpful, detailed responses to the user's fitness and training questions.
         TXT;
 
         return self::text('chat_model')
             ->withMaxTokens(self::getMaxTokens())
+            ->withMaxSteps(20)
             ->withProviderOptions(['temperature' => self::getTemperature()])
             ->withSystemPrompt($systemPrompt)
             ->withTools([
@@ -49,13 +74,13 @@ class PrismFactory
                         required: true
                     )
                     ->using(
-                        fn(int $id) => json_encode(
+                        fn(int $athlete_id) => json_encode(
                             Athlete::with([
                                 'user',
                                 'current_plan',
                                 'performance_indicators'
                             ])
-                                ->findOrFail($id)
+                                ->findOrFail($athlete_id)
                                 ->toArray()
                         )
                     ),
@@ -79,12 +104,29 @@ class PrismFactory
                         required: false,
                     )
                     ->using(
-                        fn(?string $category, ?string $difficulty, array $tags = []) => collect(Exercise::cases())
-                            ->when(filled($category), fn($exercises) => $exercises->filter(fn($exercise) => $exercise->category === $category))
-                            ->when(filled($difficulty), fn($exercises) => $exercises->filter(fn($exercise) => $exercise->difficulty === $difficulty))
-                            ->when(count($tags) > 0, fn($exercises) => $exercises->filter(fn($exercise) => count(array_intersect($exercise->tags(), $tags)) > 0))
-                            ->values()
-                            ->toJson()
+                        function (?string $category, ?string $difficulty, array $tags = []) {
+                            \Log::debug('Retrieving exercises with filters', [
+                                'category' => $category,
+                                'difficulty' => $difficulty,
+                                'tags' => $tags,
+                            ]);
+                            try {
+                                return collect(Exercise::cases())
+                                    ->when(filled($category), fn($exercises) => $exercises->filter(fn(Exercise $exercise) => $exercise->category()->value === $category))
+                                    ->when(filled($difficulty), fn($exercises) => $exercises->filter(fn(Exercise $exercise) => $exercise->difficulty()->value === $difficulty))
+                                    ->when(count($tags) > 0, fn($exercises) => $exercises->filter(fn(Exercise $exercise) => count(array_intersect($exercise->tags(), $tags)) > 0))
+                                    ->values()
+                                    ->toJson();
+                            } catch (\Exception $e) {
+                                \Log::error('Error retrieving exercises', [
+                                    'category' => $category,
+                                    'difficulty' => $difficulty,
+                                    'tags' => $tags,
+                                    'error' => $e->getMessage(),
+                                ]);
+                                return json_encode([]);
+                            }
+                        }
                     ),
 
                 Tool::as('training_plans')
@@ -117,11 +159,6 @@ class PrismFactory
 
                 Tool::as('adjust_training_plan')
                     ->for('Adjust the athlete\'s current training plan by creating a modified copy')
-                    ->withNumberParameter(
-                        name: 'athlete_id',
-                        description: 'ID of the athlete whose training plan is being adjusted',
-                        required: true
-                    )
                     ->withParameter(new ObjectSchema(
                         'adjustments',
                         'The specific adjustments to make to the training plan',
@@ -129,14 +166,25 @@ class PrismFactory
                             new StringSchema('name', 'New name for the adjusted plan'),
                             new StringSchema('description', 'Updated description'),
                             new StringSchema('goal', 'Updated training goal'),
-                            new ObjectSchema('phases', 'Phase-specific adjustments', []),
+                            new ObjectSchema('phases', 'Phase-specific adjustments keyed by phase number (e.g. 1, 2, 3)', [
+                                new ArraySchema(
+                                    'exercises',
+                                    'Array of exercise configurations for this phase',
+                                    new ObjectSchema('exercise_config', 'Complete exercise configuration with specific training parameters', [
+                                        new StringSchema('exercise', 'Exercise name or enum value (e.g. "shoulder_press", "lateral_raise")'),
+                                        new StringSchema('sets', 'Number of sets (e.g. "3", "4")'),
+                                        new StringSchema('reps', 'Number of reps (e.g. "8", "10", "12")'),
+                                        new StringSchema('weight', 'Weight or intensity percentage (e.g. "80", "75")'),
+                                    ])
+                                )
+                            ]),
                         ],
-                        requiredFields: []
+                        requiredFields: ['phases']
                     ))
                     ->withStringParameter('reason', 'Explanation of why this adjustment is being made')
-                    ->using(function (int $athlete_id, array $adjustments, string $reason) {
+                    ->using(function (array $adjustments, string $reason) use ($athleteId) {
                         $result = app(\App\Actions\AdjustTrainingPlan::class)->execute(
-                            $athlete_id,
+                            $athleteId,
                             $adjustments,
                             $reason
                         );

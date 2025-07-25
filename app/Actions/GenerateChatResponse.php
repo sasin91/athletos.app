@@ -32,6 +32,6 @@ class GenerateChatResponse
         $prismMessages[] = new UserMessage($userPrompt);
 
         // Use Prism for response generation
-        return PrismFactory::chat()->withMessages($prismMessages);
+        return PrismFactory::chat($session->athlete)->withMessages($prismMessages);
     }
 }
