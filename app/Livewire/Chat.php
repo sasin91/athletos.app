@@ -89,6 +89,9 @@ class Chat extends Component
                     break;
                 }
 
+
+                Context::add('textChunk', $textChunk);
+
                 switch ($textChunk->chunkType) {
                     case ChunkType::Text:
                         $this->reply($textChunk->text);
@@ -145,7 +148,6 @@ class Chat extends Component
                 sprintf('<i>Reply Error: %s</i>', $e->getMessage())
             );
 
-            Context::add('textChunk', $textChunk);
             Debugbar::debug($e->getMessage());
 
             report($e);
