@@ -65,21 +65,19 @@
         @endforeach
 
         <!-- Current streaming response -->
-        @if ($currentResponse)
-            <div class="flex justify-start">
-                <div class="max-w-xs lg:max-w-2xl group">
-                    <div class="flex items-center mb-1">
-                        <x-heroicon-o-cpu-chip class="w-4 h-4 mr-2" />
-                        <span class="text-xs font-medium text-gray-600">AI Coach</span>
-                    </div>
-                    <div class="px-4 py-3 rounded-lg bg-gray-50 text-gray-800 shadow-sm">
-                        <div class="prose prose-sm max-w-none text-sm" wire:stream="currentResponse">
-                            {!! Str::markdown($currentResponse) !!}
-                        </div>
+        <div class="flex justify-start">
+            <div class="max-w-xs lg:max-w-2xl group">
+                <div class="flex items-center mb-1">
+                    <x-heroicon-o-cpu-chip class="w-4 h-4 mr-2" />
+                    <span class="text-xs font-medium text-gray-600">AI Coach</span>
+                </div>
+                <div class="px-4 py-3 rounded-lg bg-gray-50 text-gray-800 shadow-sm">
+                    <div class="prose prose-sm max-w-none text-sm" wire:stream="currentResponse">
+                        {!! Str::markdown($this->currentResponse) !!}
                     </div>
                 </div>
             </div>
-        @endif
+        </div>
     </div>
 
     <!-- Input Area -->

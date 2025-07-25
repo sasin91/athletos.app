@@ -64,16 +64,25 @@ class ChatDrawer extends Component
 
     public function newSession()
     {
-        $this->activeSession = null;
-        $this->loadOrCreateSession();
+        $this->activeSession = $this->athlete->chatSessions()->create([
+            'last_activity_at' => now(),
+        ]);
     }
 
     private function loadOrCreateSession()
     {
-        // Load the most recent session for today
-        $this->activeSession = $this->athlete->chatSessions()
-            ->latest('last_activity_at')
-            ->firstOrCreate();
+        if (!$this->activeSession) {
+            // Load the most recent session or create a new one
+            $this->activeSession = $this->athlete->chatSessions()
+                ->latest('last_activity_at')
+                ->first();
+                
+            if (!$this->activeSession) {
+                $this->activeSession = $this->athlete->chatSessions()->create([
+                    'last_activity_at' => now(),
+                ]);
+            }
+        }
     }
 
     public function loadSession(ChatSession $session)

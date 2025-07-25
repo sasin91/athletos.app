@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\Exercise;
+use App\Models\Athlete;
 use App\Models\TrainingPlan;
 use Illuminate\Support\Facades\Auth;
 use Prism\Prism\Prism;
@@ -23,31 +24,104 @@ class PrismFactory
 
     public static function chat()
     {
+        $user = Auth::user();
+        $athlete = $user->athlete;
+        $systemPrompt = <<<TXT
+            You are an expert AI training coach with deep knowledge of exercise science, 
+            periodization, and individualized program design. 
+            Always prioritize safety while maximizing training effectiveness.
+            You specialize in analyzing training situations and identifying key issues, opportunities, recommendations,
+            and provide supportive, knowledgeable coaching advice in natural conversation format.
+
+            Your are currently assisting Athlete: {$user->name} (ID: {$athlete->id}) with their training plan.
+        TXT;
+
         return self::text('chat_model')
             ->withMaxTokens(self::getMaxTokens())
             ->withProviderOptions(['temperature' => self::getTemperature()])
-            ->withSystemPrompt(<<<TXT
-                You are an expert AI training coach with deep knowledge of exercise science, 
-                periodization, and individualized program design. 
-                Always prioritize safety while maximizing training effectiveness.
-                You specialize in analyzing training situations and identifying key issues, opportunities, recommendations,
-                and provide supportive, knowledgeable coaching advice in natural conversation format.
-            TXT)
+            ->withSystemPrompt($systemPrompt)
             ->withTools([
                 Tool::as('athlete')
                     ->for('Retrieve athlete information')
-                    ->using(fn() => Auth::user()->athlete()->with(['current_plan', 'performance_indicators'])->toArray()),
+                    ->withNumberParameter(
+                        name: 'athlete_id',
+                        description: 'ID of the athlete to retrieve',
+                        required: true
+                    )
+                    ->using(
+                        fn(int $id) => json_encode(
+                            Athlete::with([
+                                'user',
+                                'current_plan',
+                                'performance_indicators'
+                            ])
+                                ->findOrFail($id)
+                                ->toArray()
+                        )
+                    ),
 
                 Tool::as('exercises')
                     ->for('Retrieving a list of available exercises')
-                    ->using(fn() => Exercise::cases()),
+                    ->withStringParameter(
+                        name: 'category',
+                        description: 'Filter exercises by category',
+                        required: false
+                    )
+                    ->withStringParameter(
+                        name: 'difficulty',
+                        description: 'Filter exercises by difficulty level',
+                        required: false
+                    )
+                    ->withArrayParameter(
+                        name: 'tags',
+                        description: 'Filter exercises by tags',
+                        items: new StringSchema('tag', 'Tag to filter exercises by'),
+                        required: false,
+                    )
+                    ->using(
+                        fn(?string $category, ?string $difficulty, array $tags = []) => collect(Exercise::cases())
+                            ->when(filled($category), fn($exercises) => $exercises->filter(fn($exercise) => $exercise->category === $category))
+                            ->when(filled($difficulty), fn($exercises) => $exercises->filter(fn($exercise) => $exercise->difficulty === $difficulty))
+                            ->when(count($tags) > 0, fn($exercises) => $exercises->filter(fn($exercise) => count(array_intersect($exercise->tags(), $tags)) > 0))
+                            ->values()
+                            ->toJson()
+                    ),
 
                 Tool::as('training_plans')
                     ->for('Retrieving a list of training plans')
-                    ->using(fn() => TrainingPlan::all()),
+                    ->withStringParameter(
+                        name: 'name',
+                        description: 'Name of the training plan to retrieve',
+                        required: false
+                    )
+                    ->withStringParameter(
+                        name: 'goal',
+                        description: 'Goal of the training plan to retrieve',
+                        required: false
+                    )
+                    ->withStringParameter(
+                        name: 'experience_level',
+                        description: 'Experience level of the training plan to retrieve',
+                        required: false
+                    )
+                    ->using(
+                        fn(?string $name, ?string $goal, ?string $experience_level) => json_encode(
+                            TrainingPlan::query()
+                                ->when(filled($name), fn($query) => $query->where('name', 'like', "%{$name}%"))
+                                ->when(filled($goal), fn($query) => $query->where('goal', '=', $goal))
+                                ->when(filled($experience_level), fn($query) => $query->where('experience_level', '=', $experience_level))
+                                ->get()
+                                ->toArray()
+                        )
+                    ),
 
                 Tool::as('adjust_training_plan')
                     ->for('Adjust the athlete\'s current training plan by creating a modified copy')
+                    ->withNumberParameter(
+                        name: 'athlete_id',
+                        description: 'ID of the athlete whose training plan is being adjusted',
+                        required: true
+                    )
                     ->withParameter(new ObjectSchema(
                         'adjustments',
                         'The specific adjustments to make to the training plan',
@@ -60,17 +134,14 @@ class PrismFactory
                         requiredFields: []
                     ))
                     ->withStringParameter('reason', 'Explanation of why this adjustment is being made')
-                    ->using(function (array $adjustments, string $reason) {
-                        $athlete = Auth::user()->athlete;
-                        if (!$athlete) {
-                            throw new \Exception('User is not an athlete');
-                        }
-                        
-                        return app(\App\Actions\AdjustTrainingPlan::class)->execute(
-                            $athlete->id,
+                    ->using(function (int $athlete_id, array $adjustments, string $reason) {
+                        $result = app(\App\Actions\AdjustTrainingPlan::class)->execute(
+                            $athlete_id,
                             $adjustments,
                             $reason
                         );
+
+                        return $result['message'];
                     }),
             ]);
     }

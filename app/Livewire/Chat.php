@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 use Livewire\Attributes\Validate;
 use Livewire\Attributes\On;
+use Prism\Prism\Enums\ChunkType;
+use Prism\Prism\Exceptions\PrismException;
+use Prism\Prism\ValueObjects\ToolCall;
 
 class Chat extends Component
 {
@@ -64,9 +67,75 @@ class Chat extends Component
 
         $userMessage = $lastUserMessage->content;
 
-        /** @var \Prism\Prism\Text\Chunk $textChunk */
-        foreach (app(GenerateChatResponse::class)->execute($this->session, $userMessage) as $textChunk) {
-            $this->stream(to: 'currentResponse', content: $textChunk->text);
+        try {
+            $request = app(GenerateChatResponse::class)->execute($this->session, $userMessage);
+
+            /** @var \Prism\Prism\Text\Chunk $textChunk */
+            foreach ($request->asStream() as $textChunk) {
+                if ($textChunk->finishReason !== null) {
+                    $this->stream(
+                        to: 'currentResponse',
+                        content: sprintf(
+                            '<i>Response finished with reason: %s</i>',
+                            $textChunk->finishReason->name
+                        )
+                    );
+
+                    break;
+                }
+
+                switch ($textChunk->chunkType) {
+                    case ChunkType::Text:
+                        $this->stream(to: 'currentResponse', content: $textChunk->text);
+                        break;
+                    case ChunkType::Thinking:
+                        $this->stream(to: 'currentResponse', content: '<i>Thinking...</i>');
+                        break;
+
+                    case ChunkType::ToolCall:
+                        foreach ($textChunk->toolCalls as $toolCall) {
+                            $this->stream(to: 'currentResponse', content: sprintf(
+                                '<i>Calling: %s</i>',
+                                $toolCall->name
+                            ));
+                        }
+                        break;
+
+                    case ChunkType::ToolResult:
+                        foreach ($textChunk->toolResults as $toolResult) {
+                            $this->stream(to: 'currentResponse', content: sprintf(
+                                '<i>%s Result: <pre>%s</pre></i>',
+                                $toolResult->toolName,
+                                is_array($toolResult->result)
+                                    ? json_encode($toolResult->result, JSON_PRETTY_PRINT)
+                                    : (string) $toolResult->result
+                            ));
+                        }
+                        break;
+
+                    case ChunkType::Meta:
+                        $this->stream(to: 'currentResponse', content: sprintf(
+                            '<i>This is %s (ID: %s)</i>',
+                            $textChunk->meta->model,
+                            $textChunk->meta->id
+                        ));
+                        break;
+                }
+            }
+        } catch (PrismException $prismException) {
+            // Handle specific Prism exceptions
+            $this->stream(
+                to: 'currentResponse',
+                content: sprintf('<i>Error: %s</i>', $prismException->getMessage())
+            );
+            \Log::error('Prism exception during chat response generation: ' . $prismException->getMessage());
+        } catch (\Exception $e) {
+            // Handle general exceptions
+            $this->stream(
+                to: 'currentResponse',
+                content: sprintf('<i>Error: %s</i>', $e->getMessage())
+            );
+            \Log::error('General exception during chat response generation: ' . $e->getMessage());
         }
 
         // Save the complete response to database
