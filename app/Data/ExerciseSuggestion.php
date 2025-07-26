@@ -5,9 +5,10 @@ namespace App\Data;
 use App\Enums\Exercise;
 use App\Enums\ExerciseCategory;
 use App\Enums\ExerciseDifficulty;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class ExerciseSuggestion implements Wireable
+class ExerciseSuggestion implements Jsonable, Arrayable
 {
     public function __construct(
         public Exercise $exercise,
@@ -81,12 +82,12 @@ class ExerciseSuggestion implements Wireable
         };
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
             'exercise' => [
                 'value' => $this->exercise->value,
-                'display_name' => $this->displayName,
+                'displayName' => $this->displayName,
                 'category' => $this->category->value,
                 'difficulty' => $this->difficulty->value,
                 'tags' => $this->tags,
@@ -94,22 +95,18 @@ class ExerciseSuggestion implements Wireable
             'conditions' => $this->conditions,
             'benefits' => $this->benefits,
             'score' => $this->score,
+            // Computed properties for React components
+            'isBodyweight' => $this->isBodyweight(),
+            'requiresEquipment' => $this->requiresEquipment(),
+            'requiredEquipment' => $this->getRequiredEquipment(),
+            'difficultyColor' => $this->getDifficultyColor(),
+            'categoryColor' => $this->getCategoryColor(),
+            'estimatedDurationMinutes' => $this->getEstimatedDurationMinutes(),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        $exercise = Exercise::from($value['exercise']['value']);
-        
-        return new self(
-            exercise: $exercise,
-            displayName: $value['exercise']['display_name'],
-            category: ExerciseCategory::from($value['exercise']['category']),
-            difficulty: ExerciseDifficulty::from($value['exercise']['difficulty']),
-            tags: $value['exercise']['tags'],
-            conditions: $value['conditions'] ?? null,
-            benefits: $value['benefits'] ?? null,
-            score: $value['score'] ?? null,
-        );
+        return json_encode($this->toArray(), $options);
     }
 } 

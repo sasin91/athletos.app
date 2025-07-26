@@ -3,6 +3,8 @@
  * Auto-generated from Laravel routes - DO NOT EDIT MANUALLY
  */
 
+import { router } from '@inertiajs/react';
+
 interface RouteParams {
   [key: string]: string | number | boolean | undefined;
 }
@@ -150,7 +152,6 @@ export const routes = {
     const { url } = route.dashboard(params, options);
     // For compatibility with Inertia, trigger the navigation
     if (typeof window !== 'undefined') {
-      const { router } = require('@inertiajs/react');
       if (params?.date) {
         return router.get(url, { date: params.date }, options);
       } else {
@@ -162,7 +163,6 @@ export const routes = {
   startTraining: (data: any, options?: any) => {
     const { url } = route['dashboard.start-training']({}, { method: 'post' });
     if (typeof window !== 'undefined') {
-      const { router } = require('@inertiajs/react');
       return router.post(url, data, options);
     }
   },
@@ -170,7 +170,6 @@ export const routes = {
   progress: (options?: any) => {
     // Assuming progress maps to dashboard with progress view
     if (typeof window !== 'undefined') {
-      const { router } = require('@inertiajs/react');
       return router.get('/progress', {}, options);
     }
   },
@@ -178,14 +177,12 @@ export const routes = {
   chat: (options?: any) => {
     const { url } = route['chat.index']();
     if (typeof window !== 'undefined') {
-      const { router } = require('@inertiajs/react');
       return router.get(url, {}, options);
     }
   },
   
   calendar: (options?: any) => {
     if (typeof window !== 'undefined') {
-      const { router } = require('@inertiajs/react');
       return router.get('/calendar', {}, options);
     }
   },

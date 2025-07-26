@@ -91,7 +91,7 @@ class OnboardingController extends Controller
     /**
      * Show the training plan selection page
      */
-    public function plan(): \Illuminate\View\View
+    public function plan(): \Inertia\Response
     {
         Gate::authorize('isAthlete');
 
@@ -101,11 +101,11 @@ class OnboardingController extends Controller
         // Filter training plans based on athlete preferences (experience level, goal, muscle groups)
         $trainingPlans = $allTrainingPlans->filter(fn(TrainingPlan $plan) => $plan->isSuitableForAthlete($athlete));
 
-        return view('onboarding.plan', [
+        return Inertia::render('Onboarding/Plan', [
             'user' => Auth::user(),
             'athlete' => $athlete,
             'onboarding' => Auth::user()->onboarding(),
-            'trainingPlans' => $trainingPlans
+            'trainingPlans' => $trainingPlans->values()
         ]);
     }
 

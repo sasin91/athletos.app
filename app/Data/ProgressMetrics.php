@@ -2,9 +2,10 @@
 
 namespace App\Data;
 
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class ProgressMetrics implements Wireable
+class ProgressMetrics implements Jsonable, Arrayable
 {
     public function __construct(
         public int $totalWorkouts,
@@ -17,7 +18,7 @@ class ProgressMetrics implements Wireable
     ) {
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
             'totalWorkouts' => $this->totalWorkouts,
@@ -27,20 +28,17 @@ class ProgressMetrics implements Wireable
             'phaseProgress' => $this->phaseProgress,
             'phaseWeek' => $this->phaseWeek,
             'totalPhaseWeeks' => $this->totalPhaseWeeks,
+            // Computed properties for React components
+            'weeklyProgressPercentage' => $this->weeklyProgressPercentage(),
+            'phaseProgressPercentage' => $this->phaseProgressPercentage(),
+            'isOnTrack' => $this->isOnTrack(),
+            'needsCatchUp' => $this->needsCatchUp(),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        return new self(
-            totalWorkouts: $value['totalWorkouts'],
-            currentStreak: $value['currentStreak'],
-            weeklyGoal: $value['weeklyGoal'],
-            completedThisWeek: $value['completedThisWeek'],
-            phaseProgress: $value['phaseProgress'],
-            phaseWeek: $value['phaseWeek'],
-            totalPhaseWeeks: $value['totalPhaseWeeks'],
-        );
+        return json_encode($this->toArray(), $options);
     }
 
     public function weeklyProgressPercentage(): float

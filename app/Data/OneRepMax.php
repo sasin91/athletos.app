@@ -3,9 +3,10 @@
 namespace App\Data;
 
 use App\Enums\Exercise;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class OneRepMax implements Wireable
+class OneRepMax implements Jsonable, Arrayable
 {
     public function __construct(
         public Exercise $exercise,
@@ -15,31 +16,31 @@ class OneRepMax implements Wireable
     ) {
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
             'exercise' => [
                 'value' => $this->exercise->value,
-                'display_name' => $this->exercise->displayName(),
-                'one_rep_max_key' => $this->exercise->oneRepMaxKey(),
-                'one_rep_max_display_name' => $this->exercise->oneRepMaxDisplayName(),
+                'displayName' => $this->exercise->displayName(),
+                'oneRepMaxKey' => $this->exercise->oneRepMaxKey(),
+                'oneRepMaxDisplayName' => $this->exercise->oneRepMaxDisplayName(),
             ],
             'current' => $this->current,
             'previous' => $this->previous,
             'change' => $this->change,
+            // Computed properties for React components
+            'hasImproved' => $this->hasImproved(),
+            'hasDeclined' => $this->hasDeclined(),
+            'isStable' => $this->isStable(),
+            'improvementPercentage' => $this->improvementPercentage(),
+            'changeDisplay' => $this->getChangeDisplay(),
+            'changeColorClass' => $this->getChangeColorClass(),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        $exercise = Exercise::from($value['exercise']['value']);
-        
-        return new self(
-            exercise: $exercise,
-            current: $value['current'],
-            previous: $value['previous'],
-            change: $value['change'],
-        );
+        return json_encode($this->toArray(), $options);
     }
 
     public function hasImproved(): bool

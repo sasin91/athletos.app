@@ -5,9 +5,9 @@ namespace App\Settings;
 use App\Enums\Exercise;
 use App\Enums\WeightType;
 use Illuminate\Contracts\Support\Arrayable;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class ExerciseConfig implements Arrayable, Wireable
+class ExerciseConfig implements Arrayable, Jsonable
 {
     public function __construct(
         public string $exercise,
@@ -76,29 +76,11 @@ class ExerciseConfig implements Arrayable, Wireable
     }
 
     /**
-     * Convert to Livewire format
+     * Convert to JSON
      */
-    public function toLivewire(): array
+    public function toJson($options = 0): string
     {
-        return $this->toArray();
-    }
-
-    /**
-     * Create from Livewire format
-     */
-    public static function fromLivewire($value): self
-    {
-        return new self(
-            exercise: $value['exercise'] ?? $value['exercise_slug'] ?? $value['exercise_id'] ?? '', // Backward compatibility
-            sets: (int) $value['sets'],
-            reps: (int) $value['reps'],
-            weight: (float) $value['weight'],
-            rest_seconds: $value['rest_seconds'] ?? 120,
-            notes: $value['notes'] ?? null,
-            metadata: $value['metadata'] ?? [],
-            day: $value['day'] ?? 1,
-            cues: $value['cues'] ?? null,
-        );
+        return json_encode($this->toArray(), $options);
     }
 
     /**

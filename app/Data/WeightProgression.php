@@ -4,9 +4,10 @@ namespace App\Data;
 
 use App\Enums\Exercise;
 use Carbon\Carbon;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Contracts\Support\Arrayable;
 
-class WeightProgression implements Wireable
+class WeightProgression implements Jsonable, Arrayable
 {
     public function __construct(
         public Exercise $exercise,
@@ -19,7 +20,7 @@ class WeightProgression implements Wireable
     ) {
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
             'exercise' => [
@@ -34,22 +35,17 @@ class WeightProgression implements Wireable
             'startingWeight' => $this->startingWeight,
             'startDate' => $this->startDate?->toISOString(),
             'endDate' => $this->endDate?->toISOString(),
+            'chartData' => $this->getChartData(),
+            'progressPercentage' => $this->getProgressPercentage(),
+            'isOnTrack' => $this->isOnTrack(),
+            'isAhead' => $this->isAhead(),
+            'isBehind' => $this->isBehind(),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        $exercise = Exercise::from($value['exercise']['value']);
-        
-        return new self(
-            exercise: $exercise,
-            dataPoints: $value['dataPoints'],
-            currentWeight: $value['currentWeight'],
-            expectedWeight: $value['expectedWeight'],
-            startingWeight: $value['startingWeight'],
-            startDate: $value['startDate'] ? Carbon::parse($value['startDate']) : null,
-            endDate: $value['endDate'] ? Carbon::parse($value['endDate']) : null,
-        );
+        return json_encode($this->toArray(), $options);
     }
 
     public function getChartData(): array

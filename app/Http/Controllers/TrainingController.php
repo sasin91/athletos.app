@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Actions\DetermineTrainingPhase;
+use App\Actions\ComputePlannedExercises;
+use App\Actions\ComputeTrainingDay;
 use App\Models\Training;
 use App\Models\User;
 use App\Actions\CalculateTrainingOffset;
@@ -78,9 +80,110 @@ class TrainingController extends Controller
             }
         ]);
 
+        // Get planned exercises from the same source as Dashboard
+        $day = app(ComputeTrainingDay::class)->execute($athlete);
+        $plannedExercisesCollection = collect();
+        
+        if ($training->trainingPhase) {
+            try {
+                $plannedExercisesCollection = app(ComputePlannedExercises::class)->execute($training, $day);
+            } catch (\Exception $e) {
+                // If there's an error getting planned exercises, fall back to empty collection
+                $plannedExercisesCollection = collect();
+            }
+        }
+        
+        // Convert planned exercises to the format expected by the React component
+        $plannedExercises = $plannedExercisesCollection->map(function($exercise) {
+            return [
+                'exercise' => [
+                    'value' => $exercise->exercise->value,
+                    'displayName' => $exercise->exercise->displayName(),
+                    'category' => $exercise->exercise->category()->value,
+                    'difficulty' => $exercise->exercise->difficulty()->value,
+                ],
+                'exerciseSlug' => $exercise->exerciseSlug,
+                'order' => $exercise->priority,
+                'sets' => $exercise->sets,
+                'reps' => $exercise->reps,
+                'weight' => $exercise->weight,
+                'restSeconds' => $exercise->restSeconds,
+                'displayName' => $exercise->displayName,
+                'category' => $exercise->category,
+                'difficulty' => $exercise->difficulty,
+                'tags' => $exercise->tags,
+                'notes' => $exercise->notes,
+                'cues' => $exercise->cues,
+            ];
+        })->toArray();
+        
+        // Create initial sets structure from planned exercises
+        $sets = [];
+        foreach ($plannedExercisesCollection as $exercise) {
+            $exerciseSlug = $exercise->exerciseSlug;
+            $sets[$exerciseSlug] = [];
+            
+            // Create initial sets based on planned sets
+            for ($setNumber = 1; $setNumber <= $exercise->sets; $setNumber++) {
+                $sets[$exerciseSlug][] = [
+                    'setNumber' => $setNumber,
+                    'reps' => null, // User will fill these in
+                    'weight' => null,
+                    'rpe' => null,
+                    'timeSpent' => 0,
+                    'explosiveness' => 0,
+                    'notes' => '',
+                    'meta' => [
+                        'exercise' => [
+                            'value' => $exercise->exercise->value,
+                            'displayName' => $exercise->exercise->displayName(),
+                            'category' => $exercise->exercise->category()->value,
+                            'difficulty' => $exercise->exercise->difficulty()->value,
+                        ],
+                        'exerciseSlug' => $exercise->exerciseSlug,
+                        'displayName' => $exercise->displayName,
+                        'sets' => $exercise->sets,
+                        'reps' => $exercise->reps,
+                        'weight' => $exercise->weight,
+                        'restSeconds' => $exercise->restSeconds,
+                        'category' => $exercise->category,
+                        'difficulty' => $exercise->difficulty,
+                        'tags' => $exercise->tags,
+                        'notes' => $exercise->notes,
+                        'cues' => $exercise->cues,
+                    ]
+                ];
+            }
+        }
+        
+        // Create available exercises list (could be expanded to include more exercises)
+        $allExercises = \App\Enums\Exercise::cases();
+        $availableExercises = collect($allExercises)->map(function($exercise) {
+            return [
+                'exercise' => [
+                    'value' => $exercise->value,
+                    'displayName' => $exercise->displayName()
+                ],
+                'exerciseSlug' => strtolower(str_replace(' ', '_', $exercise->displayName())),
+                'displayName' => $exercise->displayName(),
+                'category' => $exercise->category()->value,
+                'difficulty' => $exercise->difficulty()->value,
+                'tags' => $exercise->tags(),
+                'image' => null,
+                'summary' => $exercise->description() ?? 'No description available'
+            ];
+        })->take(10)->toArray(); // Limit to first 10 for performance
+
         return Inertia::render('Training', [
             'training' => $training,
-            'athlete' => $athlete,
+            'plannedExercises' => $plannedExercises,
+            'sets' => $sets,
+            'availableExercises' => $availableExercises,
+            'totalTimerSeconds' => 0,
+            'totalTimerStarted' => false,
+            'isLoading' => false,
+            'hasError' => false,
+            'errorMessage' => null,
         ]);
     }
 

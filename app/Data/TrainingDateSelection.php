@@ -5,9 +5,10 @@ namespace App\Data;
 use App\Models\Training;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class TrainingDateSelection implements Wireable
+class TrainingDateSelection implements Jsonable, Arrayable
 {
     public function __construct(
         public Carbon $date,
@@ -15,7 +16,7 @@ class TrainingDateSelection implements Wireable
         public Collection $trainings
     ) {}
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
             'date' => $this->date->toDateString(),
@@ -23,13 +24,8 @@ class TrainingDateSelection implements Wireable
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        return new self(
-            date: Carbon::parse($value['date']),
-            trainings: collect($value['trainings'])->map(fn($training) => 
-                is_array($training) ? new Training($training) : $training
-            )
-        );
+        return json_encode($this->toArray(), $options);
     }
 } 

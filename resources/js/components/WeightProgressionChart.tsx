@@ -3,26 +3,35 @@ import { useState, useEffect, useRef } from 'react';
 interface WeightProgression {
   exercise: {
     value: string;
-    displayName: () => string;
+    displayName: string;
+    category: string;
+    difficulty: string;
   };
   currentWeight: number | null;
   expectedWeight: number | null;
-  isAhead: () => boolean;
-  isBehind: () => boolean;
-  isOnTrack: () => boolean;
-  getProgressPercentage: () => number;
-  getChartData: () => {
+  startingWeight: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  dataPoints: any[];
+  chartData: {
     series: any[];
     categories: string[];
   };
-  dataPoints: any[];
+  progressPercentage: number;
+  isAhead: boolean;
+  isBehind: boolean;
+  isOnTrack: boolean;
 }
 
 interface WeightProgressionChartProps {
   athlete: any;
   weightProgressions: {
-    hasData: () => boolean;
+    hasData: boolean;
     progressions: WeightProgression[];
+    exercisesWithData: WeightProgression[];
+    onTrackExercises: WeightProgression[];
+    behindExercises: WeightProgression[];
+    aheadExercises: WeightProgression[];
   };
   selectedExercise: string | null;
   timeframe: string;
@@ -46,19 +55,19 @@ export default function WeightProgressionChart({
   );
 
   const getStatusClass = (progression: WeightProgression) => {
-    if (progression.isAhead()) {
+    if (progression.isAhead) {
       return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-    } else if (progression.isBehind()) {
+    } else if (progression.isBehind) {
       return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-    } else if (progression.isOnTrack()) {
+    } else if (progression.isOnTrack) {
       return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
     }
     return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
   };
 
   const getStatusIcon = (progression: WeightProgression) => {
-    if (progression.isAhead()) return '↑';
-    if (progression.isBehind()) return '↓';
+    if (progression.isAhead) return '↑';
+    if (progression.isBehind) return '↓';
     return '→';
   };
 
@@ -70,7 +79,7 @@ export default function WeightProgressionChart({
           chart.destroy();
         }
 
-        const chartData = selectedProgression.getChartData();
+        const chartData = selectedProgression.chartData;
         
         const options = {
           series: chartData.series,
@@ -134,7 +143,7 @@ export default function WeightProgressionChart({
     };
   }, [selectedProgression]);
 
-  if (!weightProgressions?.hasData()) {
+  if (!weightProgressions?.hasData) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="text-center py-8">
@@ -194,7 +203,7 @@ export default function WeightProgressionChart({
                   isSelected ? 'ring-2 ring-blue-500' : ''
                 } ${statusClass}`}
               >
-                {progression.exercise.displayName()}
+                {progression.exercise.displayName}
                 <span className="ml-1">{getStatusIcon(progression)}</span>
               </button>
             );
@@ -234,12 +243,12 @@ export default function WeightProgressionChart({
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
               <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Progress</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {Math.round(selectedProgression.getProgressPercentage())}%
+                {Math.round(selectedProgression.progressPercentage)}%
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {selectedProgression.isAhead() ? (
+                {selectedProgression.isAhead ? (
                   <span className="text-green-600 dark:text-green-400">Ahead of schedule</span>
-                ) : selectedProgression.isBehind() ? (
+                ) : selectedProgression.isBehind ? (
                   <span className="text-red-600 dark:text-red-400">Behind schedule</span>
                 ) : (
                   <span className="text-blue-600 dark:text-blue-400">On track</span>

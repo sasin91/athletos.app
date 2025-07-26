@@ -2,9 +2,10 @@
 
 namespace App\Data;
 
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class ExerciseSummaryItem implements Wireable
+class ExerciseSummaryItem implements Jsonable, Arrayable
 {
     public function __construct(
         public string $name,
@@ -14,7 +15,7 @@ class ExerciseSummaryItem implements Wireable
     ) {
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
             'name' => $this->name,
@@ -24,13 +25,8 @@ class ExerciseSummaryItem implements Wireable
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        return new self(
-            name: $value['name'],
-            sets: $value['sets'],
-            reps: $value['reps'],
-            weight: $value['weight'],
-        );
+        return json_encode($this->toArray(), $options);
     }
 } 
