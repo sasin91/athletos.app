@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class TrainingPlanController extends Controller
 {
@@ -119,6 +120,8 @@ class TrainingPlanController extends Controller
         
         $trainingPlan->load('phases');
         
-        return view('training-plans.show', compact('trainingPlan'));
+        return Inertia::render('TrainingPlans/Show', [
+            'trainingPlan' => $trainingPlan,
+        ]);
     }
 }

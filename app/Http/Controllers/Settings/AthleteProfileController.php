@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\Athlete;
 use App\Enums\ExperienceLevel;
+use App\Enums\MuscleGroup;
 use App\Enums\TrainingGoal;
 use App\Enums\TrainingTime;
 use App\Enums\Difficulty;
@@ -12,10 +13,11 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
+use Inertia\Inertia;
 
 class AthleteProfileController extends Controller
 {
-    public function edit(Request $request): View|RedirectResponse
+    public function edit(Request $request): \Inertia\Response|RedirectResponse
     {
         Gate::authorize('isAthlete');
         
@@ -25,8 +27,31 @@ class AthleteProfileController extends Controller
             return redirect()->route('onboarding.profile');
         }
 
-        return view('settings.athlete-profile', [
+        return Inertia::render('Settings/AthleteProfile', [
             'athlete' => $athlete,
+            'experienceLevels' => collect(ExperienceLevel::cases())->map(fn($level) => [
+                'value' => $level->value,
+                'label' => $level->getLabel(),
+                'description' => $level->getDescription(),
+            ]),
+            'trainingGoals' => collect(TrainingGoal::cases())->map(fn($goal) => [
+                'value' => $goal->value,
+                'label' => $goal->getLabel(),
+                'description' => $goal->getDescription(),
+            ]),
+            'muscleGroups' => collect(MuscleGroup::onboardingOptions())->map(fn($group) => [
+                'value' => $group->value,
+                'label' => $group->label(),
+            ]),
+            'trainingTimes' => collect(TrainingTime::cases())->map(fn($time) => [
+                'value' => $time->value,
+                'label' => $time->getLabel(),
+            ]),
+            'difficulties' => collect(Difficulty::cases())->map(fn($difficulty) => [
+                'value' => $difficulty->value,
+                'label' => $difficulty->getLabel(),
+                'description' => $difficulty->getDescription(),
+            ]),
         ]);
     }
 

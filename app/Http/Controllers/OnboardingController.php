@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Enums\Difficulty;
 use App\Enums\Exercise;
 use App\Enums\ExperienceLevel;
+use App\Enums\MuscleGroup;
 use App\Enums\TrainingGoal;
 use App\Enums\TrainingTime;
+use App\Enums\Weekday;
 use App\Models\Athlete;
 use App\Models\PerformanceIndicator;
 use App\Models\TrainingPlan;
@@ -17,20 +19,35 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class OnboardingController extends Controller
 {
     /**
      * Show the profile setup page
      */
-    public function profile(): \Illuminate\View\View
+    public function profile(): \Inertia\Response
     {
         Gate::authorize('isAthlete');
 
-        return view('onboarding.profile', [
+        return Inertia::render('Onboarding/Profile', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding()
+            'onboarding' => Auth::user()->onboarding(),
+            'experienceLevels' => collect(ExperienceLevel::cases())->map(fn($level) => [
+                'value' => $level->value,
+                'label' => $level->getLabel(),
+                'description' => $level->getDescription(),
+            ]),
+            'trainingGoals' => collect(TrainingGoal::cases())->map(fn($goal) => [
+                'value' => $goal->value,
+                'label' => $goal->getLabel(),
+                'description' => $goal->getDescription(),
+            ]),
+            'muscleGroups' => collect(MuscleGroup::onboardingOptions())->map(fn($group) => [
+                'value' => $group->value,
+                'label' => $group->label(),
+            ]),
         ]);
     }
 
@@ -119,14 +136,23 @@ class OnboardingController extends Controller
     /**
      * Show the schedule setup page
      */
-    public function schedule(): \Illuminate\View\View
+    public function schedule(): \Inertia\Response
     {
         Gate::authorize('isAthlete');
 
-        return view('onboarding.schedule', [
+        return Inertia::render('Onboarding/Schedule', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding()
+            'onboarding' => Auth::user()->onboarding(),
+            'weekdays' => collect(Weekday::cases())->map(fn($day) => [
+                'value' => $day->value,
+                'label' => $day->label('en'),
+            ]),
+            'trainingTimes' => collect(TrainingTime::cases())->map(fn($time) => [
+                'value' => $time->value,
+                'label' => $time->getLabel(),
+                'timeRange' => $time->getTimeRange(),
+            ]),
         ]);
     }
 
@@ -155,14 +181,14 @@ class OnboardingController extends Controller
     /**
      * Show the stats entry page
      */
-    public function stats(): \Illuminate\View\View
+    public function stats(): \Inertia\Response
     {
         Gate::authorize('isAthlete');
 
-        return view('onboarding.stats', [
+        return Inertia::render('Onboarding/Stats', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding()
+            'onboarding' => Auth::user()->onboarding(),
         ]);
     }
 
@@ -194,14 +220,19 @@ class OnboardingController extends Controller
     /**
      * Show the preferences setup page
      */
-    public function preferences(): \Illuminate\View\View
+    public function preferences(): \Inertia\Response
     {
         Gate::authorize('isAthlete');
 
-        return view('onboarding.preferences', [
+        return Inertia::render('Onboarding/Preferences', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding()
+            'onboarding' => Auth::user()->onboarding(),
+            'difficulties' => collect(Difficulty::cases())->map(fn($difficulty) => [
+                'value' => $difficulty->value,
+                'label' => $difficulty->getLabel(),
+                'description' => $difficulty->getDescription(),
+            ]),
         ]);
     }
 

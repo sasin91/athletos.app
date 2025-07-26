@@ -10,7 +10,7 @@ use App\Http\Middleware\EnsureAthleteIsOnboarded;
 use Illuminate\Support\Facades\Auth;
 
 Route::get('/', function () {
-    return view('welcome');
+    return \Inertia\Inertia::render('Welcome');
 })->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -19,13 +19,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('trainings', [TrainingController::class, 'index'])->name('trainings.index');
         Route::post('trainings', [TrainingController::class, 'store'])->name('trainings.store');
-        Route::get('trainings/{training}', App\Livewire\Training::class)->name('trainings.show');
+        Route::get('trainings/{training}', [TrainingController::class, 'show'])->name('trainings.show');
         Route::get('trainings/{training}/complete', [TrainingController::class, 'complete'])->name('trainings.complete');
         Route::get('training-plans/create', [App\Http\Controllers\TrainingPlanController::class, 'create'])->name('training-plans.create');
         Route::post('training-plans', [App\Http\Controllers\TrainingPlanController::class, 'store'])->name('training-plans.store');
         Route::get('training-plans/{trainingPlan}', [App\Http\Controllers\TrainingPlanController::class, 'show'])->name('training-plans.show');
         Route::post('training-plans/{trainingPlan}/assign', [App\Http\Controllers\TrainingPlanController::class, 'assign'])->name('training-plans.assign');
         Route::get('exercises/{exercise:slug}', [App\Http\Controllers\ExerciseController::class, 'show'])->name('exercises.show');
+
+        // Chat routes
+        Route::get('chat', [App\Http\Controllers\ChatController::class, 'index'])->name('chat.index');
+        Route::get('chat/{session}', [App\Http\Controllers\ChatController::class, 'index'])->name('chat.session');
+        Route::post('chat/stream/start', [App\Http\Controllers\ChatController::class, 'startStream'])->name('chat.stream.start');
+        Route::get('chat/stream/{streamId}', [App\Http\Controllers\ChatController::class, 'stream'])->name('chat.stream');
+
+        // Dashboard actions
+        Route::post('dashboard/start-training', [DashboardController::class, 'startTraining'])->name('dashboard.start-training');
 
         Route::get('settings/athlete-profile', [Settings\AthleteProfileController::class, 'edit'])->name('settings.athlete-profile.edit');
         Route::put('settings/athlete-profile', [Settings\AthleteProfileController::class, 'update'])->name('settings.athlete-profile.update');
@@ -59,8 +68,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/appearance', [Settings\AppearanceController::class, 'edit'])->name('settings.appearance.edit');
 });
 
-Route::view('/terms', 'terms')->name('terms');
-Route::view('/privacy', 'privacy')->name('privacy');
-Route::view('/about', 'about')->name('about');
+Route::get('/terms', fn() => \Inertia\Inertia::render('Terms'))->name('terms');
+Route::get('/privacy', fn() => \Inertia\Inertia::render('Privacy'))->name('privacy');
+Route::get('/about', fn() => \Inertia\Inertia::render('About'))->name('about');
 
 require __DIR__ . '/auth.php';

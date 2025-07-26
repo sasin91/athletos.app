@@ -9,12 +9,13 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use Inertia\Inertia;
 
 class PasswordController extends Controller
 {
-    public function edit(Request $request): View
+    public function edit(Request $request): \Inertia\Response
     {
-        return view('settings.password', [
+        return Inertia::render('Settings/Password', [
             'user' => $request->user(),
         ]);
     }
@@ -27,7 +28,7 @@ class PasswordController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return redirect()->route('settings.profile.edit')
+            return redirect()->route('settings.password.edit')
                 ->withErrors($validator)
                 ->withInput();
         }
@@ -38,6 +39,6 @@ class PasswordController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
-        return redirect()->route('settings.profile.edit')->with('status', 'password-updated');
+        return redirect()->route('settings.password.edit')->with('status', 'password-updated');
     }
 }

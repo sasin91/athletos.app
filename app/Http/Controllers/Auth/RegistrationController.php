@@ -11,12 +11,13 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use Inertia\Inertia;
 
 class RegistrationController extends Controller
 {
-    public function create(): View
+    public function create(): \Inertia\Response
     {
-        return view('auth.register');
+        return Inertia::render('Auth/Register');
     }
 
     public function store(Request $request): RedirectResponse

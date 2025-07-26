@@ -56,7 +56,13 @@ class DashboardTest extends TestCase
         $this->actingAs($user)
             ->get('/dashboard')
             ->assertStatus(200)
-            ->assertViewIs('dashboard')
-            ->assertViewHas('athlete', $athlete);
+            ->assertInertia(fn ($page) => 
+                $page->component('Dashboard')
+                    ->has('athlete')
+                    ->where('athlete.id', $athlete->id)
+                    ->has('metrics')
+                    ->has('weightProgressions')
+                    ->has('plannedExercises')
+            );
     }
 }

@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class TrainingController extends Controller
 {
@@ -20,7 +22,7 @@ class TrainingController extends Controller
         private CalculateTrainingOffset $calculateTrainingOffset,
     ) {}
 
-    public function index(#[CurrentUser] User $user): \Illuminate\View\View|\Illuminate\Http\RedirectResponse
+    public function index(#[CurrentUser] User $user): Response
     {
         Gate::authorize('viewAny', Training::class);
         $athlete = $user->athlete;
@@ -31,7 +33,9 @@ class TrainingController extends Controller
             ->orderBy('scheduled_at', 'desc')
             ->paginate(20);
 
-        return view('trainings.index', compact('trainings'));
+        return Inertia::render('Trainings/Index', [
+            'trainings' => $trainings
+        ]);
     }
 
     public function store(Request $request, #[CurrentUser] User $user): \Illuminate\Http\RedirectResponse
@@ -57,6 +61,27 @@ class TrainingController extends Controller
         ]);
 
         return redirect()->route('trainings.show', $training);
+    }
+
+    public function show(Training $training, #[CurrentUser] User $user): Response
+    {
+        Gate::authorize('view', $training);
+
+        $athlete = $user->athlete;
+        
+        // Load the training with relationships
+        $training->load([
+            'trainingPlan',
+            'trainingPhase',
+            'exercises' => function($query) {
+                $query->orderBy('created_at');
+            }
+        ]);
+
+        return Inertia::render('Training', [
+            'training' => $training,
+            'athlete' => $athlete,
+        ]);
     }
 
     public function complete(
