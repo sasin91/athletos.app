@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Head } from '@inertiajs/react';
 import { route } from '@/lib/wayfinder';
-import AppLayout from '@/components/Layout/AppLayout';
+import AppLayout from '@/layouts/app-layout';
 
 interface Exercise {
   id: number;
@@ -166,8 +166,8 @@ export default function Training({ training, athlete }: TrainingProps) {
                   <div
                     key={exercise.id}
                     className={`bg-white dark:bg-gray-800 rounded-lg border-2 p-6 transition-colors ${exercise.completed
-                        ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
-                        : 'border-gray-200 dark:border-gray-700'
+                      ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+                      : 'border-gray-200 dark:border-gray-700'
                       }`}
                   >
                     <div className="flex items-center justify-between">

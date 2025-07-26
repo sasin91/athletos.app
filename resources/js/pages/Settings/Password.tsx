@@ -1,5 +1,5 @@
 import { Head, useForm } from '@inertiajs/react';
-import SettingsLayout from '@/components/Settings/SettingsLayout';
+import SettingsLayout from '@/layouts/settings-layout';
 import { route } from '@/lib/wayfinder';
 
 interface PasswordData {

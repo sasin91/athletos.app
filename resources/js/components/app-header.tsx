@@ -9,9 +9,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { UserMenuContent } from '@/components/user-menu-content';
 import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
+import { routes } from '@/lib/wayfinder';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, Menu, Search, MessageCircle, Dumbbell } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
 
@@ -20,6 +22,11 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: '/dashboard',
         icon: LayoutGrid,
+    },
+    {
+        title: 'Trainings',
+        href: '/trainings',
+        icon: Dumbbell,
     },
 ];
 
@@ -46,6 +53,48 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const page = usePage<SharedData>();
     const { auth } = page.props;
     const getInitials = useInitials();
+    const [theme, setTheme] = useState('system');
+
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('appearance') || 'system';
+        setTheme(savedTheme);
+    }, []);
+
+    const toggleTheme = () => {
+        let newTheme: string;
+        if (theme === 'light') {
+            newTheme = 'dark';
+        } else if (theme === 'dark') {
+            newTheme = 'system';
+        } else {
+            newTheme = 'light';
+        }
+
+        setTheme(newTheme);
+        setAppearance(newTheme);
+    };
+
+    const setAppearance = (appearance: string) => {
+        const setDark = () => document.documentElement.classList.add('dark');
+        const setLight = () => document.documentElement.classList.remove('dark');
+
+        if (appearance === 'system') {
+            localStorage.removeItem('appearance');
+            const media = window.matchMedia('(prefers-color-scheme: dark)');
+            media.matches ? setDark() : setLight();
+        } else if (appearance === 'dark') {
+            localStorage.setItem('appearance', 'dark');
+            setDark();
+        } else if (appearance === 'light') {
+            localStorage.setItem('appearance', 'light');
+            setLight();
+        }
+    };
+
+    const handleChatOpen = () => {
+        routes.chat();
+    };
+
     return (
         <>
             <div className="border-b border-sidebar-border/80">
@@ -129,6 +178,60 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                             <Button variant="ghost" size="icon" className="group h-9 w-9 cursor-pointer">
                                 <Search className="!size-5 opacity-80 group-hover:opacity-100" />
                             </Button>
+                            
+                            {/* Theme Toggle */}
+                            <TooltipProvider delayDuration={0}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={toggleTheme}
+                                            className="group h-9 w-9 cursor-pointer"
+                                        >
+                                            {theme === 'light' && (
+                                                <svg className="!size-5 opacity-80 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                                                </svg>
+                                            )}
+                                            {theme === 'dark' && (
+                                                <svg className="!size-5 opacity-80 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                                                </svg>
+                                            )}
+                                            {theme === 'system' && (
+                                                <svg className="!size-5 opacity-80 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                </svg>
+                                            )}
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>{theme === 'light' ? 'Light Mode' : theme === 'dark' ? 'Dark Mode' : 'System Mode'}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+
+                            {/* AI Chat Button */}
+                            <TooltipProvider delayDuration={0}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={handleChatOpen}
+                                            className="group h-9 w-9 cursor-pointer relative"
+                                        >
+                                            <MessageCircle className="!size-5 opacity-80 group-hover:opacity-100" />
+                                            <span className="absolute -top-1 -right-1 h-3 w-3 bg-blue-500 rounded-full animate-pulse"></span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Chat with AI Training Coach</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                            
                             <div className="hidden lg:flex">
                                 {rightNavItems.map((item) => (
                                     <TooltipProvider key={item.title} delayDuration={0}>

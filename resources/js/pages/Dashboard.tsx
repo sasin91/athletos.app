@@ -1,10 +1,32 @@
+import { useState, useMemo } from 'react';
 import { Head } from '@inertiajs/react';
-import AppLayout from '@/components/Layout/AppLayout';
-import Dashboard from '@/components/Dashboard';
+import AppLayout from '@/layouts/app-layout';
+import { routes } from '@/lib/wayfinder';
+import WeightProgressionChart from '@/components/WeightProgressionChart';
+import ExerciseSummary from '@/components/ExerciseSummary';
+import DashboardHeader from '@/components/Dashboard/DashboardHeader';
+import DashboardStats from '@/components/Dashboard/DashboardStats';
+import TodaysTraining from '@/components/Dashboard/TodaysTraining';
+import DashboardSidebar from '@/components/Dashboard/DashboardSidebar';
+import { CommandPalette } from '@/components/ui/command-palette';
+import { QuickActionButton } from '@/components/ui/action-sheet';
+import { useDashboardCommands } from '@/hooks/useDashboardCommands';
+import PageTransition from '@/components/ui/PageTransition';
 
 interface DashboardPageProps {
   athlete: any;
-  metrics: any;
+  metrics: {
+    totalWorkouts: number;
+    currentStreak: number;
+    completedThisWeek: number;
+    weeklyGoal: number;
+    phaseProgress: number;
+    currentPhaseName: string;
+    currentPhaseWeek: number;
+    totalPhaseWeeks: number;
+    lastWorkoutDate: string | null;
+    nextWorkoutDate: string | null;
+  };
   weightProgressions: any;
   plannedExercises: any[];
   oneRepMaxes: any;
@@ -13,11 +35,159 @@ interface DashboardPageProps {
   formattedDate: string;
 }
 
-export default function DashboardPage(props: DashboardPageProps) {
+export default function DashboardPage({
+  athlete,
+  metrics,
+  weightProgressions,
+  plannedExercises,
+  oneRepMaxes,
+  recoveryExercises,
+  date,
+  formattedDate
+}: DashboardPageProps) {
+  const [currentDate, setCurrentDate] = useState(new Date(date));
+  const [showExerciseSummary, setShowExerciseSummary] = useState(false);
+  const [exerciseSummaryDate, setExerciseSummaryDate] = useState<string | null>(null);
+  const [selectedExercise, setSelectedExercise] = useState<string | null>(
+    weightProgressions?.progressions?.[0]?.exercise?.value || null
+  );
+  const [timeframe, setTimeframe] = useState('12');
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  const progressMetrics = useMemo(() => ({
+    completedThisWeek: metrics.completedThisWeek,
+    weeklyGoal: metrics.weeklyGoal,
+    phaseWeek: metrics.currentPhaseWeek,
+    totalPhaseWeeks: metrics.totalPhaseWeeks,
+    phaseProgressPercentage: () => metrics.phaseProgress,
+  }), [metrics]);
+
+  const handleDateChange = (direction: 'prev' | 'next' | 'today') => {
+    let newDate = new Date(currentDate);
+
+    switch (direction) {
+      case 'prev':
+        newDate.setDate(newDate.getDate() - 1);
+        break;
+      case 'next':
+        newDate.setDate(newDate.getDate() + 1);
+        break;
+      case 'today':
+        newDate = new Date();
+        break;
+    }
+
+    setCurrentDate(newDate);
+    setIsNavigating(true);
+
+    routes.dashboard({
+      date: newDate.toISOString().split('T')[0]
+    }, {
+      preserveState: true,
+      preserveScroll: true,
+      onFinish: () => setIsNavigating(false),
+    });
+  };
+
+  const handleStartTraining = () => {
+    routes.startTraining({
+      date: currentDate.toISOString().split('T')[0]
+    });
+  };
+
+  const {
+    showCommandPalette,
+    setShowCommandPalette,
+    commands,
+    quickActions
+  } = useDashboardCommands({ onStartTraining: handleStartTraining });
+
+  const showExerciseSummaryModal = (date: string) => {
+    setExerciseSummaryDate(date);
+    setShowExerciseSummary(true);
+  };
+
+  const handleSelectExercise = (exercise: string) => {
+    setSelectedExercise(exercise);
+  };
+
+  const handleSetTimeframe = (newTimeframe: string) => {
+    setTimeframe(newTimeframe);
+    routes.dashboard({}, {
+      data: { timeframe: newTimeframe },
+      preserveState: true,
+      preserveScroll: true,
+      only: ['weightProgressions']
+    });
+  };
+
+  const isToday = currentDate.toDateString() === new Date().toDateString();
+
   return (
     <AppLayout>
       <Head title="Dashboard" />
-      <Dashboard {...props} />
+      <PageTransition>
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <DashboardHeader
+              athleteName={athlete.name}
+              currentDate={currentDate}
+              formattedDate={formattedDate}
+              isToday={isToday}
+              onDateChange={handleDateChange}
+            />
+
+            <DashboardStats
+              isNavigating={isNavigating}
+              metrics={metrics}
+            />
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+              <div className="xl:col-span-2 space-y-8">
+                <TodaysTraining
+                  isToday={isToday}
+                  formattedDate={formattedDate}
+                  plannedExercises={plannedExercises}
+                  currentStreak={metrics.currentStreak}
+                  onStartTraining={handleStartTraining}
+                />
+
+                <WeightProgressionChart
+                  athlete={athlete}
+                  weightProgressions={weightProgressions}
+                  selectedExercise={selectedExercise}
+                  timeframe={timeframe}
+                  onSelectExercise={handleSelectExercise}
+                  onSetTimeframe={handleSetTimeframe}
+                />
+              </div>
+
+              <DashboardSidebar
+                progressMetrics={progressMetrics}
+                currentPhaseName={metrics.currentPhaseName}
+                recoveryExercises={recoveryExercises}
+              />
+            </div>
+          </div>
+
+          <CommandPalette
+            open={showCommandPalette}
+            onOpenChange={setShowCommandPalette}
+            commands={commands}
+          />
+
+          <QuickActionButton actions={quickActions} />
+        </div>
+      </PageTransition>
+
+      <ExerciseSummary
+        athlete={athlete}
+        trainings={[]}
+        show={showExerciseSummary}
+        date={exerciseSummaryDate}
+        summary={[]}
+        onHide={() => setShowExerciseSummary(false)}
+      />
     </AppLayout>
   );
 }

@@ -1,7 +1,7 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState, useEffect, useRef } from 'react';
 import { route } from '@/lib/wayfinder';
-import AppLayout from '@/components/Layout/AppLayout';
+import AppLayout from '@/layouts/app-layout';
 
 interface Exercise {
   value: string;
@@ -129,7 +129,7 @@ export default function TrainingShow({
       totalTimerInterval.current = setInterval(() => {
         setTotalTimerSeconds(prev => prev + 1);
       }, 1000);
-      
+
       // Request wake lock to keep screen active
       try {
         if ('wakeLock' in navigator) {
@@ -163,7 +163,7 @@ export default function TrainingShow({
   const updateSetValue = (exerciseSlug: string, setIndex: number, field: keyof TrainingSet, value: any) => {
     setSets(prevSets => ({
       ...prevSets,
-      [exerciseSlug]: prevSets[exerciseSlug].map((set, index) => 
+      [exerciseSlug]: prevSets[exerciseSlug].map((set, index) =>
         index === setIndex ? { ...set, [field]: value } : set
       )
     }));
@@ -173,7 +173,7 @@ export default function TrainingShow({
     const exerciseSets = sets[exerciseSlug] || [];
     const newSetNumber = exerciseSets.length + 1;
     const lastSet = exerciseSets[exerciseSets.length - 1];
-    
+
     const newSet: TrainingSet = {
       setNumber: newSetNumber,
       reps: null,
@@ -283,7 +283,7 @@ export default function TrainingShow({
 
     // For now, just show an alert since the backend route needs to be implemented
     alert('Training completion functionality needs to be implemented in the backend.');
-    
+
     // TODO: Implement proper training completion
     // submitFeedback(route['training.complete'](training.id).url, {
     //   onSuccess: () => {
@@ -331,7 +331,7 @@ export default function TrainingShow({
   return (
     <AppLayout>
       <Head title={`${training.trainingPlan?.name || 'Training Session'}`} />
-      
+
       <div className="mx-auto max-w-4xl">
         {/* Training Header */}
         <header className="mb-8">
@@ -363,7 +363,7 @@ export default function TrainingShow({
           {/* Progress Bar */}
           <div className="mt-4">
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-              <div 
+              <div
                 className="bg-blue-600 dark:bg-blue-400 h-3 rounded-full transition-all duration-300"
                 style={{ width: `${training.progress}%` }}
                 role="progressbar"
@@ -433,11 +433,11 @@ export default function TrainingShow({
                             Remove
                           </button>
                         </div>
-                        
+
                         {/* Input Fields */}
                         <div className="space-y-4 mb-4">
                           <div className="relative">
-                            <label 
+                            <label
                               htmlFor={`reps-${exerciseSlug}-${set.setNumber}`}
                               className="absolute -top-2 left-2 inline-block rounded-lg bg-white dark:bg-gray-800 px-1 text-xs font-medium text-gray-900 dark:text-gray-100"
                             >
@@ -453,7 +453,7 @@ export default function TrainingShow({
                             />
                           </div>
                           <div className="relative">
-                            <label 
+                            <label
                               htmlFor={`weight-${exerciseSlug}-${set.setNumber}`}
                               className="absolute -top-2 left-2 inline-block rounded-lg bg-white dark:bg-gray-800 px-1 text-xs font-medium text-gray-900 dark:text-gray-100"
                             >
@@ -469,7 +469,7 @@ export default function TrainingShow({
                             />
                           </div>
                           <div className="relative">
-                            <label 
+                            <label
                               htmlFor={`rpe-${exerciseSlug}-${set.setNumber}`}
                               className="absolute -top-2 left-2 inline-block rounded-lg bg-white dark:bg-gray-800 px-1 text-xs font-medium text-gray-900 dark:text-gray-100"
                             >
@@ -561,9 +561,8 @@ export default function TrainingShow({
                           key={rating}
                           type="button"
                           onClick={() => setFeedback('overallRating', rating)}
-                          className={`flex items-center justify-center w-12 h-12 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-yellow-300 dark:hover:border-yellow-600 transition-colors ${
-                            feedback.overallRating >= rating ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : ''
-                          }`}
+                          className={`flex items-center justify-center w-12 h-12 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-yellow-300 dark:hover:border-yellow-600 transition-colors ${feedback.overallRating >= rating ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : ''
+                            }`}
                         >
                           <svg
                             className={`w-8 h-8 ${feedback.overallRating >= rating ? 'text-yellow-500' : 'text-gray-300'}`}
@@ -598,9 +597,8 @@ export default function TrainingShow({
                           key={moodOption.value}
                           type="button"
                           onClick={() => setFeedback('mood', moodOption.value)}
-                          className={`flex flex-col items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 transition-colors ${
-                            feedback.mood === moodOption.value ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' : ''
-                          }`}
+                          className={`flex flex-col items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 transition-colors ${feedback.mood === moodOption.value ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' : ''
+                            }`}
                         >
                           <span className="text-2xl mb-1">{moodOption.emoji}</span>
                           <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -624,9 +622,8 @@ export default function TrainingShow({
                             key={level}
                             type="button"
                             onClick={() => setFeedback('energyLevel', level)}
-                            className={`flex items-center justify-center h-12 w-12 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 transition-colors ${
-                              feedback.energyLevel === level ? 'border-blue-600 bg-blue-600 text-white' : ''
-                            }`}
+                            className={`flex items-center justify-center h-12 w-12 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 transition-colors ${feedback.energyLevel === level ? 'border-blue-600 bg-blue-600 text-white' : ''
+                              }`}
                           >
                             <span className="font-semibold">{level}</span>
                           </button>
@@ -655,9 +652,8 @@ export default function TrainingShow({
                           key={diffOption.value}
                           type="button"
                           onClick={() => setFeedback('difficulty', diffOption.value)}
-                          className={`flex flex-col items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 transition-colors ${
-                            feedback.difficulty === diffOption.value ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' : ''
-                          }`}
+                          className={`flex flex-col items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 transition-colors ${feedback.difficulty === diffOption.value ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' : ''
+                            }`}
                         >
                           <span className="text-xs font-medium text-gray-700 dark:text-gray-300 text-center">
                             {diffOption.label}
@@ -684,9 +680,8 @@ export default function TrainingShow({
                             key={level}
                             type="button"
                             onClick={() => setFeedback('difficultyLevel', level)}
-                            className={`flex items-center justify-center h-12 w-12 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-red-300 dark:hover:border-red-600 transition-colors ${
-                              feedback.difficultyLevel === level ? 'border-red-600 bg-red-600 text-white' : ''
-                            }`}
+                            className={`flex items-center justify-center h-12 w-12 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-red-300 dark:hover:border-red-600 transition-colors ${feedback.difficultyLevel === level ? 'border-red-600 bg-red-600 text-white' : ''
+                              }`}
                           >
                             <span className="font-semibold">{level}</span>
                           </button>
@@ -743,12 +738,12 @@ export default function TrainingShow({
           {addingExercise && (
             <>
               {/* Backdrop */}
-              <div 
-                className="fixed inset-0 z-40 bg-gray-500/75" 
+              <div
+                className="fixed inset-0 z-40 bg-gray-500/75"
                 aria-hidden="true"
                 onClick={() => setAddingExercise(false)}
               />
-              
+
               {/* Drawer */}
               <div className="fixed inset-y-0 right-0 z-50 flex max-w-full pl-10 sm:pl-16">
                 <div className="pointer-events-auto w-screen max-w-md">
@@ -774,7 +769,7 @@ export default function TrainingShow({
                       {availableExercises.map((exercise) => (
                         <li key={exercise.exercise.value} className="flex justify-between gap-x-6 py-5">
                           <div className="flex min-w-0 gap-x-4">
-                            <img 
+                            <img
                               className="size-12 flex-none rounded bg-gray-50 object-cover"
                               src={exercise.image || '/images/exercise-placeholder.png'}
                               alt={exercise.displayName}
@@ -843,13 +838,13 @@ export default function TrainingShow({
                 Back to Dashboard
               </div>
             </div>
-            
+
             {/* Total Timer */}
             <div className="flex flex-col items-center">
               <span className="font-medium">Total Timer:</span>
               <span className="font-mono text-lg">{formatTime(totalTimerSeconds)}</span>
             </div>
-            
+
             {/* Add Exercise */}
             <div className="relative group">
               <button

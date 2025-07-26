@@ -1,6 +1,6 @@
 import { Head } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
-import SettingsLayout from '@/components/Settings/SettingsLayout';
+import SettingsLayout from '@/layouts/settings-layout';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -63,8 +63,8 @@ export default function Appearance() {
                   <label
                     key={option.value}
                     className={`relative flex items-center p-4 rounded-lg border-2 cursor-pointer transition-colors ${currentTheme === option.value
-                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-600'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                      : 'border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-600'
                       }`}
                   >
                     <input

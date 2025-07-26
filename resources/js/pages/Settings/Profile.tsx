@@ -1,6 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
-import SettingsLayout from '@/components/Settings/SettingsLayout';
+import SettingsLayout from '@/layouts/settings-layout';
 import { route } from '@/lib/wayfinder';
 
 interface ProfileData {

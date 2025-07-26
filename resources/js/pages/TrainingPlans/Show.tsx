@@ -1,6 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
-import AppLayout from '@/components/Layout/AppLayout';
+import AppLayout from '@/layouts/app-layout';
 import { route } from '@/lib/wayfinder';
 
 interface Exercise {

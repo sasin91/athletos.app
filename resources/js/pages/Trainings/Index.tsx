@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import AppLayout from '@/components/Layout/AppLayout';
+import AppLayout from '@/layouts/app-layout';
 
 interface Training {
   id: number;
