@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription } from '@/components/ui/card';
-import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
-import { StaggeredAnimation } from '@/components/ui/PageTransition';
+import LoadingSkeleton from '@/components/ui/loading-skeleton';
+import { StaggeredAnimation } from '@/components/ui/page-transition';
 
 interface DashboardStatsProps {
   isNavigating: boolean;

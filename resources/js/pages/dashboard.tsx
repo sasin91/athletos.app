@@ -2,16 +2,16 @@ import { useState, useMemo } from 'react';
 import { Head } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { routes } from '@/lib/wayfinder';
-import WeightProgressionChart from '@/components/WeightProgressionChart';
-import ExerciseSummary from '@/components/ExerciseSummary';
-import DashboardHeader from '@/components/Dashboard/DashboardHeader';
-import DashboardStats from '@/components/Dashboard/DashboardStats';
-import TodaysTraining from '@/components/Dashboard/TodaysTraining';
-import DashboardSidebar from '@/components/Dashboard/DashboardSidebar';
+import WeightProgressionChart from '@/components/weight-progression-chart';
+import ExerciseSummary from '@/components/exercise-summary';
+import DashboardHeader from '@/components/Dashboard/dashboard-header';
+import DashboardStats from '@/components/Dashboard/dashboard-stats';
+import TodaysTraining from '@/components/Dashboard/todays-training';
+import DashboardSidebar from '@/components/Dashboard/dashboard-sidebar';
 import { CommandPalette } from '@/components/ui/command-palette';
 import { QuickActionButton } from '@/components/ui/action-sheet';
-import { useDashboardCommands } from '@/hooks/useDashboardCommands';
-import PageTransition from '@/components/ui/PageTransition';
+import { useDashboardCommands } from '@/hooks/use-dashboard-commands';
+import PageTransition from '@/components/ui/page-transition';
 
 interface DashboardPageProps {
   athlete: any;

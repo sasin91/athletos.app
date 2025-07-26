@@ -1,4 +1,4 @@
-import { FadeIn } from '@/components/ui/PageTransition';
+import { FadeIn } from '@/components/ui/page-transition';
 
 interface DashboardHeaderProps {
   athleteName: string;

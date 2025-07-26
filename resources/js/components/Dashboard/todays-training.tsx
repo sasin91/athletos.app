@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import EmptyState, { NoUpcomingWorkouts } from '@/components/ui/EmptyState';
+import EmptyState, { NoUpcomingWorkouts } from '@/components/ui/empty-state';
 
 interface Exercise {
   name: string;
