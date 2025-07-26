@@ -1,6 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
-import AppLayout from '@/Components/Layout/AppLayout';
+import AppLayout from '@/components/Layout/AppLayout';
 import { route } from '@/lib/wayfinder';
 
 interface Exercise {
@@ -70,14 +70,14 @@ export default function Show({ trainingPlan, auth }: Props) {
       'barbell_row': 'Barbell Row',
       // Add more mappings as needed
     };
-    
+
     return exerciseNames[exerciseValue] || exerciseValue.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
   return (
     <AppLayout>
       <Head title={`${trainingPlan.name} - Training Plan`} />
-      
+
       <div className="py-12">
         <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
           <div className="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
@@ -140,10 +140,10 @@ export default function Show({ trainingPlan, auth }: Props) {
               {/* Training Phases */}
               <div className="space-y-8">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Training Phases</h2>
-                
+
                 {trainingPlan.phases.map((phase) => {
                   // Group exercises by day
-                  const exercisesByDay = phase.settings?.exercises ? 
+                  const exercisesByDay = phase.settings?.exercises ?
                     phase.settings.exercises.reduce((acc, exercise) => {
                       if (!acc[exercise.day]) {
                         acc[exercise.day] = [];
@@ -175,7 +175,7 @@ export default function Show({ trainingPlan, auth }: Props) {
                       {Object.keys(exercisesByDay).length > 0 && (
                         <div className="space-y-4">
                           <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100">Exercises</h4>
-                          
+
                           {Object.entries(exercisesByDay).map(([day, exercises]) => (
                             <div key={day} className="mb-6">
                               <h5 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-3">

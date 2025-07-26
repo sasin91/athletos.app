@@ -1,6 +1,6 @@
 import { Head } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
-import SettingsLayout from '@/Components/Settings/SettingsLayout';
+import SettingsLayout from '@/components/Settings/SettingsLayout';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -15,7 +15,7 @@ export default function Appearance() {
 
   const setAppearance = (theme: Theme) => {
     setCurrentTheme(theme);
-    
+
     if (theme === 'system') {
       localStorage.removeItem('theme');
       // Apply system preference
@@ -43,7 +43,7 @@ export default function Appearance() {
   return (
     <SettingsLayout>
       <Head title="Appearance Settings - Athletos" />
-      
+
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
         <div className="p-6">
           <div className="mb-6">
@@ -62,11 +62,10 @@ export default function Appearance() {
                 {themeOptions.map((option) => (
                   <label
                     key={option.value}
-                    className={`relative flex items-center p-4 rounded-lg border-2 cursor-pointer transition-colors ${
-                      currentTheme === option.value
+                    className={`relative flex items-center p-4 rounded-lg border-2 cursor-pointer transition-colors ${currentTheme === option.value
                         ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                         : 'border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-600'
-                    }`}
+                      }`}
                   >
                     <input
                       type="radio"
@@ -91,7 +90,7 @@ export default function Appearance() {
 
             <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
               <p className="text-sm text-blue-800 dark:text-blue-200">
-                <strong>Note:</strong> Theme changes are applied immediately and saved to your browser. 
+                <strong>Note:</strong> Theme changes are applied immediately and saved to your browser.
                 The system option will automatically switch between light and dark modes based on your device settings.
               </p>
             </div>

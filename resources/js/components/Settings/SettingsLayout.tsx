@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import AppLayout from '@/Components/Layout/AppLayout';
+import AppLayout from '@/components/Layout/AppLayout';
 import { route } from '@/lib/wayfinder';
 
 interface SettingsLayoutProps {
@@ -14,7 +14,7 @@ interface SettingsNavItem {
 
 export default function SettingsLayout({ children }: SettingsLayoutProps) {
   const { auth } = usePage().props as any;
-  
+
   const navItems: SettingsNavItem[] = [
     {
       label: 'Profile',
@@ -77,11 +77,10 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
                   <li key={item.routePattern}>
                     <Link
                       href={item.href}
-                      className={`block px-4 py-3 ${
-                        isActiveRoute(item.routePattern)
+                      className={`block px-4 py-3 ${isActiveRoute(item.routePattern)
                           ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 font-medium'
                           : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600'
-                      }`}
+                        }`}
                     >
                       {item.label}
                     </Link>

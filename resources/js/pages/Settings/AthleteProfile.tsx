@@ -1,5 +1,5 @@
 import { Head, useForm } from '@inertiajs/react';
-import SettingsLayout from '@/Components/Settings/SettingsLayout';
+import SettingsLayout from '@/components/Settings/SettingsLayout';
 import { route } from '@/lib/wayfinder';
 
 interface ExperienceLevel {
@@ -54,13 +54,13 @@ interface Props {
   difficulties: Difficulty[];
 }
 
-export default function AthleteProfile({ 
-  athlete, 
-  experienceLevels, 
-  trainingGoals, 
+export default function AthleteProfile({
+  athlete,
+  experienceLevels,
+  trainingGoals,
   muscleGroups,
   trainingTimes,
-  difficulties 
+  difficulties
 }: Props) {
   const { data, setData, put, processing, errors } = useForm<AthleteProfileData>({
     experience_level: athlete?.experience_level || '',
@@ -126,7 +126,7 @@ export default function AthleteProfile({
   return (
     <SettingsLayout>
       <Head title="Athlete Profile Settings - Athletos" />
-      
+
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
         <div className="p-6">
           <div className="mb-6">
@@ -373,7 +373,7 @@ export default function AthleteProfile({
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   Share your best lifts to help us track your progress and set appropriate starting weights.
                 </p>
-                
+
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div>
                     <label htmlFor="top_squat" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

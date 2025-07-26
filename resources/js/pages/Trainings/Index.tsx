@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import AppLayout from '@/Components/Layout/AppLayout';
+import AppLayout from '@/components/Layout/AppLayout';
 
 interface Training {
   id: number;
@@ -33,7 +33,7 @@ export default function TrainingsIndex({ trainings }: TrainingsIndexProps) {
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400">
           <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
           </svg>
           Completed
         </span>
@@ -70,7 +70,7 @@ export default function TrainingsIndex({ trainings }: TrainingsIndexProps) {
   return (
     <AppLayout>
       <Head title="Training History" />
-      
+
       <div className="bg-slate-50 dark:bg-gray-900 min-h-screen">
         <div className="mx-auto max-w-7xl px-6 lg:px-8 py-8">
           <div className="mb-8">
@@ -121,7 +121,7 @@ export default function TrainingsIndex({ trainings }: TrainingsIndexProps) {
                       {trainings.data.map((training) => {
                         const { date, time } = formatDate(training.scheduled_at);
                         const progress = training.progress || 0;
-                        
+
                         return (
                           <tr key={training.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
@@ -145,8 +145,8 @@ export default function TrainingsIndex({ trainings }: TrainingsIndexProps) {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                <div 
-                                  className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                                <div
+                                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                                   style={{ width: `${progress}%` }}
                                 />
                               </div>

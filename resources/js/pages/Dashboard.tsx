@@ -1,6 +1,6 @@
 import { Head } from '@inertiajs/react';
-import AppLayout from '@/Components/Layout/AppLayout';
-import Dashboard from '@/Components/Dashboard';
+import AppLayout from '@/components/Layout/AppLayout';
+import Dashboard from '@/components/Dashboard';
 
 interface DashboardPageProps {
   athlete: any;

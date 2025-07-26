@@ -1,5 +1,5 @@
 import { Head, useForm } from '@inertiajs/react';
-import SettingsLayout from '@/Components/Settings/SettingsLayout';
+import SettingsLayout from '@/components/Settings/SettingsLayout';
 import { route } from '@/lib/wayfinder';
 
 interface PasswordData {
@@ -35,7 +35,7 @@ export default function Password({ user }: Props) {
   return (
     <SettingsLayout>
       <Head title="Password Settings - Athletos" />
-      
+
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
         <div className="p-6">
           <div className="mb-6">

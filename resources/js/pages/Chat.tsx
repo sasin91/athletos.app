@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react';
-import Chat from '@/Components/Chat';
+import Chat from '@/components/Chat';
 
 interface ChatPageProps {
   session: {

@@ -1,6 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
-import AppLayout from '@/Components/Layout/AppLayout';
+import AppLayout from '@/components/Layout/AppLayout';
 import { route } from '@/lib/wayfinder';
 
 interface Exercise {
@@ -20,7 +20,7 @@ export default function Show({ exercise, exerciseData }: Props) {
   return (
     <AppLayout>
       <Head title={`${exerciseData.name} - Exercise`} />
-      
+
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-3xl mx-auto">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8">
@@ -40,7 +40,7 @@ export default function Show({ exercise, exerciseData }: Props) {
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                 {exerciseData.name}
               </h1>
-              
+
               <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
                 {exerciseData.description}
               </p>

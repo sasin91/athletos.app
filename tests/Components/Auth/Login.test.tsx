@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
-import Login from '@/Pages/Auth/Login';
+import Login from '@/pages/Auth/Login';
 
 // Mock Inertia hooks
 const mockPost = vi.fn();
@@ -34,7 +34,7 @@ describe('Login Component', () => {
 
   it('renders login form correctly', () => {
     render(<Login {...defaultProps} />);
-    
+
     expect(screen.getByText('Login')).toBeInTheDocument();
     expect(screen.getByText('Sign in to your account')).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
@@ -45,59 +45,59 @@ describe('Login Component', () => {
 
   it('displays forgot password link when canResetPassword is true', () => {
     render(<Login {...defaultProps} />);
-    
+
     expect(screen.getByText('Forgot password?')).toBeInTheDocument();
   });
 
   it('does not display forgot password link when canResetPassword is false', () => {
     render(<Login {...defaultProps} canResetPassword={false} />);
-    
+
     expect(screen.queryByText('Forgot password?')).not.toBeInTheDocument();
   });
 
   it('displays status message when provided', () => {
     render(<Login {...defaultProps} status="Password reset successful" />);
-    
+
     expect(screen.getByText('Password reset successful')).toBeInTheDocument();
   });
 
   it('calls setData when email input changes', async () => {
     const user = userEvent.setup();
     render(<Login {...defaultProps} />);
-    
+
     const emailInput = screen.getByLabelText('Email');
     await user.type(emailInput, 'test@example.com');
-    
+
     expect(mockUseForm.setData).toHaveBeenCalledWith('email', 'test@example.com');
   });
 
   it('calls setData when password input changes', async () => {
     const user = userEvent.setup();
     render(<Login {...defaultProps} />);
-    
+
     const passwordInput = screen.getByLabelText('Password');
     await user.type(passwordInput, 'password123');
-    
+
     expect(mockUseForm.setData).toHaveBeenCalledWith('password', 'password123');
   });
 
   it('calls setData when remember checkbox changes', async () => {
     const user = userEvent.setup();
     render(<Login {...defaultProps} />);
-    
+
     const rememberCheckbox = screen.getByLabelText('Remember me');
     await user.click(rememberCheckbox);
-    
+
     expect(mockUseForm.setData).toHaveBeenCalledWith('remember', true);
   });
 
   it('submits form when login button is clicked', async () => {
     const user = userEvent.setup();
     render(<Login {...defaultProps} />);
-    
+
     const submitButton = screen.getByRole('button', { name: 'Sign In' });
     await user.click(submitButton);
-    
+
     expect(mockPost).toHaveBeenCalledWith(route('login'), {
       onFinish: expect.any(Function),
     });
@@ -105,7 +105,7 @@ describe('Login Component', () => {
 
   it('displays register link', () => {
     render(<Login {...defaultProps} />);
-    
+
     expect(screen.getByText("Don't have an account?")).toBeInTheDocument();
     expect(screen.getByText('Sign up')).toBeInTheDocument();
   });

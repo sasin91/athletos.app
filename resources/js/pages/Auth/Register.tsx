@@ -1,6 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
-import AuthLayout from '@/Components/Auth/AuthLayout';
+import AuthLayout from '@/components/Auth/AuthLayout';
 import { route } from '@/lib/wayfinder';
 
 interface RegisterData {

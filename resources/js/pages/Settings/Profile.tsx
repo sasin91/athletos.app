@@ -1,6 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
-import SettingsLayout from '@/Components/Settings/SettingsLayout';
+import SettingsLayout from '@/components/Settings/SettingsLayout';
 import { route } from '@/lib/wayfinder';
 
 interface ProfileData {
@@ -18,7 +18,7 @@ interface Props {
 
 export default function Profile({ user }: Props) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
+
   const { data, setData, put, processing, errors, reset } = useForm<ProfileData>({
     name: user.name,
     email: user.email,
@@ -44,7 +44,7 @@ export default function Profile({ user }: Props) {
   return (
     <SettingsLayout>
       <Head title="Profile Settings - Athletos" />
-      
+
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
         <div className="p-6">
           <div className="mb-6">
