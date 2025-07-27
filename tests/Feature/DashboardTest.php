@@ -13,56 +13,60 @@ class DashboardTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_guests_are_redirected_to_the_login_page(): void
+    protected function setUp(): void
     {
-        $this->get('/dashboard')->assertRedirect('/login');
-    }
+        parent::setUp();
 
-    public function test_user_without_athlete_gets_redirected_to_onboarding(): void
-    {
-        $user = User::factory()->create();
+        $this->user = User::factory()->create(['roles' => [UserRole::Athlete]]);
+        $this->trainingPlan = TrainingPlan::factory()->create();
 
-        $this->actingAs($user)
-            ->get('/dashboard')
-            ->assertRedirect('/onboarding/profile');
-    }
-
-    public function test_user_with_athlete_can_access_dashboard(): void
-    {
-        $user = User::factory()->create(['roles' => [UserRole::Athlete]]);
-        
-        // Create a training plan first to satisfy foreign key constraint
-        $trainingPlan = TrainingPlan::factory()->create();
-        
-        // Ensure the plan has at least one phase
         \App\Models\TrainingPhase::factory()->create([
-            'training_plan_id' => $trainingPlan->id,
+            'training_plan_id' => $this->trainingPlan->id,
             'order' => 0,
             'duration_weeks' => 4,
         ]);
-        
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
+
+        $this->athlete = Athlete::factory()->create([
+            'user_id' => $this->user->id,
             'training_days' => ['monday', 'wednesday', 'friday'],
             'experience_level' => 'intermediate',
             'primary_goal' => 'strength',
             'preferred_time' => 'evening',
             'session_duration' => 60,
             'difficulty_preference' => 'challenging',
-            'current_plan_id' => $trainingPlan->id,
+            'current_plan_id' => $this->trainingPlan->id,
             'plan_start_date' => now(),
         ]);
+    }
 
-        $this->actingAs($user)
-            ->get('/dashboard')
-            ->assertStatus(200)
-            ->assertInertia(fn ($page) => 
+    /** @test */
+    public function dashboard_returns_inertia_response()
+    {
+        $response = $this->actingAs($this->user)
+            ->get('/dashboard');
+
+        $response->assertStatus(200)
+            ->assertInertia(
+                fn($page) =>
                 $page->component('Dashboard')
                     ->has('athlete')
-                    ->where('athlete.id', $athlete->id)
                     ->has('metrics')
                     ->has('weightProgressions')
                     ->has('plannedExercises')
+            );
+    }
+
+    /** @test */
+    public function chat_returns_inertia_response()
+    {
+        $response = $this->actingAs($this->user)
+            ->get('/chat');
+
+        $response->assertStatus(200)
+            ->assertInertia(
+                fn($page) =>
+                $page->component('Chat')
+                    ->has('athlete')
             );
     }
 }

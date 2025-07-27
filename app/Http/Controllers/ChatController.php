@@ -45,7 +45,7 @@ class ChatController extends Controller
             $messages = collect();
         }
 
-        return Inertia::render('Chat', [
+        return Inertia::render('chat', [
             'session' => $session,
             'messages' => $messages,
             'basePlan' => $basePlan,
@@ -67,7 +67,7 @@ class ChatController extends Controller
 
         $sessionId = $request->get('session_id');
         $basePlanId = $request->get('base_plan_id');
-        
+
         if ($sessionId) {
             $session = ChatSession::findOrFail($sessionId);
         } else {
@@ -83,7 +83,7 @@ class ChatController extends Controller
 
         // Generate a unique stream ID
         $streamId = Str::uuid();
-        
+
         // Store the stream data in cache for the streaming endpoint
         cache()->put("chat_stream_{$streamId}", [
             'session_id' => $session->id,
@@ -103,7 +103,7 @@ class ChatController extends Controller
     public function stream(string $streamId): StreamedResponse
     {
         $streamData = cache()->get("chat_stream_{$streamId}");
-        
+
         if (!$streamData) {
             abort(404, 'Stream not found');
         }
@@ -120,7 +120,7 @@ class ChatController extends Controller
                     if ($textChunk->finishReason !== null) {
                         // Save the complete response to database
                         app(AddChatMessage::class)->addAssistantMessage($session, $fullAnswer);
-                        
+
                         echo "data: " . json_encode([
                             'type' => 'finished',
                             'reason' => $textChunk->finishReason->name
@@ -180,14 +180,14 @@ class ChatController extends Controller
                     'type' => 'error',
                     'message' => 'Connection Error: ' . $e->getMessage()
                 ]) . "\n\n";
-                
+
                 report($e);
             } catch (\Exception $e) {
                 echo "data: " . json_encode([
                     'type' => 'error',
                     'message' => 'Reply Error: ' . $e->getMessage()
                 ]) . "\n\n";
-                
+
                 report($e);
             } finally {
                 // Clean up the stream data
@@ -199,30 +199,5 @@ class ChatController extends Controller
             'Connection' => 'keep-alive',
             'X-Accel-Buffering' => 'no', // Disable Nginx buffering
         ]);
-    }
-
-    /**
-     * Generate a subject for the chat session
-     */
-    private function generateSubject(string $prompt): string
-    {
-        try {
-            $response = PrismFactory::subject()
-                ->withSystemPrompt('Generate a concise 3-5 word subject line for this fitness/training related conversation. Focus on the main topic or goal. Examples: "Upper Body Strength Plan", "Cardio Weight Loss Help", "Form Check Deadlift", "Nutrition Advice Request". Return only the subject line with no quotes or additional text.')
-                ->withPrompt($prompt)
-                ->asText();
-
-            $subject = trim($response->text);
-
-            // Fallback if AI response is too long or empty
-            if (empty($subject) || strlen($subject) > 50) {
-                return Str::limit($prompt, 30);
-            }
-
-            return $subject;
-        } catch (\Exception $e) {
-            \Log::warning('Failed to generate chat subject: ' . $e->getMessage());
-            return Str::limit($prompt, 30);
-        }
     }
 }

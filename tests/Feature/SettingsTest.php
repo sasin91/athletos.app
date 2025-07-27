@@ -9,7 +9,7 @@ use App\Enums\UserRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-class TrainingTest extends TestCase
+class SettingsTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -40,48 +40,78 @@ class TrainingTest extends TestCase
     }
 
     /** @test */
-    public function training_plan_show_returns_inertia_response()
+    public function settings_profile_returns_inertia_response()
     {
         $response = $this->actingAs($this->user)
-            ->get("/training-plans/{$this->trainingPlan->id}");
+            ->get('/settings/profile');
 
         $response->assertStatus(200)
             ->assertInertia(
                 fn($page) =>
-                $page->component('TrainingPlans/Show')
-                    ->has('trainingPlan')
+                $page->component('Settings/Profile')
+                    ->has('user')
             );
     }
 
     /** @test */
-    public function exercise_show_returns_inertia_response()
+    public function settings_password_returns_inertia_response()
     {
         $response = $this->actingAs($this->user)
-            ->get('/exercises/bench-press');
+            ->get('/settings/password');
 
         $response->assertStatus(200)
             ->assertInertia(
                 fn($page) =>
-                $page->component('Exercises/Show')
-                    ->has('exercise')
-                    ->has('exerciseData')
+                $page->component('Settings/Password')
+                    ->has('user')
             );
     }
 
-
-
     /** @test */
-    public function trainings_index_returns_inertia_response()
+    public function settings_appearance_returns_inertia_response()
     {
         $response = $this->actingAs($this->user)
-            ->get('/trainings');
+            ->get('/settings/appearance');
 
         $response->assertStatus(200)
             ->assertInertia(
                 fn($page) =>
-                $page->component('Trainings/Index')
-                    ->has('trainings')
+                $page->component('Settings/Appearance')
+            );
+    }
+
+    /** @test */
+    public function settings_athlete_profile_returns_inertia_response()
+    {
+        $response = $this->actingAs($this->user)
+            ->get('/settings/athlete-profile');
+
+        $response->assertStatus(200)
+            ->assertInertia(
+                fn($page) =>
+                $page->component('settings/athlete-profile')
                     ->has('athlete')
+                    ->has('experienceLevels')
+                    ->has('trainingGoals')
+                    ->has('muscleGroups')
+                    ->has('trainingTimes')
+                    ->has('difficulties')
             );
+    }
+
+    /** @test */
+    public function profile_update_form_submission_works()
+    {
+        $response = $this->actingAs($this->user)
+            ->put('/settings/profile', [
+                'name' => 'Updated Name',
+                'email' => $this->user->email,
+            ]);
+
+        $response->assertStatus(302); // Redirect after successful update
+        $this->assertDatabaseHas('users', [
+            'id' => $this->user->id,
+            'name' => 'Updated Name',
+        ]);
     }
 }

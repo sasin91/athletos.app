@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Models\BonusActivity;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class ProfileController extends Controller
 {
     public function edit(Request $request): \Inertia\Response
     {
-        return Inertia::render('Settings/Profile', [
+        return Inertia::render('settings/profile', [
             'user' => $request->user(),
         ]);
     }
@@ -55,36 +56,26 @@ class ProfileController extends Controller
         Auth::logout();
 
         DB::transaction(function () use ($user) {
-            // Temporarily disable foreign key constraints for SQLite
-            if (DB::getDriverName() === 'sqlite') {
-                DB::statement('PRAGMA foreign_keys = OFF');
-            }
-
             // Delete related records in the correct order to avoid foreign key constraint violations
             if ($user->athlete) {
                 // Delete performance indicators first
                 $user->athlete->performanceIndicators()->delete();
-                
+
                 // Delete trainings
                 $user->athlete->trainings()->delete();
-                
+
                 // Delete bonus activities
                 $user->athlete->bonusActivities()->delete();
-                
+
                 // Delete the athlete
                 $user->athlete->delete();
             }
 
             // Delete any bonus activities scheduled by this user
-            \App\Models\BonusActivity::where('scheduled_by', $user->id)->delete();
+            BonusActivity::where('scheduled_by', $user->id)->delete();
 
             // Finally delete the user
             $user->delete();
-
-            // Re-enable foreign key constraints for SQLite
-            if (DB::getDriverName() === 'sqlite') {
-                DB::statement('PRAGMA foreign_keys = ON');
-            }
         });
 
         $request->session()->invalidate();

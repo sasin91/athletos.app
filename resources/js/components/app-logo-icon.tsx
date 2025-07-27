@@ -2,12 +2,74 @@ import { SVGAttributes } from 'react';
 
 export default function AppLogoIcon(props: SVGAttributes<SVGElement>) {
     return (
-        <svg {...props} viewBox="0 0 40 42" xmlns="http://www.w3.org/2000/svg">
-            <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M17.2 5.63325L8.6 0.855469L0 5.63325V32.1434L16.2 41.1434L32.4 32.1434V23.699L40 19.4767V9.85547L31.4 5.07769L22.8 9.85547V18.2999L17.2 21.411V5.63325ZM38 18.2999L32.4 21.411V15.2545L38 12.1434V18.2999ZM36.9409 10.4439L31.4 13.5221L25.8591 10.4439L31.4 7.36561L36.9409 10.4439ZM24.8 18.2999V12.1434L30.4 15.2545V21.411L24.8 18.2999ZM23.8 20.0323L29.3409 23.1105L16.2 30.411L10.6591 27.3328L23.8 20.0323ZM7.6 27.9212L15.2 32.1434V38.2999L2 30.9666V7.92116L7.6 11.0323V27.9212ZM8.6 9.29991L3.05913 6.22165L8.6 3.14339L14.1409 6.22165L8.6 9.29991ZM30.4 24.8101L17.2 32.1434V38.2999L30.4 30.9666V24.8101ZM9.6 11.0323L15.2 7.92117V22.5221L9.6 25.6333V11.0323Z"
-            />
+        <svg {...props} viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+            {/* Base platform */}
+            <rect x="50" y="350" width="300" height="25" fill="currentColor" />
+            
+            {/* Left column base */}
+            <rect x="75" y="320" width="50" height="30" fill="currentColor" />
+            {/* Left column shaft */}
+            <rect x="90" y="120" width="20" height="200" fill="currentColor" />
+            {/* Left column capital */}
+            <ellipse cx="100" cy="120" rx="30" ry="15" fill="currentColor" />
+            <rect x="70" y="105" width="60" height="15" fill="currentColor" />
+            
+            {/* Right column base */}
+            <rect x="275" y="320" width="50" height="30" fill="currentColor" />
+            {/* Right column shaft */}
+            <rect x="290" y="120" width="20" height="200" fill="currentColor" />
+            {/* Right column capital */}
+            <ellipse cx="300" cy="120" rx="30" ry="15" fill="currentColor" />
+            <rect x="270" y="105" width="60" height="15" fill="currentColor" />
+            
+            {/* Left dumbbell */}
+            <rect x="60" y="340" width="80" height="8" fill="currentColor" />
+            <rect x="55" y="335" width="10" height="18" fill="currentColor" />
+            <rect x="135" y="335" width="10" height="18" fill="currentColor" />
+            
+            {/* Right dumbbell */}
+            <rect x="260" y="340" width="80" height="8" fill="currentColor" />
+            <rect x="255" y="335" width="10" height="18" fill="currentColor" />
+            <rect x="335" y="335" width="10" height="18" fill="currentColor" />
+            
+            {/* Figure - torso */}
+            <ellipse cx="200" cy="200" rx="45" ry="60" fill="#D4B896" />
+            
+            {/* Figure - head */}
+            <circle cx="200" cy="130" r="25" fill="#D4B896" />
+            <path d="M185 125 Q200 115 215 125 Q210 135 200 138 Q190 135 185 125" fill="currentColor" />
+            
+            {/* Figure - arms */}
+            <ellipse cx="150" cy="180" rx="15" ry="35" fill="#D4B896" transform="rotate(-20 150 180)" />
+            <ellipse cx="250" cy="180" rx="15" ry="35" fill="#D4B896" transform="rotate(20 250 180)" />
+            
+            {/* Figure - forearms holding columns */}
+            <ellipse cx="125" cy="160" rx="12" ry="25" fill="#D4B896" transform="rotate(-45 125 160)" />
+            <ellipse cx="275" cy="160" rx="12" ry="25" fill="#D4B896" transform="rotate(45 275 160)" />
+            
+            {/* Figure - legs */}
+            <ellipse cx="180" cy="280" rx="18" ry="50" fill="#D4B896" />
+            <ellipse cx="220" cy="280" rx="18" ry="50" fill="#D4B896" />
+            
+            {/* Figure - shorts */}
+            <rect x="165" y="240" width="70" height="40" rx="5" fill="currentColor" />
+            
+            {/* Muscle definition */}
+            <ellipse cx="190" cy="190" rx="8" ry="12" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.6" />
+            <ellipse cx="210" cy="190" rx="8" ry="12" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.6" />
+            <path d="M200 210 Q190 220 200 230 Q210 220 200 210" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.6" />
+            
+            {/* Column details - left */}
+            <circle cx="85" cy="130" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+            <circle cx="115" cy="130" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+            <rect x="88" y="140" width="24" height="3" fill="currentColor" />
+            <rect x="88" y="148" width="24" height="3" fill="currentColor" />
+            
+            {/* Column details - right */}
+            <circle cx="285" cy="130" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+            <circle cx="315" cy="130" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+            <rect x="288" y="140" width="24" height="3" fill="currentColor" />
+            <rect x="288" y="148" width="24" height="3" fill="currentColor" />
         </svg>
     );
 }

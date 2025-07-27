@@ -20,14 +20,14 @@ class AthleteProfileController extends Controller
     public function edit(Request $request): \Inertia\Response|RedirectResponse
     {
         Gate::authorize('isAthlete');
-        
+
         $athlete = $request->user()->athlete;
-        
+
         if (!$athlete) {
             return redirect()->route('onboarding.profile');
         }
 
-        return Inertia::render('Settings/AthleteProfile', [
+        return Inertia::render('settings/athlete-profile', [
             'athlete' => $athlete,
             'experienceLevels' => collect(ExperienceLevel::cases())->map(fn($level) => [
                 'value' => $level->value,
@@ -58,9 +58,9 @@ class AthleteProfileController extends Controller
     public function update(Request $request): RedirectResponse
     {
         Gate::authorize('isAthlete');
-        
+
         $athlete = $request->user()->athlete;
-        
+
         if (!$athlete) {
             return redirect()->route('onboarding.profile');
         }
@@ -110,7 +110,7 @@ class AthleteProfileController extends Controller
             if ($value !== null && $value > 0) {
                 // Always use canonical exercise for consistency
                 $canonicalExercise = $exerciseEnum->synonym();
-                
+
                 // Delete any existing performance indicator for this exercise (check both current and canonical)
                 \App\Models\PerformanceIndicator::where('athlete_id', $athlete->id)
                     ->whereIn('exercise', [$exerciseEnum, $canonicalExercise])
@@ -130,4 +130,4 @@ class AthleteProfileController extends Controller
             }
         }
     }
-} 
+}

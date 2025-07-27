@@ -41,10 +41,10 @@ class DashboardController extends Controller
 
         // Get training for the selected date
         $training = $this->getTraining($athlete, $date);
-        
+
         // Calculate metrics
         $metrics = $this->getMetrics($athlete, $date);
-        
+
         // Get planned exercises for today
         $plannedExercises = app(ComputePlannedExercises::class)->execute(
             training: $training,
@@ -64,13 +64,13 @@ class DashboardController extends Controller
                 ->whereDate('scheduled_at', $date)
                 ->whereNotNull('completed_at')
                 ->first();
-                
+
             if ($todaysCompletedTraining) {
                 $recoveryExercises = app(\App\Actions\SuggestRecoveryExercises::class)->execute($todaysCompletedTraining);
             }
         }
 
-        return Inertia::render('Dashboard', [
+        return Inertia::render('dashboard', [
             'athlete' => $athlete,
             'metrics' => $metrics,
             'weightProgressions' => $weightProgressions,
@@ -98,9 +98,9 @@ class DashboardController extends Controller
 
         $athlete = $user->athlete;
         $date = $request->get('date') ? Carbon::parse($request->get('date')) : Carbon::today();
-        
+
         $training = $this->getTraining($athlete, $date);
-        
+
         if (!$training->exists) {
             $training->save();
         }
@@ -122,7 +122,7 @@ class DashboardController extends Controller
         $training->scheduled_at = $date;
         $training->athlete()->associate($athlete);
         $training->trainingPlan()->associate($athlete->currentPlan);
-        
+
         if ($athlete->currentPlan) {
             $trainingPhase = app(DetermineTrainingPhase::class)->execute($athlete, $date);
             $training->trainingPhase()->associate($trainingPhase);
@@ -205,4 +205,4 @@ class DashboardController extends Controller
 
         return $indicator ? $indicator->value : 0;
     }
-} 
+}

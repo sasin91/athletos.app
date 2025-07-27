@@ -15,7 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\Rule;
-use Inertia\Inertia;
+use Illuminate\Http\Response;
 
 class TrainingPlanController extends Controller
 {
@@ -31,11 +31,11 @@ class TrainingPlanController extends Controller
         return Redirect::route('dashboard')->with('status', 'Training plan assigned successfully!');
     }
 
-    public function create(#[CurrentUser] User $user)
+    public function create(#[CurrentUser] User $user): Response
     {
         Gate::authorize('create', TrainingPlan::class);
-        
-        return view('training-plans.create');
+
+        return inertia('training-plans/create');
     }
 
     public function store(Request $request, #[CurrentUser] User $user)
@@ -117,10 +117,10 @@ class TrainingPlanController extends Controller
     public function show(TrainingPlan $trainingPlan)
     {
         Gate::authorize('view', $trainingPlan);
-        
+
         $trainingPlan->load('phases');
-        
-        return Inertia::render('TrainingPlans/Show', [
+
+        return Inertia::render('training-plans/show', [
             'trainingPlan' => $trainingPlan,
         ]);
     }

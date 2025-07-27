@@ -30,7 +30,7 @@ class OnboardingController extends Controller
     {
         Gate::authorize('isAthlete');
 
-        return Inertia::render('Onboarding/Profile', [
+        return Inertia::render('onboarding/profile', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
             'onboarding' => Auth::user()->onboarding(),
@@ -101,7 +101,7 @@ class OnboardingController extends Controller
         // Filter training plans based on athlete preferences (experience level, goal, muscle groups)
         $trainingPlans = $allTrainingPlans->filter(fn(TrainingPlan $plan) => $plan->isSuitableForAthlete($athlete));
 
-        return Inertia::render('Onboarding/Plan', [
+        return Inertia::render('onboarding/plan', [
             'user' => Auth::user(),
             'athlete' => $athlete,
             'onboarding' => Auth::user()->onboarding(),
@@ -140,7 +140,7 @@ class OnboardingController extends Controller
     {
         Gate::authorize('isAthlete');
 
-        return Inertia::render('Onboarding/Schedule', [
+        return Inertia::render('onboarding/schedule', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
             'onboarding' => Auth::user()->onboarding(),
@@ -185,7 +185,7 @@ class OnboardingController extends Controller
     {
         Gate::authorize('isAthlete');
 
-        return Inertia::render('Onboarding/Stats', [
+        return Inertia::render('onboarding/stats', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
             'onboarding' => Auth::user()->onboarding(),
@@ -224,7 +224,7 @@ class OnboardingController extends Controller
     {
         Gate::authorize('isAthlete');
 
-        return Inertia::render('Onboarding/Preferences', [
+        return Inertia::render('onboarding/preferences', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
             'onboarding' => Auth::user()->onboarding(),

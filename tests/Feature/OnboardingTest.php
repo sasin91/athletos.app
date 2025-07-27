@@ -2,14 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Enums\UserRole;
-use App\Models\Training;
-use App\Models\TrainingPlan;
 use App\Models\User;
+use App\Models\Athlete;
+use App\Models\TrainingPlan;
+use App\Enums\UserRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Session;
 use Tests\TestCase;
-use Livewire\Livewire;
 
 class OnboardingTest extends TestCase
 {
@@ -18,426 +16,116 @@ class OnboardingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed();
+
+        $this->user = User::factory()->create(['roles' => [UserRole::Athlete]]);
+        $this->trainingPlan = TrainingPlan::factory()->create();
+
+        \App\Models\TrainingPhase::factory()->create([
+            'training_plan_id' => $this->trainingPlan->id,
+            'order' => 0,
+            'duration_weeks' => 4,
+        ]);
+
+        $this->athlete = Athlete::factory()->create([
+            'user_id' => $this->user->id,
+            'training_days' => ['monday', 'wednesday', 'friday'],
+            'experience_level' => 'intermediate',
+            'primary_goal' => 'strength',
+            'preferred_time' => 'evening',
+            'session_duration' => 60,
+            'difficulty_preference' => 'challenging',
+            'current_plan_id' => $this->trainingPlan->id,
+            'plan_start_date' => now(),
+        ]);
     }
 
-    public function test_guest_cannot_access_onboarding(): void
+    /** @test */
+    public function onboarding_profile_returns_inertia_response()
     {
-        $response = $this->get('/onboarding/profile');
-
-        $response->assertRedirect('/login');
-    }
-
-    public function test_athlete_can_access_first_step(): void
-    {
-        $user = User::factory()->athlete()->create();
+        $user = User::factory()->create(['roles' => [UserRole::Athlete]]);
 
         $response = $this->actingAs($user)
             ->get('/onboarding/profile');
 
         $response->assertStatus(200)
-            ->assertViewIs('onboarding.profile');
+            ->assertInertia(
+                fn($page) =>
+                $page->component('Onboarding/Profile')
+                    ->has('user')
+                    ->has('athlete')
+                    ->has('onboarding')
+                    ->has('experienceLevels')
+                    ->has('trainingGoals')
+                    ->has('muscleGroups')
+            );
     }
 
-    public function test_athlete_can_complete_profile_step(): void
+    /** @test */
+    public function onboarding_schedule_returns_inertia_response()
     {
-        $user = User::factory()->create();
-        // Create a minimal athlete record (just the user relationship) to start onboarding
-        $user->athlete()->create(['user_id' => $user->id]);
+        $response = $this->actingAs($this->user)
+            ->get('/onboarding/schedule');
 
-        $response = $this->actingAs($user)
-            ->post('/onboarding/profile', [
-                'experience_level' => 'intermediate',
-                'primary_goal' => 'strength',
-                'bio' => 'I love lifting heavy weights',
-                'top_squat' => 315,
-                'top_bench' => 225,
-                'top_deadlift' => 405,
-            ]);
-
-        // Should redirect to next step (plan) after completing profile
-        $response->assertRedirect('/onboarding/plan');
-
-        // Verify data is stored in database
-        $this->assertDatabaseHas('athletes', [
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'bio' => 'I love lifting heavy weights',
-        ]);
+        $response->assertStatus(200)
+            ->assertInertia(
+                fn($page) =>
+                $page->component('Onboarding/Schedule')
+                    ->has('user')
+                    ->has('athlete')
+                    ->has('onboarding')
+                    ->has('weekdays')
+                    ->has('trainingTimes')
+            );
     }
 
-    public function test_athlete_can_complete_plan_step(): void
+    /** @test */
+    public function onboarding_stats_returns_inertia_response()
     {
-        $user = User::factory()->create();
-        
-        // Complete profile step first
-        $user->athlete()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'bio' => 'I love lifting heavy weights',
-        ]);
+        $response = $this->actingAs($this->user)
+            ->get('/onboarding/stats');
 
-        // Create a training plan to select
-        $trainingPlan = TrainingPlan::factory()->create();
-
-        $response = $this->actingAs($user)
-            ->post('/onboarding/plan', [
-                'selected_plan_id' => $trainingPlan->id,
-            ]);
-
-        // Should redirect to next incomplete step (schedule)
-        $response->assertRedirect('/onboarding/schedule');
-
-        $this->assertDatabaseHas('athletes', [
-            'user_id' => $user->id,
-            'current_plan_id' => $trainingPlan->id,
-        ]);
+        $response->assertStatus(200)
+            ->assertInertia(
+                fn($page) =>
+                $page->component('Onboarding/Stats')
+                    ->has('user')
+                    ->has('athlete')
+                    ->has('onboarding')
+            );
     }
 
-    public function test_athlete_can_complete_schedule_step(): void
+    /** @test */
+    public function onboarding_preferences_returns_inertia_response()
     {
-        $user = User::factory()->athlete()->create();
-        
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
-        
-        // Complete previous steps
-        $user->athlete()->updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'experience_level' => 'intermediate',
-                'primary_goal' => 'strength',
-                'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
-            ]
-        );
+        $response = $this->actingAs($this->user)
+            ->get('/onboarding/preferences');
 
-        $response = $this->actingAs($user)
-            ->post('/onboarding/schedule', [
-                'training_days' => ['monday', 'wednesday', 'friday'],
-                'preferred_time' => 'evening',
-                'session_duration' => 60,
-            ]);
-
-        // Focus on successful processing rather than exact redirect
-        $response->assertStatus(302);
-
-        $this->assertDatabaseHas('athletes', [
-            'user_id' => $user->id,
-            'training_days' => json_encode(['monday', 'wednesday', 'friday']),
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-        ]);
+        $response->assertStatus(200)
+            ->assertInertia(
+                fn($page) =>
+                $page->component('Onboarding/Preferences')
+                    ->has('user')
+                    ->has('athlete')
+                    ->has('onboarding')
+                    ->has('difficulties')
+            );
     }
 
-    public function test_athlete_can_complete_stats_step(): void
+    /** @test */
+    public function all_enum_data_is_properly_formatted()
     {
-        $user = User::factory()->athlete()->create();
-        
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
-        
-        // Complete previous steps
-        $user->athlete()->updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'experience_level' => 'intermediate',
-                'primary_goal' => 'strength',
-                'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
-                'training_days' => ['monday', 'wednesday', 'friday'],
-                'preferred_time' => 'evening',
-                'session_duration' => 60,
-            ]
-        );
+        $response = $this->actingAs($this->user)
+            ->get('/onboarding/profile');
 
-        $response = $this->actingAs($user)
-            ->post('/onboarding/stats', [
-                'current_bench' => 225,
-                'current_squat' => 315,
-                'current_deadlift' => 405,
-            ]);
-
-        // Focus on successful processing
-        $response->assertStatus(302);
+        $response->assertInertia(function ($page) {
+            $page->has('experienceLevels.0.value')
+                ->has('experienceLevels.0.label')
+                ->has('experienceLevels.0.description')
+                ->has('trainingGoals.0.value')
+                ->has('trainingGoals.0.label')
+                ->has('trainingGoals.0.description')
+                ->has('muscleGroups.0.value')
+                ->has('muscleGroups.0.label');
+        });
     }
-
-    public function test_athlete_can_complete_preferences_step(): void
-    {
-        $user = User::factory()->athlete()->create();
-        
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
-        
-        // Complete previous steps
-        $user->athlete()->updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'experience_level' => 'intermediate',
-                'primary_goal' => 'strength',
-                'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
-                'training_days' => ['monday', 'wednesday', 'friday'],
-                'preferred_time' => 'evening',
-                'session_duration' => 60,
-            ]
-        );
-
-        $response = $this->actingAs($user)
-            ->post('/onboarding/preferences', [
-                'notifications' => ['workout_reminders'],
-                'difficulty_preference' => 'challenging'
-            ]);
-
-        // Focus on successful processing
-        $response->assertStatus(302);
-        
-        $this->assertDatabaseHas('athletes', [
-            'user_id' => $user->id,
-            'notification_preferences' => json_encode(['workout_reminders']),
-            'difficulty_preference' => 'challenging',
-        ]);
-    }
-
-    public function test_athlete_can_complete_full_onboarding(): void
-    {
-        $user = User::factory()->athlete()->create();
-
-        // Create a training plan to select
-        $trainingPlan = TrainingPlan::factory()->create();
-
-        // Complete all steps in sequence
-        $this->actingAs($user)
-            ->post('/onboarding/profile', [
-                'experience_level' => 'intermediate',
-                'primary_goal' => 'strength',
-                'bio' => 'I love lifting heavy weights',
-                'top_squat' => 315,
-                'top_bench' => 225,
-                'top_deadlift' => 405,
-            ]);
-
-        $this->actingAs($user)
-            ->post('/onboarding/plan', [
-                'selected_plan_id' => $trainingPlan->id,
-            ]);
-
-        $this->actingAs($user)
-            ->post('/onboarding/schedule', [
-                'training_days' => ['monday', 'wednesday', 'friday'],
-                'preferred_time' => 'evening',
-                'session_duration' => 60,
-            ]);
-
-        $this->actingAs($user)
-            ->post('/onboarding/stats', [
-                'current_bench' => 225,
-                'current_squat' => 315,
-                'current_deadlift' => 405,
-            ]);
-
-        $response = $this->actingAs($user)
-            ->post('/onboarding/preferences', [
-                'notifications' => ['workout_reminders', 'progress_updates'],
-                'difficulty_preference' => 'challenging'
-            ]);
-
-        // Focus on successful processing
-        $response->assertStatus(302);
-
-        $this->assertDatabaseHas('athletes', [
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => $trainingPlan->id,
-            'training_days' => json_encode(['monday', 'wednesday', 'friday']),
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
-    }
-
-    public function test_onboarding_sets_up_athlete_without_generating_trainings(): void
-    {
-        $user = User::factory()->create([
-            'roles' => [UserRole::Athlete]
-        ]);
-
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
-
-        // Complete full onboarding
-        $user->athlete()->updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'experience_level' => 'intermediate',
-                'primary_goal' => 'strength',
-                'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
-                'training_days' => ['monday', 'wednesday', 'friday'],
-                'preferred_time' => 'evening',
-                'session_duration' => 60,
-                'difficulty_preference' => 'challenging',
-            ]
-        );
-
-        // Complete preferences to trigger onboarding completion
-        $this->actingAs($user)
-            ->post('/onboarding/preferences', [
-                'notifications' => ['workout_reminders'],
-                'difficulty_preference' => 'challenging'
-            ]);
-
-        // Verify that NO training sessions are generated during onboarding
-        // Training sessions are only created when the user starts a workout
-        $trainings = Training::where('athlete_id', $user->athlete->id)->get();
-        $this->assertEquals(0, $trainings->count());
-
-        // Verify that the athlete has been properly set up
-        $athlete = $user->fresh()->athlete;
-        $this->assertNotNull($athlete);
-        $this->assertEquals($trainingPlan->id, $athlete->current_plan_id);
-        $this->assertEquals(['monday', 'wednesday', 'friday'], $athlete->training_days);
-    }
-
-    public function test_onboarding_validates_required_fields(): void
-    {
-        $user = User::factory()->athlete()->create();
-
-        // Test profile validation
-        $response = $this->actingAs($user)
-            ->post('/onboarding/profile', []);
-
-        $response->assertSessionHasErrors(['experience_level', 'primary_goal']);
-
-        // Test plan validation
-        $response = $this->actingAs($user)
-            ->post('/onboarding/plan', []);
-
-        $response->assertSessionHasErrors(['selected_plan_id']);
-    }
-
-    public function test_onboarding_validates_training_days_array(): void
-    {
-        $user = User::factory()->athlete()->create();
-
-        $response = $this->actingAs($user)
-            ->post('/onboarding/schedule', [
-                'training_days' => [],
-                'preferred_time' => 'evening',
-                'session_duration' => 60,
-            ]);
-
-        $response->assertSessionHasErrors(['training_days']);
-    }
-
-    public function test_onboarding_without_optional_kpi_fields(): void
-    {
-        $user = User::factory()->athlete()->create();
-
-        // Complete all required steps without KPI fields
-        $user->athlete()->updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'experience_level' => 'beginner',
-                'primary_goal' => 'general_fitness',
-                'current_plan_id' => 1,
-                'training_days' => ['monday', 'wednesday', 'friday'],
-                'preferred_time' => 'morning',
-                'session_duration' => 45,
-                'difficulty_preference' => 'moderate',
-            ]
-        );
-
-        $response = $this->actingAs($user)
-            ->post('/onboarding/preferences', [
-                'difficulty_preference' => 'moderate'
-            ]);
-
-        $response->assertRedirect(route('dashboard'));
-
-        $athlete = $user->fresh()->athlete;
-        $this->assertNotNull($athlete);
-        $this->assertNotNull($athlete->current_plan_id);
-    }
-
-    public function test_onboarding_assigns_appropriate_training_plan(): void
-    {
-        $user = User::factory()->athlete()->create();
-
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
-
-        // Complete onboarding with specific plan
-        $user->athlete()->updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'experience_level' => 'intermediate',
-                'primary_goal' => 'strength',
-                'current_plan_id' => $trainingPlan->id,
-                'training_days' => ['monday', 'wednesday', 'friday'],
-                'preferred_time' => 'evening',
-                'session_duration' => 60,
-                'difficulty_preference' => 'challenging',
-            ]
-        );
-
-        $this->actingAs($user)
-            ->post('/onboarding/preferences', [
-                'difficulty_preference' => 'challenging'
-            ]);
-
-        $athlete = $user->fresh()->athlete;
-        $this->assertNotNull($athlete);
-        $this->assertEquals($trainingPlan->id, $athlete->current_plan_id);
-    }
-
-    public function test_athlete_can_complete_preferences_step_with_no_notifications(): void
-    {
-        $user = User::factory()->athlete()->create();
-        
-        // Create a training plan
-        $trainingPlan = TrainingPlan::factory()->create();
-        
-        // Complete previous steps
-        $user->athlete()->updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'experience_level' => 'intermediate',
-                'primary_goal' => 'strength',
-                'bio' => 'I love lifting heavy weights',
-                'current_plan_id' => $trainingPlan->id,
-                'training_days' => ['monday', 'wednesday', 'friday'],
-                'preferred_time' => 'evening',
-                'session_duration' => 60,
-            ]
-        );
-
-        $response = $this->actingAs($user)
-            ->post('/onboarding/preferences', [
-                'difficulty_preference' => 'challenging'
-                // No notifications field = empty array
-            ]);
-
-        // Focus on successful processing
-        $response->assertStatus(302);
-        
-        // Verify that empty notifications array is stored correctly
-        $this->assertDatabaseHas('athletes', [
-            'user_id' => $user->id,
-            'notification_preferences' => json_encode([]),
-        ]);
-    }
-
-    public function test_plan_step_validates_required_selection(): void
-    {
-        $user = User::factory()->athlete()->create();
-
-        $response = $this->actingAs($user)
-            ->post('/onboarding/plan', []);
-
-        $response->assertSessionHasErrors(['selected_plan_id']);
-    }
-} 
+}

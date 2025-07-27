@@ -18,7 +18,7 @@ class LoginController extends Controller
 {
     public function create(): \Inertia\Response
     {
-        return Inertia::render('Auth/Login', [
+        return Inertia::render('auth/login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
         ]);
@@ -79,6 +79,6 @@ class LoginController extends Controller
 
     public function throttleKey(Request $request): string
     {
-        return Str::transliterate(Str::lower($request->string('email')).'|'.$request->ip());
+        return Str::transliterate(Str::lower($request->string('email')) . '|' . $request->ip());
     }
 }

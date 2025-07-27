@@ -14,9 +14,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Illuminate\Container\Attributes\CurrentUser;
-use Illuminate\View\View;
-use Inertia\Inertia;
-use Inertia\Response;
+use Illuminate\Http\Response;
 
 class TrainingController extends Controller
 {
@@ -35,7 +33,7 @@ class TrainingController extends Controller
             ->orderBy('scheduled_at', 'desc')
             ->paginate(20);
 
-        return Inertia::render('Trainings/Index', [
+        return Inertia::render('trainings/index', [
             'trainings' => $trainings
         ]);
     }
@@ -70,12 +68,12 @@ class TrainingController extends Controller
         Gate::authorize('view', $training);
 
         $athlete = $user->athlete;
-        
+
         // Load the training with relationships
         $training->load([
             'trainingPlan',
             'trainingPhase',
-            'exercises' => function($query) {
+            'exercises' => function ($query) {
                 $query->orderBy('created_at');
             }
         ]);
@@ -83,7 +81,7 @@ class TrainingController extends Controller
         // Get planned exercises from the same source as Dashboard
         $day = app(ComputeTrainingDay::class)->execute($athlete);
         $plannedExercisesCollection = collect();
-        
+
         if ($training->trainingPhase) {
             try {
                 $plannedExercisesCollection = app(ComputePlannedExercises::class)->execute($training, $day);
@@ -92,9 +90,9 @@ class TrainingController extends Controller
                 $plannedExercisesCollection = collect();
             }
         }
-        
+
         // Convert planned exercises to the format expected by the React component
-        $plannedExercises = $plannedExercisesCollection->map(function($exercise) {
+        $plannedExercises = $plannedExercisesCollection->map(function ($exercise) {
             return [
                 'exercise' => [
                     'value' => $exercise->exercise->value,
@@ -116,13 +114,13 @@ class TrainingController extends Controller
                 'cues' => $exercise->cues,
             ];
         })->toArray();
-        
+
         // Create initial sets structure from planned exercises
         $sets = [];
         foreach ($plannedExercisesCollection as $exercise) {
             $exerciseSlug = $exercise->exerciseSlug;
             $sets[$exerciseSlug] = [];
-            
+
             // Create initial sets based on planned sets
             for ($setNumber = 1; $setNumber <= $exercise->sets; $setNumber++) {
                 $sets[$exerciseSlug][] = [
@@ -155,10 +153,10 @@ class TrainingController extends Controller
                 ];
             }
         }
-        
+
         // Create available exercises list (could be expanded to include more exercises)
         $allExercises = \App\Enums\Exercise::cases();
-        $availableExercises = collect($allExercises)->map(function($exercise) {
+        $availableExercises = collect($allExercises)->map(function ($exercise) {
             return [
                 'exercise' => [
                     'value' => $exercise->value,
@@ -174,7 +172,7 @@ class TrainingController extends Controller
             ];
         })->take(10)->toArray(); // Limit to first 10 for performance
 
-        return Inertia::render('Training', [
+        return Inertia::render('training', [
             'training' => $training,
             'plannedExercises' => $plannedExercises,
             'sets' => $sets,
@@ -190,10 +188,10 @@ class TrainingController extends Controller
     public function complete(
         Training $training,
         SuggestRecoveryExercises $suggestRecoveryExercises
-    ): View {
+    ): Response {
         Gate::authorize('viewComplete', $training);
 
-        return view('trainings.complete', [
+        return inertia('trainings/complete', [
             'training' => $training,
             'recoveryExercises' => $suggestRecoveryExercises->execute($training)
         ]);

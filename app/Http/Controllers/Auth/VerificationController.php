@@ -7,15 +7,15 @@ use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
+use Illuminate\Http\Response;
 
 class VerificationController extends Controller
 {
-    public function notice(Request $request): RedirectResponse|View
+    public function notice(Request $request): RedirectResponse|Response
     {
         return $request->user()->hasVerifiedEmail()
                     ? redirect()->intended(route('dashboard', absolute: false))
-                    : view('auth.verify-email');
+                    : inertia('auth/verify-email');
     }
 
     public function store(Request $request): RedirectResponse

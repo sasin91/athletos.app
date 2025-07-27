@@ -7,13 +7,13 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
-use Illuminate\View\View;
+use Illuminate\Http\Response;
 
 class ConfirmationController extends Controller
 {
-    public function create(): View
+    public function create(): Response
     {
-        return view('auth.confirm-password');
+        return inertia('auth/confirm-password');
     }
 
     public function store(Request $request): RedirectResponse
