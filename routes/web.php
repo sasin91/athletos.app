@@ -29,7 +29,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Chat routes
         Route::get('chat', [ChatController::class, 'index'])->name('chat.index');
-        Route::get('chat/{session}', [ChatController::class, 'index'])->name('chat.session');
+        Route::get('chat/{session}', [ChatController::class, 'show'])->name('chat.show');
         Route::post('chat/stream/start', [ChatController::class, 'startStream'])->name('chat.stream.start');
         Route::get('chat/stream/{streamId}', [ChatController::class, 'stream'])->name('chat.stream');
 

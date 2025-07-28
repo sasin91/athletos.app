@@ -98,7 +98,7 @@ export const route = {
   
   // Chat routes
   'chat.index': createRoute('/chat'),
-  'chat.session': createRoute('/chat/{session}'),
+  'chat.show': createRoute('/chat/{session}'),
   'chat.stream.start': createRoute('/chat/stream/start', 'post'),
   'chat.stream': createRoute('/chat/stream/{streamId}'),
   

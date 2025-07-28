@@ -50,16 +50,16 @@ export function useChatStream({ sessionId, basePlanId }: UseChatStreamProps) {
           if (chunk.type === 'text') {
             setAnswer(prev => prev + chunk.content);
           } else if (chunk.type === 'thinking') {
-            setAnswer(prev => prev + '<i>Thinking...</i><br>');
+            setAnswer(prev => prev + '*Thinking...*\n\n');
           } else if (chunk.type === 'tool_call') {
-            setAnswer(prev => prev + `<i>Calling: ${chunk.tool_name}...</i><br>`);
+            setAnswer(prev => prev + `*Calling: ${chunk.tool_name}...*\n\n`);
           } else if (chunk.type === 'tool_result') {
-            setAnswer(prev => prev + `<i>✅ ${chunk.tool_name} called</i><br>`);
+            setAnswer(prev => prev + `*✅ ${chunk.tool_name} called*\n\n`);
           } else if (chunk.type === 'finished') {
             eventSourceRef.current?.close();
             setIsLoading(false);
-            // Use Inertia router for page reload
-            router.reload({ only: ['messages'] });
+            // Reload to get updated messages and sessions from database
+            router.reload({ only: ['messages', 'session', 'sessions'] });
           }
         };
 
@@ -67,13 +67,13 @@ export function useChatStream({ sessionId, basePlanId }: UseChatStreamProps) {
           console.error('EventSource failed:', error);
           eventSourceRef.current?.close();
           setIsLoading(false);
-          setAnswer(prev => prev + '<i>Connection Error: Stream interrupted</i>');
+          setAnswer(prev => prev + '*Connection Error: Stream interrupted*');
         };
       }
     } catch (error) {
       console.error('Chat error:', error);
       setIsLoading(false);
-      setAnswer('<i>Connection Error: ' + (error as Error).message + '</i>');
+      setAnswer('*Connection Error: ' + (error as Error).message + '*');
     }
   };
 

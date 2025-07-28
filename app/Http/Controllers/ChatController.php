@@ -27,29 +27,36 @@ class ChatController extends Controller
      * Display the chat interface
      */
     public function index(
-        Request $request,
-        #[CurrentUser] User $user,
-        ?ChatSession $session = null,
-        ?TrainingPlan $basePlan = null
+        #[CurrentUser] User $user
     ): Response {
         Gate::authorize('isAthlete');
 
-        if ($session) {
-            // Load existing session
-            $messages = $session->messages()->orderBy('created_at')->get();
-        } else {
-            // Create new session
-            $session = app(CreateChatSession::class)->execute(
-                $user->athlete->id,
-                $basePlan
-            );
-            $messages = collect();
-        }
+        $session = $user->athlete->chatSessions()->latest()->firstOr(function () use ($user) {
+            // Create a new session if none exists
+            return app(CreateChatSession::class)->execute($user->athlete->id);
+        });
+
+        $messages = $session->messages()->latest()->get();
 
         return inertia('chat', [
             'session' => $session,
             'messages' => $messages,
-            'basePlan' => $basePlan,
+            'basePlan' => $user->athlete->currentPlan,
+        ]);
+    }
+
+    public function show(
+        ChatSession $session
+    ): Response {
+        Gate::authorize('isAthlete');
+
+        // Load messages for the session
+        $messages = $session->messages()->latest()->get();
+
+        return inertia('chat', [
+            'session' => $session,
+            'messages' => $messages,
+            'basePlan' => null, // No base plan in this context
         ]);
     }
 

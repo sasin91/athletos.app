@@ -1,3 +1,5 @@
+import ReactMarkdown from 'react-markdown';
+
 interface ChatMessageProps {
   role: 'user' | 'assistant';
   content: string;
@@ -22,7 +24,29 @@ export default function ChatMessage({ role, content, isLoading = false }: ChatMe
             <span>Thinking...</span>
           </div>
         ) : (
-          <div dangerouslySetInnerHTML={{ __html: content }} />
+          <div className="prose prose-sm max-w-none dark:prose-invert">
+            <ReactMarkdown 
+              components={{
+                pre: ({ children }) => (
+                  <pre className="bg-gray-900 dark:bg-gray-700 text-gray-100 p-3 rounded-md overflow-x-auto">
+                    {children}
+                  </pre>
+                ),
+                code: ({ children, className }) => {
+                  const isInline = !className;
+                  return isInline ? (
+                    <code className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-sm">
+                      {children}
+                    </code>
+                  ) : (
+                    <code className={className}>{children}</code>
+                  );
+                },
+              }}
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
         )}
       </div>
     </div>
