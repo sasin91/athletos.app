@@ -20,6 +20,7 @@ use Inertia\Response;
 use Prism\Prism\Enums\ChunkType;
 use Prism\Prism\Exceptions\PrismException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\Broadcast;
 
 class ChatController extends Controller
 {
@@ -38,25 +39,31 @@ class ChatController extends Controller
 
         $messages = $session->messages()->latest()->get();
 
+        $sessions = $user->athlete->chatSessions()->latest()->get();
+
         return inertia('chat', [
             'session' => $session,
             'messages' => $messages,
             'basePlan' => $user->athlete->currentPlan,
+            'sessions' => $sessions,
         ]);
     }
 
     public function show(
-        ChatSession $session
+        ChatSession $session,
+        #[CurrentUser] User $user
     ): Response {
         Gate::authorize('isAthlete');
 
         // Load messages for the session
         $messages = $session->messages()->latest()->get();
+        $sessions = $user->athlete->chatSessions()->latest()->get();
 
         return inertia('chat', [
             'session' => $session,
             'messages' => $messages,
             'basePlan' => null, // No base plan in this context
+            'sessions' => $sessions,
         ]);
     }
 
@@ -232,6 +239,169 @@ class ChatController extends Controller
             'Cache-Control' => 'no-cache',
             'Connection' => 'keep-alive',
             'X-Accel-Buffering' => 'no', // Disable Nginx buffering
+        ]);
+    }
+
+    /**
+     * Handle WebSocket-based chat requests
+     */
+    public function websocket(Request $request, #[CurrentUser] User $user): JsonResponse
+    {
+        Gate::authorize('isAthlete');
+
+        $request->validate([
+            'prompt' => 'required|string|min:3|max:1000',
+            'session_id' => 'nullable|exists:chat_sessions,id',
+            'base_plan_id' => 'nullable|exists:training_plans,id',
+            'channel' => 'required|string',
+        ]);
+
+        $sessionId = $request->get('session_id');
+        $basePlanId = $request->get('base_plan_id');
+        $channel = $request->get('channel');
+
+        if ($sessionId) {
+            $session = ChatSession::findOrFail($sessionId);
+        } else {
+            $basePlan = $basePlanId ? TrainingPlan::find($basePlanId) : null;
+            $session = app(CreateChatSession::class)->execute(
+                $user->athlete->id,
+                $basePlan
+            );
+        }
+
+        // Add user message to session
+        app(AddChatMessage::class)->addUserMessage($session, $request->get('prompt'));
+
+        // Process chat response in background job to avoid blocking
+        dispatch(function () use ($session, $request, $channel) {
+            try {
+                $prompt = $request->get('prompt');
+                
+                // Check if we're using RunPod
+                if (config('ai.default_provider') === 'runpod') {
+                    $responseGenerator = app(GenerateRunPodChatResponse::class)->execute($session, $prompt);
+                    $fullAnswer = '';
+
+                    foreach ($responseGenerator as $chunk) {
+                        if ($chunk['type'] === 'text') {
+                            $fullAnswer .= $chunk['content'];
+                        }
+
+                        // Broadcast chunk to WebSocket channel
+                        Broadcast::channel($channel)->send([
+                            'event' => 'ChatResponseChunk',
+                            'data' => $chunk
+                        ]);
+
+                        if ($chunk['type'] === 'finished') {
+                            // Save the complete response to database
+                            app(AddChatMessage::class)->addAssistantMessage($session, $fullAnswer);
+                            break;
+                        }
+                    }
+                } else {
+                    // Use original Prism-based approach
+                    $request = app(GenerateChatResponse::class)->execute($session, $prompt);
+                    $fullAnswer = '';
+
+                    foreach ($request->asStream() as $textChunk) {
+                        if ($textChunk->finishReason !== null) {
+                            // Save the complete response to database
+                            app(AddChatMessage::class)->addAssistantMessage($session, $fullAnswer);
+
+                            // Broadcast finished event
+                            Broadcast::channel($channel)->send([
+                                'event' => 'ChatResponseChunk',
+                                'data' => [
+                                    'type' => 'finished',
+                                    'reason' => $textChunk->finishReason->name
+                                ]
+                            ]);
+                            break;
+                        }
+
+                        switch ($textChunk->chunkType) {
+                            case ChunkType::Text:
+                                $fullAnswer .= $textChunk->text;
+                                Broadcast::channel($channel)->send([
+                                    'event' => 'ChatResponseChunk',
+                                    'data' => [
+                                        'type' => 'text',
+                                        'content' => $textChunk->text
+                                    ]
+                                ]);
+                                break;
+
+                            case ChunkType::Thinking:
+                                Broadcast::channel($channel)->send([
+                                    'event' => 'ChatResponseChunk',
+                                    'data' => ['type' => 'thinking']
+                                ]);
+                                break;
+
+                            case ChunkType::ToolCall:
+                                foreach ($textChunk->toolCalls as $toolCall) {
+                                    Broadcast::channel($channel)->send([
+                                        'event' => 'ChatResponseChunk',
+                                        'data' => [
+                                            'type' => 'tool_call',
+                                            'tool_name' => $toolCall->name
+                                        ]
+                                    ]);
+                                }
+                                break;
+
+                            case ChunkType::ToolResult:
+                                foreach ($textChunk->toolResults as $toolResult) {
+                                    Broadcast::channel($channel)->send([
+                                        'event' => 'ChatResponseChunk',
+                                        'data' => [
+                                            'type' => 'tool_result',
+                                            'tool_name' => $toolResult->toolName
+                                        ]
+                                    ]);
+                                }
+                                break;
+
+                            case ChunkType::Meta:
+                                Broadcast::channel($channel)->send([
+                                    'event' => 'ChatResponseChunk',
+                                    'data' => [
+                                        'type' => 'meta',
+                                        'model' => $textChunk->meta->model,
+                                        'id' => $textChunk->meta->id
+                                    ]
+                                ]);
+                                break;
+                        }
+                    }
+                }
+            } catch (PrismException $e) {
+                Broadcast::channel($channel)->send([
+                    'event' => 'ChatResponseChunk',
+                    'data' => [
+                        'type' => 'error',
+                        'message' => 'Connection Error: ' . $e->getMessage()
+                    ]
+                ]);
+                report($e);
+            } catch (\Exception $e) {
+                Broadcast::channel($channel)->send([
+                    'event' => 'ChatResponseChunk',
+                    'data' => [
+                        'type' => 'error',
+                        'message' => 'Reply Error: ' . $e->getMessage()
+                    ]
+                ]);
+                report($e);
+            }
+        });
+
+        return response()->json([
+            'session_id' => $session->id,
+            'channel' => $channel,
+            'status' => 'processing'
         ]);
     }
 }
