@@ -1,4 +1,5 @@
 import { Head } from '@inertiajs/react';
+import { useEffect } from 'react';
 import ChatHeader from '@/components/chat/chat-header';
 import ChatMessageList from '@/components/chat/chat-message-list';
 import ChatInput from '@/components/chat/chat-input';
@@ -30,6 +31,13 @@ export default function ChatPage({ session, messages, basePlan }: ChatPageProps)
     sessionId: session?.id, 
     basePlanId: basePlan?.id 
   });
+
+  // Auto-start with hello message if no existing messages
+  useEffect(() => {
+    if (messages.length === 0 && !question && !answer && !isLoading) {
+      startChat('Hello');
+    }
+  }, [messages.length, question, answer, isLoading, startChat]);
 
   return (
     <>

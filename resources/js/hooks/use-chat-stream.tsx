@@ -19,12 +19,14 @@ export function useChatStream({ sessionId, basePlanId }: UseChatStreamProps) {
     setIsLoading(true);
 
     try {
-      // Use wayfinder for route URL, but fetch for streaming API
+      // Use wayfinder for route URL with standard Laravel CSRF token
       const response = await fetch(route['chat.stream.start']().url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+          'X-Requested-With': 'XMLHttpRequest',
         },
         body: JSON.stringify({
           prompt: prompt,

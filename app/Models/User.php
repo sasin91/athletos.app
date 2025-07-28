@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\HasApiTokens;
 use Spatie\Onboard\Concerns\GetsOnboarded;
 use Spatie\Onboard\Concerns\Onboardable;
 
@@ -48,7 +49,7 @@ use Spatie\Onboard\Concerns\Onboardable;
 class User extends Authenticatable implements Onboardable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, GetsOnboarded;
+    use HasFactory, Notifiable, GetsOnboarded, HasApiTokens;
 
     /**
      * The attributes that are mass assignable.
