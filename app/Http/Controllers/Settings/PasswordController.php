@@ -9,13 +9,14 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use Inertia\Response;
 use Inertia\Inertia;
 
 class PasswordController extends Controller
 {
-    public function edit(Request $request): \Inertia\Response
+    public function edit(Request $request): Response
     {
-        return Inertia::render('Settings/Password', [
+        return inertia('settings/password', [
             'user' => $request->user(),
         ]);
     }

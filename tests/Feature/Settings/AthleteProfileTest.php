@@ -62,7 +62,7 @@ class AthleteProfileTest extends TestCase
             ->get('/settings/athlete-profile')
             ->assertStatus(200)
             ->assertInertia(fn($page) => 
-                $page->component('Settings/AthleteProfile')
+                $page->component('settings/athlete-profile')
                     ->has('athlete')
             );
     }

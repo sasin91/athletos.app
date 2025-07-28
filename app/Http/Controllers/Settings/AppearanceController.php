@@ -4,12 +4,13 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use Illuminate\View\View;
+use Inertia\Response;
 use Inertia\Inertia;
 
 class AppearanceController extends Controller
 {
-    public function edit(): \Inertia\Response
+    public function edit(): Response
     {
-        return Inertia::render('Settings/Appearance');
+        return inertia('settings/appearance');
     }
 }

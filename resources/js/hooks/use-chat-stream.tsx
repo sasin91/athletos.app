@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { router } from '@inertiajs/react';
-import { routes, route } from '@/lib/wayfinder';
+import { route } from '@/lib/wayfinder';
 
 interface UseChatStreamProps {
   sessionId?: number;
@@ -38,13 +38,13 @@ export function useChatStream({ sessionId, basePlanId }: UseChatStreamProps) {
       }
 
       const data = await response.json();
-      
+
       if (data.stream_url) {
         eventSourceRef.current = new EventSource(data.stream_url);
-        
+
         eventSourceRef.current.onmessage = (event) => {
           const chunk = JSON.parse(event.data);
-          
+
           if (chunk.type === 'text') {
             setAnswer(prev => prev + chunk.content);
           } else if (chunk.type === 'thinking') {

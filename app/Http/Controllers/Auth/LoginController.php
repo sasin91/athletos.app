@@ -12,13 +12,14 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Inertia\Response;
 use Inertia\Inertia;
 
 class LoginController extends Controller
 {
-    public function create(): \Inertia\Response
+    public function create(): Response
     {
-        return Inertia::render('auth/login', [
+        return inertia('auth/login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
         ]);

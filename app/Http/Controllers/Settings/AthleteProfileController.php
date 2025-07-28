@@ -13,11 +13,12 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
+use Inertia\Response;
 use Inertia\Inertia;
 
 class AthleteProfileController extends Controller
 {
-    public function edit(Request $request): \Inertia\Response|RedirectResponse
+    public function edit(Request $request): Response|RedirectResponse
     {
         Gate::authorize('isAthlete');
 
@@ -27,7 +28,7 @@ class AthleteProfileController extends Controller
             return redirect()->route('onboarding.profile');
         }
 
-        return Inertia::render('Settings/AthleteProfile', [
+                return inertia('settings/athlete-profile', [
             'athlete' => $athlete,
             'experienceLevels' => collect(ExperienceLevel::cases())->map(fn($level) => [
                 'value' => $level->value,

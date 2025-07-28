@@ -68,8 +68,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/appearance', [Settings\AppearanceController::class, 'edit'])->name('settings.appearance.edit');
 });
 
-Route::get('/terms', fn() => \Inertia\Inertia::render('Terms'))->name('terms');
-Route::get('/privacy', fn() => \Inertia\Inertia::render('Privacy'))->name('privacy');
-Route::get('/about', fn() => \Inertia\Inertia::render('About'))->name('about');
+Route::get('/terms', fn() => \Inertia\Inertia::render('terms'))->name('terms');
+Route::get('/privacy', fn() => \Inertia\Inertia::render('privacy'))->name('privacy');
+Route::get('/about', fn() => \Inertia\Inertia::render('about'))->name('about');
 
 require __DIR__ . '/auth.php';

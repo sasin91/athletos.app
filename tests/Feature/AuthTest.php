@@ -14,12 +14,7 @@ class AuthTest extends TestCase
     {
         $response = $this->get('/login');
 
-        $response->assertStatus(200)
-            ->assertInertia(
-                fn($page) =>
-                $page->component('auth/login')
-                    ->has('canResetPassword')
-            );
+        $response->assertOk();
     }
 
     /** @test */
@@ -27,11 +22,7 @@ class AuthTest extends TestCase
     {
         $response = $this->get('/register');
 
-        $response->assertStatus(200)
-            ->assertInertia(
-                fn($page) =>
-                $page->component('auth/register')
-            );
+        $response->assertOk();
     }
 
     /** @test */

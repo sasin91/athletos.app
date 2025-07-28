@@ -45,7 +45,7 @@ class ChatController extends Controller
             $messages = collect();
         }
 
-        return Inertia::render('chat', [
+        return inertia('chat', [
             'session' => $session,
             'messages' => $messages,
             'basePlan' => $basePlan,

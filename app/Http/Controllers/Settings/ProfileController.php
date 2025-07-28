@@ -11,13 +11,14 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Inertia\Response;
 use Inertia\Inertia;
 
 class ProfileController extends Controller
 {
-    public function edit(Request $request): \Inertia\Response
+    public function edit(Request $request): Response
     {
-        return Inertia::render('settings/profile', [
+        return inertia('settings/profile', [
             'user' => $request->user(),
         ]);
     }

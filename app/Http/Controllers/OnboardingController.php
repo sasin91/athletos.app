@@ -19,6 +19,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Inertia\Response;
 use Inertia\Inertia;
 
 class OnboardingController extends Controller
@@ -26,11 +27,11 @@ class OnboardingController extends Controller
     /**
      * Show the profile setup page
      */
-    public function profile(): \Inertia\Response
+    public function profile(): Response
     {
         Gate::authorize('isAthlete');
 
-        return Inertia::render('onboarding/profile', [
+        return inertia('onboarding/profile', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
             'onboarding' => Auth::user()->onboarding(),
@@ -91,7 +92,7 @@ class OnboardingController extends Controller
     /**
      * Show the training plan selection page
      */
-    public function plan(): \Inertia\Response
+    public function plan(): Response
     {
         Gate::authorize('isAthlete');
 
@@ -101,7 +102,7 @@ class OnboardingController extends Controller
         // Filter training plans based on athlete preferences (experience level, goal, muscle groups)
         $trainingPlans = $allTrainingPlans->filter(fn(TrainingPlan $plan) => $plan->isSuitableForAthlete($athlete));
 
-        return Inertia::render('onboarding/plan', [
+        return inertia('onboarding/plan', [
             'user' => Auth::user(),
             'athlete' => $athlete,
             'onboarding' => Auth::user()->onboarding(),
@@ -136,11 +137,11 @@ class OnboardingController extends Controller
     /**
      * Show the schedule setup page
      */
-    public function schedule(): \Inertia\Response
+    public function schedule(): Response
     {
         Gate::authorize('isAthlete');
 
-        return Inertia::render('onboarding/schedule', [
+        return inertia('onboarding/schedule', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
             'onboarding' => Auth::user()->onboarding(),
@@ -181,11 +182,11 @@ class OnboardingController extends Controller
     /**
      * Show the stats entry page
      */
-    public function stats(): \Inertia\Response
+    public function stats(): Response
     {
         Gate::authorize('isAthlete');
 
-        return Inertia::render('onboarding/stats', [
+        return inertia('onboarding/stats', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
             'onboarding' => Auth::user()->onboarding(),
@@ -220,11 +221,11 @@ class OnboardingController extends Controller
     /**
      * Show the preferences setup page
      */
-    public function preferences(): \Inertia\Response
+    public function preferences(): Response
     {
         Gate::authorize('isAthlete');
 
-        return Inertia::render('onboarding/preferences', [
+        return inertia('onboarding/preferences', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
             'onboarding' => Auth::user()->onboarding(),

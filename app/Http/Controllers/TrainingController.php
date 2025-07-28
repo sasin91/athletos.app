@@ -34,7 +34,7 @@ class TrainingController extends Controller
             ->orderBy('scheduled_at', 'desc')
             ->paginate(20);
 
-        return Inertia::render('Trainings/Index', [
+        return inertia('trainings/index', [
             'trainings' => $trainings,
             'athlete' => $athlete
         ]);
@@ -174,7 +174,7 @@ class TrainingController extends Controller
             ];
         })->take(10)->toArray(); // Limit to first 10 for performance
 
-        return Inertia::render('training', [
+        return inertia('training', [
             'training' => $training,
             'plannedExercises' => $plannedExercises,
             'sets' => $sets,

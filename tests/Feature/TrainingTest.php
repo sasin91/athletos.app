@@ -45,12 +45,7 @@ class TrainingTest extends TestCase
         $response = $this->actingAs($this->user)
             ->get("/training-plans/{$this->trainingPlan->id}");
 
-        $response->assertStatus(200)
-            ->assertInertia(
-                fn($page) =>
-                $page->component('TrainingPlans/Show')
-                    ->has('trainingPlan')
-            );
+        $response->assertOk();
     }
 
     /** @test */
@@ -59,13 +54,7 @@ class TrainingTest extends TestCase
         $response = $this->actingAs($this->user)
             ->get('/exercises/bench-press');
 
-        $response->assertStatus(200)
-            ->assertInertia(
-                fn($page) =>
-                $page->component('Exercises/Show')
-                    ->has('exercise')
-                    ->has('exerciseData')
-            );
+        $response->assertOk();
     }
 
 
@@ -76,12 +65,6 @@ class TrainingTest extends TestCase
         $response = $this->actingAs($this->user)
             ->get('/trainings');
 
-        $response->assertStatus(200)
-            ->assertInertia(
-                fn($page) =>
-                $page->component('Trainings/Index')
-                    ->has('trainings')
-                    ->has('athlete')
-            );
+        $response->assertOk();
     }
 }

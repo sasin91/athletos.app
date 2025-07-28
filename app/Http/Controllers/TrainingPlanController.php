@@ -36,7 +36,7 @@ class TrainingPlanController extends Controller
     {
         Gate::authorize('create', TrainingPlan::class);
 
-        return inertia('TrainingPlans/Create');
+        return inertia('training-plans/create');
     }
 
     public function store(Request $request, #[CurrentUser] User $user)
@@ -121,7 +121,7 @@ class TrainingPlanController extends Controller
 
         $trainingPlan->load('phases');
 
-        return Inertia::render('TrainingPlans/Show', [
+        return inertia('training-plans/show', [
             'trainingPlan' => $trainingPlan,
         ]);
     }

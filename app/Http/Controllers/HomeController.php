@@ -9,6 +9,6 @@ class HomeController
 {
     public function __invoke(): Response
     {
-        return Inertia::render('welcome');
+        return inertia('welcome');
     }
 }
