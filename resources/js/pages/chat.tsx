@@ -1,7 +1,7 @@
 import { Head } from '@inertiajs/react';
-import ChatHeader from '@/components/Chat/chat-header';
-import ChatMessageList from '@/components/Chat/chat-message-list';
-import ChatInput from '@/components/Chat/chat-input';
+import ChatHeader from '@/components/chat/chat-header';
+import ChatMessageList from '@/components/chat/chat-message-list';
+import ChatInput from '@/components/chat/chat-input';
 import { useChatStream } from '@/hooks/use-chat-stream';
 
 interface ChatMessage {

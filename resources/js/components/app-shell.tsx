@@ -1,8 +1,8 @@
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { ToastProvider } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import InstallPrompt from '@/components/PWA/install-prompt';
-import UpdateNotification from '@/components/PWA/update-notification';
+import InstallPrompt from '@/components/pwa/install-prompt';
+import UpdateNotification from '@/components/pwa/update-notification';
 import AppFooter from '@/components/app-footer';
 import { SharedData } from '@/types';
 import { usePage } from '@inertiajs/react';

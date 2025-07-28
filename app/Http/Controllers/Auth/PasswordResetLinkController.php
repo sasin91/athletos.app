@@ -7,10 +7,11 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Http\Response;
+use Inertia\Response as InertiaResponse;
 
 class PasswordResetLinkController extends Controller
 {
-    public function create(): Response
+    public function create(): Response|InertiaResponse
     {
         return inertia('auth/forgot-password');
     }

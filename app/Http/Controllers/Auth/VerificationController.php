@@ -8,10 +8,11 @@ use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Inertia\Response as InertiaResponse;
 
 class VerificationController extends Controller
 {
-    public function notice(Request $request): RedirectResponse|Response
+    public function notice(Request $request): RedirectResponse|Response|InertiaResponse
     {
         return $request->user()->hasVerifiedEmail()
                     ? redirect()->intended(route('dashboard', absolute: false))

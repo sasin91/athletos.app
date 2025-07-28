@@ -12,10 +12,11 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
 use Illuminate\Http\Response;
+use Inertia\Response as InertiaResponse;
 
 class NewPasswordController extends Controller
 {
-    public function create(Request $request): Response
+    public function create(Request $request): Response|InertiaResponse
     {
         return inertia('auth/reset-password', ['request' => $request]);
     }

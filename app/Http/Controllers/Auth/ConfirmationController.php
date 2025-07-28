@@ -8,10 +8,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Response;
+use Inertia\Response as InertiaResponse;
 
 class ConfirmationController extends Controller
 {
-    public function create(): Response
+    public function create(): Response|InertiaResponse
     {
         return inertia('auth/confirm-password');
     }

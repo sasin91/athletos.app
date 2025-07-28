@@ -48,7 +48,7 @@ class DashboardTest extends TestCase
         $response->assertStatus(200)
             ->assertInertia(
                 fn($page) =>
-                $page->component('Dashboard')
+                $page->component('dashboard')
                     ->has('athlete')
                     ->has('metrics')
                     ->has('weightProgressions')
@@ -65,8 +65,10 @@ class DashboardTest extends TestCase
         $response->assertStatus(200)
             ->assertInertia(
                 fn($page) =>
-                $page->component('Chat')
-                    ->has('athlete')
+                $page->component('chat')
+                    ->has('session')
+                    ->has('messages')
+                    ->has('basePlan')
             );
     }
 }
