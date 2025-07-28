@@ -1,7 +1,31 @@
 import { Head, useForm } from '@inertiajs/react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocalStorage } from '@uidotdev/usehooks';
 import { route } from '@/lib/wayfinder';
 import AppLayout from '@/layouts/app-layout';
+
+// Custom useInterval hook to handle React state updates properly
+function useInterval(callback: () => void, delay: number | null) {
+  const savedCallback = useRef<() => void>();
+
+  // Remember the latest callback.
+  useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
+
+  // Set up the interval.
+  useEffect(() => {
+    function tick() {
+      if (savedCallback.current) {
+        savedCallback.current();
+      }
+    }
+    if (delay !== null) {
+      const id = setInterval(tick, delay);
+      return () => clearInterval(id);
+    }
+  }, [delay]);
+}
 
 interface Exercise {
   value: string;
@@ -67,13 +91,21 @@ interface Props {
   errorMessage?: string;
 }
 
-interface TrainingFeedback {
+type TrainingFeedback = {
   overallRating: number;
   mood: string;
   energyLevel: number;
   difficulty: string;
   difficultyLevel: number;
   notes: string;
+}
+
+interface TrainingSessionState {
+  sets: Record<string, TrainingSet[]>;
+  totalTimerSeconds: number;
+  totalTimerStarted: boolean;
+  feedback: TrainingFeedback;
+  lastSaved: string;
 }
 
 interface RestTimer {
@@ -93,64 +125,167 @@ export default function TrainingShow({
   hasError,
   errorMessage
 }: Props) {
-  const [sets, setSets] = useState(initialSets);
-  const [addingExercise, setAddingExercise] = useState(false);
-  const [totalTimerSeconds, setTotalTimerSeconds] = useState(initialTotalSeconds);
-  const [totalTimerStarted, setTotalTimerStarted] = useState(initialTimerStarted);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [restTimers, setRestTimers] = useState<Record<string, RestTimer>>({});
-  const totalTimerInterval = useRef<NodeJS.Timeout | null>(null);
-  const wakeLock = useRef<any>(null);
-
-  const { data: feedback, setData: setFeedback, post: submitFeedback, processing } = useForm<TrainingFeedback>({
-    overallRating: 0,
-    mood: '',
-    energyLevel: 0,
-    difficulty: '',
-    difficultyLevel: 0,
-    notes: ''
+  // Use localStorage hook for persistent training session state
+  const [sessionState, setSessionState] = useLocalStorage<TrainingSessionState>(`training_session_${training.id}`, {
+    sets: initialSets,
+    totalTimerSeconds: initialTotalSeconds,
+    totalTimerStarted: initialTimerStarted,
+    feedback: {
+      overallRating: 0,
+      mood: '',
+      energyLevel: 0,
+      difficulty: '',
+      difficultyLevel: 0,
+      notes: ''
+    },
+    lastSaved: new Date().toISOString()
   });
 
-  // Initialize total timer
+  // Local state for UI interactions (not persisted)
+  const [addingExercise, setAddingExercise] = useState(false);
+  const [timerRunning, setTimerRunning] = useState(true); // Always start running immediately
+  const [restTimers, setRestTimers] = useState<Record<string, RestTimer>>({});
+  const [inputValues, setInputValues] = useState<Record<string, string>>({}); // Store raw input values temporarily
+  const wakeLock = useRef<any>(null);
+  const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
+
+  // Use Inertia form for feedback with persisted initial values
+  const { data: feedback, setData: setFeedback, post: submitFeedback, processing } = useForm<TrainingFeedback>(sessionState.feedback);
+
+  // Helper functions to update persisted state
+  const updateSets = (newSets: Record<string, TrainingSet[]>) => {
+    setSessionState(prev => ({
+      ...prev,
+      sets: newSets,
+      lastSaved: new Date().toISOString()
+    }));
+  };
+
+  const updateTimer = (seconds: number, started: boolean) => {
+    setSessionState(prev => ({
+      ...prev,
+      totalTimerSeconds: seconds,
+      totalTimerStarted: started,
+      lastSaved: new Date().toISOString()
+    }));
+  };
+
+  // Update session state when feedback changes (without causing loops)
+  const updateFeedback = (field: keyof TrainingFeedback, value: any) => {
+    setFeedback(field, value);
+    // Update session state immediately without useEffect to prevent loops
+    setSessionState(prev => ({
+      ...prev,
+      feedback: {
+        ...prev.feedback,
+        [field]: value
+      },
+      lastSaved: new Date().toISOString()
+    }));
+  };
+
+  // Timer callback function
+  const incrementTimer = useCallback(() => {
+    setSessionState(prev => ({
+      ...prev,
+      totalTimerSeconds: prev.totalTimerSeconds + 1,
+      totalTimerStarted: true,
+      lastSaved: new Date().toISOString()
+    }));
+  }, [setSessionState]);
+
+  // Use the custom useInterval hook for the timer
+  useInterval(incrementTimer, timerRunning ? 1000 : null);
+
+  // Initialize wake lock and cleanup on mount/unmount
   useEffect(() => {
-    if (totalTimerStarted && !timerRunning) {
-      startTotalTimer();
-    }
-    return () => {
-      if (totalTimerInterval.current) {
-        clearInterval(totalTimerInterval.current);
-      }
-    };
-  }, [totalTimerStarted]);
-
-  const startTotalTimer = async () => {
-    if (!timerRunning) {
-      setTimerRunning(true);
-      totalTimerInterval.current = setInterval(() => {
-        setTotalTimerSeconds(prev => prev + 1);
-      }, 1000);
-
-      // Request wake lock to keep screen active
+    // Request wake lock to keep screen active when timer starts
+    const requestWakeLock = async () => {
       try {
-        if ('wakeLock' in navigator) {
+        if ('wakeLock' in navigator && timerRunning) {
+          if (wakeLock.current) {
+            wakeLock.current.release();
+          }
           wakeLock.current = await (navigator as any).wakeLock.request('screen');
         }
       } catch (err) {
         console.log('Wake lock failed:', err);
       }
-    }
-  };
+    };
 
-  const pauseTotalTimer = () => {
     if (timerRunning) {
-      setTimerRunning(false);
-      if (totalTimerInterval.current) {
-        clearInterval(totalTimerInterval.current);
-      }
+      requestWakeLock();
+    }
+    
+    return () => {
+      // Cleanup on unmount
       if (wakeLock.current) {
         wakeLock.current.release();
         wakeLock.current = null;
       }
+      // Clean up all rest timers
+      Object.values(restTimers).forEach(timer => {
+        if (timer.restInterval) {
+          clearInterval(timer.restInterval);
+        }
+      });
+      // Clean up all debounce timers
+      Object.values(debounceTimers.current).forEach(timer => {
+        clearTimeout(timer);
+      });
+    };
+  }, [timerRunning, restTimers]);
+
+  const stopTimer = () => {
+    setTimerRunning(false);
+    if (wakeLock.current) {
+      wakeLock.current.release();
+      wakeLock.current = null;
+    }
+  };
+
+  const resetTimer = () => {
+    setTimerRunning(false);
+    setSessionState(prev => ({
+      ...prev,
+      totalTimerSeconds: 0,
+      totalTimerStarted: false,
+      lastSaved: new Date().toISOString()
+    }));
+    if (wakeLock.current) {
+      wakeLock.current.release();
+      wakeLock.current = null;
+    }
+  };
+
+  // Clear all saved data and reset to initial state (for testing/debugging)
+  const clearSavedState = () => {
+    if (confirm('This will clear all your saved progress. Are you sure?')) {
+      setSessionState({
+        sets: initialSets,
+        totalTimerSeconds: initialTotalSeconds,
+        totalTimerStarted: initialTimerStarted,
+        feedback: {
+          overallRating: 0,
+          mood: '',
+          energyLevel: 0,
+          difficulty: '',
+          difficultyLevel: 0,
+          notes: ''
+        },
+        lastSaved: new Date().toISOString()
+      });
+      // Reset form state too
+      updateFeedback('overallRating', 0);
+      updateFeedback('mood', '');
+      updateFeedback('energyLevel', 0);
+      updateFeedback('difficulty', '');
+      updateFeedback('difficultyLevel', 0);
+      updateFeedback('notes', '');
+      // Clear input values
+      setInputValues({});
+      // Restart timer immediately after clearing state
+      setTimerRunning(true);
     }
   };
 
@@ -161,16 +296,66 @@ export default function TrainingShow({
   };
 
   const updateSetValue = (exerciseSlug: string, setIndex: number, field: keyof TrainingSet, value: any) => {
-    setSets(prevSets => ({
-      ...prevSets,
-      [exerciseSlug]: prevSets[exerciseSlug].map((set, index) =>
+    const newSets = {
+      ...sessionState.sets,
+      [exerciseSlug]: sessionState.sets[exerciseSlug].map((set, index) =>
         index === setIndex ? { ...set, [field]: value } : set
       )
+    };
+    updateSets(newSets);
+  };
+
+  // Debounced version for input fields to prevent rapid state updates
+  const updateSetValueDebounced = (exerciseSlug: string, setIndex: number, field: keyof TrainingSet, rawValue: string) => {
+    const inputId = `${exerciseSlug}-${setIndex}-${field}`;
+    
+    // Update the raw input value immediately for UI responsiveness
+    setInputValues(prev => ({
+      ...prev,
+      [inputId]: rawValue
     }));
+
+    // Clear existing debounce timer
+    if (debounceTimers.current[inputId]) {
+      clearTimeout(debounceTimers.current[inputId]);
+    }
+
+    // Set new debounce timer
+    debounceTimers.current[inputId] = setTimeout(() => {
+      let parsedValue: any = null;
+      
+      if (rawValue.trim() !== '') {
+        if (field === 'reps' || field === 'rpe') {
+          parsedValue = parseInt(rawValue);
+          if (isNaN(parsedValue)) parsedValue = null;
+        } else if (field === 'weight') {
+          parsedValue = parseFloat(rawValue);
+          if (isNaN(parsedValue)) parsedValue = null;
+        } else {
+          parsedValue = rawValue;
+        }
+      }
+
+      updateSetValue(exerciseSlug, setIndex, field, parsedValue);
+      delete debounceTimers.current[inputId];
+    }, 300); // 300ms debounce
+  };
+
+  // Get the display value for an input field
+  const getInputValue = (exerciseSlug: string, setIndex: number, field: keyof TrainingSet, currentValue: any): string => {
+    const inputId = `${exerciseSlug}-${setIndex}-${field}`;
+    
+    // If we have a raw input value stored, use that (for immediate UI feedback)
+    if (inputValues[inputId] !== undefined) {
+      return inputValues[inputId];
+    }
+    
+    // Otherwise use the current persisted value
+    return currentValue?.toString() || '';
   };
 
   const addSet = (exerciseSlug: string) => {
-    const exerciseSets = sets[exerciseSlug] || [];
+    const exerciseSets = sessionState.sets[exerciseSlug] || [];
     const newSetNumber = exerciseSets.length + 1;
     const lastSet = exerciseSets[exerciseSets.length - 1];
 
@@ -185,17 +370,19 @@ export default function TrainingShow({
       meta: lastSet?.meta || plannedExercises.find(ex => ex.exerciseSlug === exerciseSlug)!
     };
 
-    setSets(prevSets => ({
-      ...prevSets,
+    const newSets = {
+      ...sessionState.sets,
       [exerciseSlug]: [...exerciseSets, newSet]
-    }));
+    };
+    updateSets(newSets);
   };
 
   const removeSet = (exerciseSlug: string, setNumber: number) => {
-    setSets(prevSets => ({
-      ...prevSets,
-      [exerciseSlug]: prevSets[exerciseSlug].filter(set => set.setNumber !== setNumber)
-    }));
+    const newSets = {
+      ...sessionState.sets,
+      [exerciseSlug]: sessionState.sets[exerciseSlug].filter(set => set.setNumber !== setNumber)
+    };
+    updateSets(newSets);
   };
 
   const addExercise = (exerciseValue: string) => {
@@ -212,10 +399,11 @@ export default function TrainingShow({
         meta: exercise
       };
 
-      setSets(prevSets => ({
-        ...prevSets,
+      const newSets = {
+        ...sessionState.sets,
         [exercise.exerciseSlug]: [newSet]
-      }));
+      };
+      updateSets(newSets);
     }
     setAddingExercise(false);
   };
@@ -281,8 +469,27 @@ export default function TrainingShow({
       return;
     }
 
+    // Stop the timer when training is completed
+    stopTimer();
+
+    // Clear the saved state since training is completed
+    setSessionState({
+      sets: initialSets,
+      totalTimerSeconds: initialTotalSeconds,
+      totalTimerStarted: initialTimerStarted,
+      feedback: {
+        overallRating: 0,
+        mood: '',
+        energyLevel: 0,
+        difficulty: '',
+        difficultyLevel: 0,
+        notes: ''
+      },
+      lastSaved: new Date().toISOString()
+    });
+
     // For now, just show an alert since the backend route needs to be implemented
-    alert('Training completion functionality needs to be implemented in the backend.');
+    alert('Training completed! Timer stopped. Training completion functionality needs to be implemented in the backend.');
 
     // TODO: Implement proper training completion
     // submitFeedback(route['training.complete'](training.id).url, {
@@ -333,6 +540,34 @@ export default function TrainingShow({
       <Head title={`${training.trainingPlan?.name || 'Training Session'}`} />
 
       <div className="mx-auto max-w-4xl">
+        {/* Restored State Notification */}
+        {sessionState.lastSaved && sessionState.totalTimerSeconds > 0 && (
+          <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                    Welcome back! Your training session has been restored.
+                  </p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    Last saved: {new Date(sessionState.lastSaved).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={clearSavedState}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 underline"
+                title="Start fresh (clears all saved progress)"
+              >
+                Start Fresh
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Training Header */}
         <header className="mb-8">
           <div className="flex items-center justify-between">
@@ -377,15 +612,15 @@ export default function TrainingShow({
 
         {/* Training Content */}
         <div className="relative">
-          {Object.keys(sets).length > 0 ? (
+          {Object.keys(sessionState.sets).length > 0 ? (
             <>
               {/* Exercise Navigation */}
-              {Object.keys(sets).length > 1 && (
+              {Object.keys(sessionState.sets).length > 1 && (
                 <nav className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-8">
                   <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Jump to Exercise:</h3>
                   <div className="flex flex-wrap gap-2 mb-4">
-                    {Object.keys(sets).map((exerciseSlug, index) => {
-                      const exercise = sets[exerciseSlug][0]?.meta;
+                    {Object.keys(sessionState.sets).map((exerciseSlug, index) => {
+                      const exercise = sessionState.sets[exerciseSlug][0]?.meta;
                       return (
                         <button
                           key={exerciseSlug}
@@ -401,7 +636,7 @@ export default function TrainingShow({
               )}
 
               {/* Exercise Sets */}
-              {Object.entries(sets).map(([exerciseSlug, exerciseSets], exerciseIndex) => (
+              {Object.entries(sessionState.sets).map(([exerciseSlug, exerciseSets], exerciseIndex) => (
                 <fieldset
                   key={exerciseSlug}
                   id={`exercise-${exerciseSlug}`}
@@ -448,8 +683,8 @@ export default function TrainingShow({
                               id={`reps-${exerciseSlug}-${set.setNumber}`}
                               className="block w-full rounded-md bg-white dark:bg-gray-900 px-3 py-2 text-base text-gray-900 dark:text-gray-100 outline-1 -outline-offset-1 outline-gray-300 dark:outline-gray-700 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
                               placeholder="Reps"
-                              value={set.reps || ''}
-                              onChange={(e) => updateSetValue(exerciseSlug, setIndex, 'reps', e.target.value ? parseInt(e.target.value) : null)}
+                              value={getInputValue(exerciseSlug, setIndex, 'reps', set.reps)}
+                              onChange={(e) => updateSetValueDebounced(exerciseSlug, setIndex, 'reps', e.target.value)}
                             />
                           </div>
                           <div className="relative">
@@ -464,8 +699,8 @@ export default function TrainingShow({
                               id={`weight-${exerciseSlug}-${set.setNumber}`}
                               className="block w-full rounded-md bg-white dark:bg-gray-900 px-3 py-2 text-base text-gray-900 dark:text-gray-100 outline-1 -outline-offset-1 outline-gray-300 dark:outline-gray-700 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
                               placeholder="Weight (kg)"
-                              value={set.weight || ''}
-                              onChange={(e) => updateSetValue(exerciseSlug, setIndex, 'weight', e.target.value ? parseFloat(e.target.value) : null)}
+                              value={getInputValue(exerciseSlug, setIndex, 'weight', set.weight)}
+                              onChange={(e) => updateSetValueDebounced(exerciseSlug, setIndex, 'weight', e.target.value)}
                             />
                           </div>
                           <div className="relative">
@@ -480,8 +715,8 @@ export default function TrainingShow({
                               id={`rpe-${exerciseSlug}-${set.setNumber}`}
                               className="block w-full rounded-md bg-white dark:bg-gray-900 px-3 py-2 text-base text-gray-900 dark:text-gray-100 outline-1 -outline-offset-1 outline-gray-300 dark:outline-gray-700 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
                               placeholder="RPE"
-                              value={set.rpe || ''}
-                              onChange={(e) => updateSetValue(exerciseSlug, setIndex, 'rpe', e.target.value ? parseInt(e.target.value) : null)}
+                              value={getInputValue(exerciseSlug, setIndex, 'rpe', set.rpe)}
+                              onChange={(e) => updateSetValueDebounced(exerciseSlug, setIndex, 'rpe', e.target.value)}
                             />
                           </div>
                         </div>
@@ -560,7 +795,7 @@ export default function TrainingShow({
                         <button
                           key={rating}
                           type="button"
-                          onClick={() => setFeedback('overallRating', rating)}
+                          onClick={() => updateFeedback('overallRating', rating)}
                           className={`flex items-center justify-center w-12 h-12 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-yellow-300 dark:hover:border-yellow-600 transition-colors ${feedback.overallRating >= rating ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : ''
                             }`}
                         >
@@ -596,7 +831,7 @@ export default function TrainingShow({
                         <button
                           key={moodOption.value}
                           type="button"
-                          onClick={() => setFeedback('mood', moodOption.value)}
+                          onClick={() => updateFeedback('mood', moodOption.value)}
                           className={`flex flex-col items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 transition-colors ${feedback.mood === moodOption.value ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' : ''
                             }`}
                         >
@@ -621,7 +856,7 @@ export default function TrainingShow({
                           <button
                             key={level}
                             type="button"
-                            onClick={() => setFeedback('energyLevel', level)}
+                            onClick={() => updateFeedback('energyLevel', level)}
                             className={`flex items-center justify-center h-12 w-12 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 transition-colors ${feedback.energyLevel === level ? 'border-blue-600 bg-blue-600 text-white' : ''
                               }`}
                           >
@@ -651,7 +886,7 @@ export default function TrainingShow({
                         <button
                           key={diffOption.value}
                           type="button"
-                          onClick={() => setFeedback('difficulty', diffOption.value)}
+                          onClick={() => updateFeedback('difficulty', diffOption.value)}
                           className={`flex flex-col items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 transition-colors ${feedback.difficulty === diffOption.value ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' : ''
                             }`}
                         >
@@ -679,7 +914,7 @@ export default function TrainingShow({
                           <button
                             key={level}
                             type="button"
-                            onClick={() => setFeedback('difficultyLevel', level)}
+                            onClick={() => updateFeedback('difficultyLevel', level)}
                             className={`flex items-center justify-center h-12 w-12 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:border-red-300 dark:hover:border-red-600 transition-colors ${feedback.difficultyLevel === level ? 'border-red-600 bg-red-600 text-white' : ''
                               }`}
                           >
@@ -700,7 +935,7 @@ export default function TrainingShow({
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100"
                       placeholder="How did the training feel? Any adjustments needed for next time?"
                       value={feedback.notes}
-                      onChange={(e) => setFeedback('notes', e.target.value)}
+                      onChange={(e) => updateFeedback('notes', e.target.value)}
                     />
                   </div>
 
@@ -842,7 +1077,35 @@ export default function TrainingShow({
             {/* Total Timer */}
             <div className="flex flex-col items-center">
               <span className="font-medium">Total Timer:</span>
-              <span className="font-mono text-lg">{formatTime(totalTimerSeconds)}</span>
+              <span className={`font-mono text-lg ${
+                sessionState.totalTimerSeconds >= 3600 ? 'text-red-400' : // 60+ minutes - red
+                sessionState.totalTimerSeconds >= 2700 ? 'text-yellow-400' : // 45+ minutes - yellow
+                'text-green-400' // Under 45 minutes - green
+              }`}>
+                {formatTime(sessionState.totalTimerSeconds)}
+              </span>
+              <div className={`text-xs mt-1 flex items-center ${
+                sessionState.totalTimerSeconds >= 3600 ? 'text-red-400' :
+                sessionState.totalTimerSeconds >= 2700 ? 'text-yellow-400' :
+                'text-green-400'
+              }`}>
+                <div className={`w-2 h-2 rounded-full mr-1 animate-pulse ${
+                  sessionState.totalTimerSeconds >= 3600 ? 'bg-red-400' :
+                  sessionState.totalTimerSeconds >= 2700 ? 'bg-yellow-400' :
+                  'bg-green-400'
+                }`}></div>
+                {sessionState.totalTimerSeconds >= 3600 ? 'Over Time!' :
+                 sessionState.totalTimerSeconds >= 2700 ? 'Wrap Up Soon' :
+                 'Running'}
+              </div>
+              {sessionState.lastSaved && (
+                <div className="text-xs text-gray-400 mt-1 flex items-center">
+                  <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Progress saved
+                </div>
+              )}
             </div>
 
             {/* Add Exercise */}

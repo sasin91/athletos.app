@@ -27,7 +27,7 @@ class AthleteProfileController extends Controller
             return redirect()->route('onboarding.profile');
         }
 
-        return Inertia::render('settings/athlete-profile', [
+        return Inertia::render('Settings/AthleteProfile', [
             'athlete' => $athlete,
             'experienceLevels' => collect(ExperienceLevel::cases())->map(fn($level) => [
                 'value' => $level->value,

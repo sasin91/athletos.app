@@ -1,6 +1,9 @@
 import { Head, useForm } from '@inertiajs/react';
 import SettingsLayout from '@/layouts/settings-layout';
 import { route } from '@/lib/wayfinder';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface PasswordData {
   current_password: string;
@@ -47,16 +50,15 @@ export default function Password({ user }: Props) {
 
           <form className="max-w-md" onSubmit={submit}>
             <div className="mb-4">
-              <label htmlFor="current_password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="current_password" className="mb-2">
                 Current Password
-              </label>
-              <input
+              </Label>
+              <Input
                 type="password"
                 id="current_password"
                 name="current_password"
                 value={data.current_password}
                 onChange={(e) => setData('current_password', e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               />
               {errors.current_password && (
@@ -65,16 +67,15 @@ export default function Password({ user }: Props) {
             </div>
 
             <div className="mb-4">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="password" className="mb-2">
                 New Password
-              </label>
-              <input
+              </Label>
+              <Input
                 type="password"
                 id="password"
                 name="password"
                 value={data.password}
                 onChange={(e) => setData('password', e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               />
               {errors.password && (
@@ -83,16 +84,15 @@ export default function Password({ user }: Props) {
             </div>
 
             <div className="mb-6">
-              <label htmlFor="password_confirmation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="password_confirmation" className="mb-2">
                 Confirm Password
-              </label>
-              <input
+              </Label>
+              <Input
                 type="password"
                 id="password_confirmation"
                 name="password_confirmation"
                 value={data.password_confirmation}
                 onChange={(e) => setData('password_confirmation', e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               />
               {errors.password_confirmation && (
@@ -101,13 +101,12 @@ export default function Password({ user }: Props) {
             </div>
 
             <div>
-              <button
+              <Button
                 type="submit"
                 disabled={processing}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
               >
                 {processing ? 'Updating...' : 'Update Password'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>

@@ -2,6 +2,10 @@ import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 import AuthLayout from '@/layouts/auth-layout';
 import { route } from '@/lib/wayfinder';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 
 type LoginData = {
   email: string;
@@ -49,15 +53,14 @@ export default function Login({ status, canResetPassword }: Props) {
           <form onSubmit={submit}>
             {/* Email Input */}
             <div className="mb-4">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="email" className="mb-2">
                 Email
-              </label>
-              <input
+              </Label>
+              <Input
                 id="email"
                 type="email"
                 name="email"
                 value={data.email}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 autoComplete="username"
                 placeholder="your@email.com"
                 onChange={(e) => setData('email', e.target.value)}
@@ -70,15 +73,14 @@ export default function Login({ status, canResetPassword }: Props) {
 
             {/* Password Input */}
             <div className="mb-4">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="password" className="mb-2">
                 Password
-              </label>
-              <input
+              </Label>
+              <Input
                 id="password"
                 type="password"
                 name="password"
                 value={data.password}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 autoComplete="current-password"
                 placeholder="••••••••"
                 onChange={(e) => setData('password', e.target.value)}
@@ -99,28 +101,26 @@ export default function Login({ status, canResetPassword }: Props) {
 
             {/* Remember Me */}
             <div className="mb-6">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
+              <Label className="flex items-center space-x-2">
+                <Checkbox
                   name="remember"
                   checked={data.remember}
-                  onChange={(e) => setData('remember', e.target.checked)}
-                  className="rounded border-gray-300 dark:border-gray-600 text-blue-600 shadow-sm focus:ring-blue-500 dark:bg-gray-700"
+                  onCheckedChange={(checked) => setData('remember', checked as boolean)}
                 />
-                <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                <span className="text-sm">
                   Remember me
                 </span>
-              </label>
+              </Label>
             </div>
 
             {/* Login Button */}
-            <button
+            <Button
               type="submit"
               disabled={processing}
-              className="w-full inline-flex justify-center items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
+              className="w-full"
             >
               {processing ? 'Signing In...' : 'Sign In'}
-            </button>
+            </Button>
           </form>
 
           {/* Register Link */}

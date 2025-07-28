@@ -10,6 +10,6 @@ class AppearanceController extends Controller
 {
     public function edit(): \Inertia\Response
     {
-        return Inertia::render('settings/appearance');
+        return Inertia::render('Settings/Appearance');
     }
 }

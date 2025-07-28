@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Illuminate\Container\Attributes\CurrentUser;
 use Illuminate\Http\Response;
+use Inertia\Inertia;
 
 class TrainingController extends Controller
 {
@@ -22,7 +23,7 @@ class TrainingController extends Controller
         private CalculateTrainingOffset $calculateTrainingOffset,
     ) {}
 
-    public function index(#[CurrentUser] User $user): Response
+    public function index(#[CurrentUser] User $user)
     {
         Gate::authorize('viewAny', Training::class);
         $athlete = $user->athlete;
@@ -33,8 +34,9 @@ class TrainingController extends Controller
             ->orderBy('scheduled_at', 'desc')
             ->paginate(20);
 
-        return Inertia::render('trainings/index', [
-            'trainings' => $trainings
+        return Inertia::render('Trainings/Index', [
+            'trainings' => $trainings,
+            'athlete' => $athlete
         ]);
     }
 
@@ -63,7 +65,7 @@ class TrainingController extends Controller
         return redirect()->route('trainings.show', $training);
     }
 
-    public function show(Training $training, #[CurrentUser] User $user): Response
+    public function show(Training $training, #[CurrentUser] User $user)
     {
         Gate::authorize('view', $training);
 
@@ -188,7 +190,7 @@ class TrainingController extends Controller
     public function complete(
         Training $training,
         SuggestRecoveryExercises $suggestRecoveryExercises
-    ): Response {
+    ) {
         Gate::authorize('viewComplete', $training);
 
         return inertia('trainings/complete', [

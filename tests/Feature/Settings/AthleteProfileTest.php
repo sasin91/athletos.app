@@ -61,8 +61,10 @@ class AthleteProfileTest extends TestCase
         $this->actingAs($user)
             ->get('/settings/athlete-profile')
             ->assertStatus(200)
-            ->assertViewIs('settings.athlete-profile')
-            ->assertViewHas('athlete', $athlete);
+            ->assertInertia(fn($page) => 
+                $page->component('Settings/AthleteProfile')
+                    ->has('athlete')
+            );
     }
 
     public function test_athletes_can_update_their_profile(): void

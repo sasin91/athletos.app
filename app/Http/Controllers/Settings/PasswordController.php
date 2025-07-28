@@ -15,7 +15,7 @@ class PasswordController extends Controller
 {
     public function edit(Request $request): \Inertia\Response
     {
-        return Inertia::render('settings/password', [
+        return Inertia::render('Settings/Password', [
             'user' => $request->user(),
         ]);
     }
@@ -28,7 +28,7 @@ class PasswordController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return redirect()->route('settings.password.edit')
+            return redirect()->route('settings.profile.edit')
                 ->withErrors($validator)
                 ->withInput();
         }
@@ -39,6 +39,6 @@ class PasswordController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
-        return redirect()->route('settings.password.edit')->with('status', 'password-updated');
+        return redirect()->route('settings.profile.edit')->with('status', 'password-updated');
     }
 }

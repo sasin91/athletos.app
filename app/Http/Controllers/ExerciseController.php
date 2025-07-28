@@ -13,7 +13,7 @@ class ExerciseController extends Controller
      */
     public function show(Exercise $exercise): \Inertia\Response
     {
-        return Inertia::render('exercises/show', [
+        return Inertia::render('Exercises/Show', [
             'exercise' => $exercise,
             'exerciseData' => [
                 'name' => __("exercises.{$exercise->value}.name"),

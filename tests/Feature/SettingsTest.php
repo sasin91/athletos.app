@@ -89,7 +89,7 @@ class SettingsTest extends TestCase
         $response->assertStatus(200)
             ->assertInertia(
                 fn($page) =>
-                $page->component('settings/athlete-profile')
+                $page->component('Settings/AthleteProfile')
                     ->has('athlete')
                     ->has('experienceLevels')
                     ->has('trainingGoals')

@@ -2,6 +2,9 @@ import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import SettingsLayout from '@/layouts/settings-layout';
 import { route } from '@/lib/wayfinder';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface ProfileData {
   name: string;
@@ -57,16 +60,15 @@ export default function Profile({ user }: Props) {
           {/* Profile Form */}
           <form className="max-w-md mb-10" onSubmit={submit}>
             <div className="mb-4">
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="name" className="mb-2">
                 Name
-              </label>
-              <input
+              </Label>
+              <Input
                 type="text"
                 id="name"
                 name="name"
                 value={data.name}
                 onChange={(e) => setData('name', e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               />
               {errors.name && (
@@ -75,16 +77,15 @@ export default function Profile({ user }: Props) {
             </div>
 
             <div className="mb-6">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="email" className="mb-2">
                 Email
-              </label>
-              <input
+              </Label>
+              <Input
                 type="email"
                 id="email"
                 name="email"
                 value={data.email}
                 onChange={(e) => setData('email', e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 required
               />
               {errors.email && (
@@ -93,13 +94,12 @@ export default function Profile({ user }: Props) {
             </div>
 
             <div>
-              <button
+              <Button
                 type="submit"
                 disabled={processing}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
               >
                 {processing ? 'Saving...' : 'Save'}
-              </button>
+              </Button>
             </div>
           </form>
 
@@ -111,14 +111,14 @@ export default function Profile({ user }: Props) {
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               Delete your account and all of its resources. This action cannot be undone.
             </p>
-            <button
+            <Button
               type="button"
+              variant="destructive"
               onClick={handleDeleteAccount}
               disabled={deleteProcessing}
-              className="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-700 focus:bg-red-700 active:bg-red-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
             >
               {deleteProcessing ? 'Deleting...' : 'Delete Account'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

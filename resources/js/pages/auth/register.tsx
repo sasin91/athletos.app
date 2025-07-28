@@ -2,6 +2,9 @@ import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 import AuthLayout from '@/layouts/auth-layout';
 import { route } from '@/lib/wayfinder';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface RegisterData {
   name: string;
@@ -42,15 +45,14 @@ export default function Register() {
           <form onSubmit={submit}>
             {/* Full Name Input */}
             <div className="mb-4">
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="name" className="mb-2">
                 Full Name
-              </label>
-              <input
+              </Label>
+              <Input
                 id="name"
                 type="text"
                 name="name"
                 value={data.name}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 autoComplete="name"
                 placeholder="Full Name"
                 onChange={(e) => setData('name', e.target.value)}
@@ -63,15 +65,14 @@ export default function Register() {
 
             {/* Email Input */}
             <div className="mb-4">
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="email" className="mb-2">
                 Email
-              </label>
-              <input
+              </Label>
+              <Input
                 id="email"
                 type="email"
                 name="email"
                 value={data.email}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 autoComplete="username"
                 placeholder="your@email.com"
                 onChange={(e) => setData('email', e.target.value)}
@@ -84,15 +85,14 @@ export default function Register() {
 
             {/* Password Input */}
             <div className="mb-4">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="password" className="mb-2">
                 Password
-              </label>
-              <input
+              </Label>
+              <Input
                 id="password"
                 type="password"
                 name="password"
                 value={data.password}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 autoComplete="new-password"
                 placeholder="••••••••"
                 onChange={(e) => setData('password', e.target.value)}
@@ -105,15 +105,14 @@ export default function Register() {
 
             {/* Confirm Password Input */}
             <div className="mb-4">
-              <label htmlFor="password_confirmation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Label htmlFor="password_confirmation" className="mb-2">
                 Confirm Password
-              </label>
-              <input
+              </Label>
+              <Input
                 id="password_confirmation"
                 type="password"
                 name="password_confirmation"
                 value={data.password_confirmation}
-                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 autoComplete="new-password"
                 placeholder="••••••••"
                 onChange={(e) => setData('password_confirmation', e.target.value)}
@@ -125,13 +124,13 @@ export default function Register() {
             </div>
 
             {/* Register Button */}
-            <button
+            <Button
               type="submit"
               disabled={processing}
-              className="w-full inline-flex justify-center items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 focus:bg-blue-700 active:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition ease-in-out duration-150"
+              className="w-full"
             >
               {processing ? 'Creating Account...' : 'Create Account'}
-            </button>
+            </Button>
           </form>
 
           {/* Login Link */}

@@ -1,6 +1,9 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ChartBarIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { route } from '@/lib/wayfinder';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 interface StatsData {
   current_bench: string;
@@ -30,12 +33,20 @@ export default function Stats({ user, athlete, onboarding }: Props) {
     <>
       <Head title="Current Stats - Athletos" />
       
-      <div className="min-h-full bg-gray-50 dark:bg-gray-900">
-        <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
+      <div className="relative min-h-full bg-white dark:bg-gray-900">
+        {/* Background gradients */}
+        <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80" aria-hidden="true">
+          <div className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#ff80b5] to-[#9089fc] opacity-30 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]" style={{ clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)' }}></div>
+        </div>
+        <div className="absolute inset-x-0 top-[calc(100%-13rem)] -z-10 transform-gpu overflow-hidden blur-3xl sm:top-[calc(100%-30rem)]" aria-hidden="true">
+          <div className="relative left-[calc(50%+3rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 bg-gradient-to-tr from-[#ff80b5] to-[#9089fc] opacity-30 sm:left-[calc(50%+36rem)] sm:w-[72.1875rem]" style={{ clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)' }}></div>
+        </div>
+
+        <div className="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8">
             <div className="text-center mb-8">
-              <div className="mx-auto h-16 w-16 bg-orange-100 dark:bg-orange-900/20 rounded-full flex items-center justify-center mb-4">
-                <ChartBarIcon className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+              <div className="mx-auto h-16 w-16 bg-gradient-to-r from-pink-100 to-violet-100 dark:from-pink-900/20 dark:to-violet-900/20 rounded-full flex items-center justify-center mb-4">
+                <ChartBarIcon className="h-8 w-8 bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Current Stats</h2>
               <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
@@ -51,69 +62,60 @@ export default function Stats({ user, athlete, onboarding }: Props) {
 
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
                   <div>
-                    <label htmlFor="current_bench" className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <Label htmlFor="current_bench" className="mb-2">
                       Bench Press (lbs)
-                    </label>
-                    <div className="mt-2">
-                      <input
-                        type="number"
-                        name="current_bench"
-                        id="current_bench"
-                        min="0"
-                        max="1000"
-                        step="5"
-                        value={data.current_bench}
-                        onChange={(e) => setData('current_bench', e.target.value)}
-                        className="block w-full rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-base text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                        placeholder="e.g. 135"
-                      />
-                    </div>
+                    </Label>
+                    <Input
+                      type="number"
+                      name="current_bench"
+                      id="current_bench"
+                      min="0"
+                      max="1000"
+                      step="5"
+                      value={data.current_bench}
+                      onChange={(e) => setData('current_bench', e.target.value)}
+                      placeholder="e.g. 135"
+                    />
                     {errors.current_bench && (
                       <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.current_bench}</p>
                     )}
                   </div>
 
                   <div>
-                    <label htmlFor="current_squat" className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <Label htmlFor="current_squat" className="mb-2">
                       Squat (lbs)
-                    </label>
-                    <div className="mt-2">
-                      <input
-                        type="number"
-                        name="current_squat"
-                        id="current_squat"
-                        min="0"
-                        max="1000"
-                        step="5"
-                        value={data.current_squat}
-                        onChange={(e) => setData('current_squat', e.target.value)}
-                        className="block w-full rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-base text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                        placeholder="e.g. 185"
-                      />
-                    </div>
+                    </Label>
+                    <Input
+                      type="number"
+                      name="current_squat"
+                      id="current_squat"
+                      min="0"
+                      max="1000"
+                      step="5"
+                      value={data.current_squat}
+                      onChange={(e) => setData('current_squat', e.target.value)}
+                      placeholder="e.g. 185"
+                    />
                     {errors.current_squat && (
                       <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.current_squat}</p>
                     )}
                   </div>
 
                   <div>
-                    <label htmlFor="current_deadlift" className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <Label htmlFor="current_deadlift" className="mb-2">
                       Deadlift (lbs)
-                    </label>
-                    <div className="mt-2">
-                      <input
-                        type="number"
-                        name="current_deadlift"
-                        id="current_deadlift"
-                        min="0"
-                        max="1000"
-                        step="5"
-                        value={data.current_deadlift}
-                        onChange={(e) => setData('current_deadlift', e.target.value)}
-                        className="block w-full rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-base text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                        placeholder="e.g. 225"
-                      />
-                    </div>
+                    </Label>
+                    <Input
+                      type="number"
+                      name="current_deadlift"
+                      id="current_deadlift"
+                      min="0"
+                      max="1000"
+                      step="5"
+                      value={data.current_deadlift}
+                      onChange={(e) => setData('current_deadlift', e.target.value)}
+                      placeholder="e.g. 225"
+                    />
                     {errors.current_deadlift && (
                       <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.current_deadlift}</p>
                     )}
@@ -130,21 +132,20 @@ export default function Stats({ user, athlete, onboarding }: Props) {
               </div>
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
-                <Link
-                  href={route['onboarding.schedule']().url}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <ChevronLeftIcon className="mr-2 h-4 w-4" />
-                  Back
-                </Link>
-                <button
+                <Button variant="outline" asChild>
+                  <Link href={route['onboarding.schedule']().url}>
+                    <ChevronLeftIcon className="mr-2 h-4 w-4" />
+                    Back
+                  </Link>
+                </Button>
+                <Button
                   type="submit"
                   disabled={processing}
-                  className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="px-6 py-3"
                 >
                   {processing ? 'Saving...' : 'Continue'}
                   <ChevronRightIcon className="ml-2 h-4 w-4" />
-                </button>
+                </Button>
               </div>
             </form>
           </div>

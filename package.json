@@ -57,6 +57,7 @@
         "@tsparticles/confetti": "^3.8.1",
         "@types/react": "^19.0.3",
         "@types/react-dom": "^19.0.2",
+        "@uidotdev/usehooks": "^2.4.1",
         "@vitejs/plugin-react": "^4.6.0",
         "apexcharts": "^4.7.0",
         "class-variance-authority": "^0.7.1",
