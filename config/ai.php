@@ -11,7 +11,7 @@ return [
     | Supported: "openai", "ollama"
     |
     */
-    'default_provider' => env('AI_PROVIDER', 'ollama'),
+    'default_provider' => env('AI_PROVIDER', 'runpod'),
 
     /*
     |--------------------------------------------------------------------------
@@ -38,6 +38,16 @@ return [
             'temperature' => env('AI_OLLAMA_TEMPERATURE', 0.7),
             'max_tokens' => env('AI_OLLAMA_MAX_TOKENS', 1200),
             'base_url' => env('AI_OLLAMA_BASE_URL', 'http://localhost:11434'),
+        ],
+
+        'runpod' => [
+            'chat_model' => env('AI_RUNPOD_CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct'),
+            'extraction_model' => env('AI_RUNPOD_EXTRACTION_MODEL', 'meta-llama/llama-3.1-8b-instruct'),
+            'subject_model' => env('AI_RUNPOD_SUBJECT_MODEL', 'meta-llama/llama-3.1-8b-instruct'),
+            'temperature' => env('AI_RUNPOD_TEMPERATURE', 0.7),
+            'max_tokens' => env('AI_RUNPOD_MAX_TOKENS', 1200),
+            'base_url' => env('AI_RUNPOD_BASE_URL', ''),
+            'api_key' => env('AI_RUNPOD_API_KEY'),
         ],
     ],
 

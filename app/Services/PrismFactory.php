@@ -213,6 +213,7 @@ class PrismFactory
         return match (config('ai.default_provider')) {
             'ollama' => Provider::Ollama,
             'openai' => Provider::OpenAI,
+            'runpod' => Provider::OpenAI, // Use OpenAI format for RunPod compatibility
             default => throw new \InvalidArgumentException('Unsupported AI provider: ' . config('ai.default_provider')),
         };
     }

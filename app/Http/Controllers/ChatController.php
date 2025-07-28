@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Actions\AddChatMessage;
 use App\Actions\CreateChatSession;
 use App\Actions\GenerateChatResponse;
+use App\Actions\GenerateRunPodChatResponse;
 use App\Models\ChatSession;
 use App\Models\TrainingPlan;
 use App\Models\User;
@@ -113,67 +114,93 @@ class ChatController extends Controller
 
         return response()->stream(function () use ($session, $prompt, $streamId) {
             try {
-                $request = app(GenerateChatResponse::class)->execute($session, $prompt);
-                $fullAnswer = '';
+                // Check if we're using RunPod
+                if (config('ai.default_provider') === 'runpod') {
+                    $responseGenerator = app(GenerateRunPodChatResponse::class)->execute($session, $prompt);
+                    $fullAnswer = '';
 
-                foreach ($request->asStream() as $textChunk) {
-                    if ($textChunk->finishReason !== null) {
-                        // Save the complete response to database
-                        app(AddChatMessage::class)->addAssistantMessage($session, $fullAnswer);
+                    foreach ($responseGenerator as $chunk) {
+                        if ($chunk['type'] === 'text') {
+                            $fullAnswer .= $chunk['content'];
+                        }
 
-                        echo "data: " . json_encode([
-                            'type' => 'finished',
-                            'reason' => $textChunk->finishReason->name
-                        ]) . "\n\n";
-                        break;
+                        echo "data: " . json_encode($chunk) . "\n\n";
+
+                        if ($chunk['type'] === 'finished') {
+                            // Save the complete response to database
+                            app(AddChatMessage::class)->addAssistantMessage($session, $fullAnswer);
+                            break;
+                        }
+
+                        if (ob_get_level()) {
+                            ob_flush();
+                        }
+                        flush();
                     }
+                } else {
+                    // Use original Prism-based approach
+                    $request = app(GenerateChatResponse::class)->execute($session, $prompt);
+                    $fullAnswer = '';
 
-                    switch ($textChunk->chunkType) {
-                        case ChunkType::Text:
-                            $fullAnswer .= $textChunk->text;
+                    foreach ($request->asStream() as $textChunk) {
+                        if ($textChunk->finishReason !== null) {
+                            // Save the complete response to database
+                            app(AddChatMessage::class)->addAssistantMessage($session, $fullAnswer);
+
                             echo "data: " . json_encode([
-                                'type' => 'text',
-                                'content' => $textChunk->text
+                                'type' => 'finished',
+                                'reason' => $textChunk->finishReason->name
                             ]) . "\n\n";
                             break;
+                        }
 
-                        case ChunkType::Thinking:
-                            echo "data: " . json_encode([
-                                'type' => 'thinking'
-                            ]) . "\n\n";
-                            break;
-
-                        case ChunkType::ToolCall:
-                            foreach ($textChunk->toolCalls as $toolCall) {
+                        switch ($textChunk->chunkType) {
+                            case ChunkType::Text:
+                                $fullAnswer .= $textChunk->text;
                                 echo "data: " . json_encode([
-                                    'type' => 'tool_call',
-                                    'tool_name' => $toolCall->name
+                                    'type' => 'text',
+                                    'content' => $textChunk->text
                                 ]) . "\n\n";
-                            }
-                            break;
+                                break;
 
-                        case ChunkType::ToolResult:
-                            foreach ($textChunk->toolResults as $toolResult) {
+                            case ChunkType::Thinking:
                                 echo "data: " . json_encode([
-                                    'type' => 'tool_result',
-                                    'tool_name' => $toolResult->toolName
+                                    'type' => 'thinking'
                                 ]) . "\n\n";
-                            }
-                            break;
+                                break;
 
-                        case ChunkType::Meta:
-                            echo "data: " . json_encode([
-                                'type' => 'meta',
-                                'model' => $textChunk->meta->model,
-                                'id' => $textChunk->meta->id
-                            ]) . "\n\n";
-                            break;
-                    }
+                            case ChunkType::ToolCall:
+                                foreach ($textChunk->toolCalls as $toolCall) {
+                                    echo "data: " . json_encode([
+                                        'type' => 'tool_call',
+                                        'tool_name' => $toolCall->name
+                                    ]) . "\n\n";
+                                }
+                                break;
 
-                    if (ob_get_level()) {
-                        ob_flush();
+                            case ChunkType::ToolResult:
+                                foreach ($textChunk->toolResults as $toolResult) {
+                                    echo "data: " . json_encode([
+                                        'type' => 'tool_result',
+                                        'tool_name' => $toolResult->toolName
+                                    ]) . "\n\n";
+                                }
+                                break;
+
+                            case ChunkType::Meta:
+                                echo "data: " . json_encode([
+                                    'type' => 'meta',
+                                    'model' => $textChunk->meta->model,
+                                    'id' => $textChunk->meta->id
+                                ]) . "\n\n";
+                                break;
+                        }
+
+                        if (ob_get_level()) {
+                            ob_flush();
+                        }
+                        flush();
                     }
-                    flush();
                 }
             } catch (PrismException $e) {
                 echo "data: " . json_encode([
