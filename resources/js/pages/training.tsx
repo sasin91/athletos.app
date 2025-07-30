@@ -1,12 +1,14 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, useForm, router } from '@inertiajs/react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalStorage } from '@uidotdev/usehooks';
 import { route } from '@/lib/wayfinder';
 import AppLayout from '@/layouts/app-layout';
 
+type SavedCallback = (data?: any) => void;
+
 // Custom useInterval hook to handle React state updates properly
-function useInterval(callback: () => void, delay: number | null) {
-  const savedCallback = useRef<() => void>();
+function useInterval(callback: SavedCallback, delay: number | null) {
+  const savedCallback = useRef<SavedCallback>(() => {});
 
   // Remember the latest callback.
   useEffect(() => {
@@ -150,7 +152,10 @@ export default function TrainingShow({
   const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
   // Use Inertia form for feedback with persisted initial values
-  const { data: feedback, setData: setFeedback, post: submitFeedback, processing } = useForm<TrainingFeedback>(sessionState.feedback);
+  const { data: feedback, setData: setFeedback } = useForm<TrainingFeedback>(sessionState.feedback);
+  
+  // Processing state for completion
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // Helper functions to update persisted state
   const updateSets = (newSets: Record<string, TrainingSet[]>) => {
@@ -472,31 +477,46 @@ export default function TrainingShow({
     // Stop the timer when training is completed
     stopTimer();
 
-    // Clear the saved state since training is completed
-    setSessionState({
-      sets: initialSets,
-      totalTimerSeconds: initialTotalSeconds,
-      totalTimerStarted: initialTimerStarted,
-      feedback: {
-        overallRating: 0,
-        mood: '',
-        energyLevel: 0,
-        difficulty: '',
-        difficultyLevel: 0,
-        notes: ''
+    // Submit training completion with feedback and exercise sets
+    setIsCompleting(true);
+    
+    const completionData = {
+      overall_rating: feedback.overallRating,
+      mood: feedback.mood,
+      energy_level: feedback.energyLevel,
+      difficulty: feedback.difficulty,
+      difficulty_level: feedback.difficultyLevel,
+      notes: feedback.notes,
+      total_timer_seconds: sessionState.totalTimerSeconds,
+      exercise_sets: JSON.stringify(sessionState.sets),
+    };
+
+    router.post(`/trainings/${training.id}/complete`, completionData, {
+      onSuccess: () => {
+        // Clear the saved state since training is completed successfully
+        setSessionState({
+          sets: initialSets,
+          totalTimerSeconds: initialTotalSeconds,
+          totalTimerStarted: initialTimerStarted,
+          feedback: {
+            overallRating: 0,
+            mood: '',
+            energyLevel: 0,
+            difficulty: '',
+            difficultyLevel: 0,
+            notes: ''
+          },
+          lastSaved: new Date().toISOString()
+        });
+        setIsCompleting(false);
       },
-      lastSaved: new Date().toISOString()
+      onError: (errors: any) => {
+        console.error('Training completion failed:', errors);
+        // Restart the timer if completion failed
+        setTimerRunning(true);
+        setIsCompleting(false);
+      }
     });
-
-    // For now, just show an alert since the backend route needs to be implemented
-    alert('Training completed! Timer stopped. Training completion functionality needs to be implemented in the backend.');
-
-    // TODO: Implement proper training completion
-    // submitFeedback(route['training.complete'](training.id).url, {
-    //   onSuccess: () => {
-    //     // Navigate to dashboard or show success message
-    //   }
-    // });
   };
 
   const scrollToExercise = (exerciseSlug: string) => {
@@ -510,7 +530,7 @@ export default function TrainingShow({
     return (
       <>
         <Head title="Training Session - Loading" />
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-8 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Loading Exercises...</h3>
@@ -944,13 +964,13 @@ export default function TrainingShow({
                     <button
                       type="button"
                       onClick={completeTraining}
-                      disabled={processing}
+                      disabled={isCompleting}
                       className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
                     >
                       <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                       </svg>
-                      {processing ? 'Completing...' : 'Complete Training'}
+                      {isCompleting ? 'Completing...' : 'Complete Training'}
                     </button>
                   </div>
                 </div>

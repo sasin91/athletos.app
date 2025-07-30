@@ -14,8 +14,6 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Illuminate\Container\Attributes\CurrentUser;
-use Illuminate\Http\Response;
-use Inertia\Inertia;
 
 class TrainingController extends Controller
 {
@@ -197,5 +195,36 @@ class TrainingController extends Controller
             'training' => $training,
             'recoveryExercises' => $suggestRecoveryExercises->execute($training)
         ]);
+    }
+
+    public function storeComplete(Request $request, Training $training)
+    {
+        Gate::authorize('complete', $training);
+
+        $validated = $request->validate([
+            'overall_rating' => 'required|integer|min:1|max:5',
+            'mood' => 'required|string|in:terrible,bad,okay,good,excellent',
+            'energy_level' => 'required|integer|min:1|max:10',
+            'difficulty' => 'required|string|in:too_easy,just_right,challenging,too_hard',
+            'difficulty_level' => 'required|integer|min:1|max:10',
+            'notes' => 'nullable|string|max:1000',
+            'total_timer_seconds' => 'nullable|integer|min:0',
+            'exercise_sets' => 'nullable|array',
+        ]);
+
+        // Complete the training with feedback and current timestamp
+        $training->update([
+            'overall_rating' => $validated['overall_rating'],
+            'mood' => $validated['mood'],
+            'energy_level' => $validated['energy_level'],
+            'difficulty' => $validated['difficulty'],
+            'difficulty_level' => $validated['difficulty_level'],
+            'notes' => $validated['notes'],
+            'total_timer_seconds' => $validated['total_timer_seconds'],
+            'exercise_sets' => $validated['exercise_sets'],
+            'completed_at' => now(),
+        ]);
+
+        return redirect()->route('dashboard')->with('success', 'Training completed successfully! Great work!');
     }
 }

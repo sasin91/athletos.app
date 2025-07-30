@@ -83,10 +83,14 @@ class Training extends Model
         'reschedule_reason',
         'mood',
         'energy_level',
+        'overall_rating',
+        'difficulty',
+        'difficulty_level',
         'completed_at',
         'notes',
         'total_timer_seconds',
         'set_timer_seconds',
+        'exercise_sets',
     ];
 
     /**
@@ -103,8 +107,12 @@ class Training extends Model
             'scheduled_at' => 'datetime',
             'postponed' => 'boolean',
             'completed_at' => 'datetime',
+            'energy_level' => 'integer',
+            'overall_rating' => 'integer',
+            'difficulty_level' => 'integer',
             'total_timer_seconds' => 'integer',
             'set_timer_seconds' => 'integer',
+            'exercise_sets' => 'array',
         ];
     }
 

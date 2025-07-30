@@ -21,6 +21,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('trainings', [TrainingController::class, 'store'])->name('trainings.store');
         Route::get('trainings/{training}', [TrainingController::class, 'show'])->name('trainings.show');
         Route::get('trainings/{training}/complete', [TrainingController::class, 'complete'])->name('trainings.complete');
+        Route::post('trainings/{training}/complete', [TrainingController::class, 'storeComplete'])->name('trainings.complete.store');
         Route::get('training-plans/create', [TrainingPlanController::class, 'create'])->name('training-plans.create');
         Route::post('training-plans', [TrainingPlanController::class, 'store'])->name('training-plans.store');
         Route::get('training-plans/{trainingPlan}', [TrainingPlanController::class, 'show'])->name('training-plans.show');
