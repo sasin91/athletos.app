@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Actions\AddChatMessage;
 use App\Actions\CreateChatSession;
 use App\Actions\GenerateChatResponse;
+use App\Events\NewChatMessage;
 use App\Models\ChatSession;
 use App\Models\TrainingPlan;
 use App\Models\User;
@@ -248,103 +249,33 @@ class ChatController extends Controller
         app(AddChatMessage::class)->addUserMessage($session, $request->get('prompt'));
 
         // Process chat response in background job to avoid blocking
-        dispatch(function () use ($session, $request, $channel) {
-            try {
-                $prompt = $request->get('prompt');
-                // Use original Prism-based approach
-                $request = app(GenerateChatResponse::class)->execute($session, $prompt);
-                $fullAnswer = '';
+        dispatch(function () use ($session, $request) {
+            retry(
+                times: 3,
+                callback: function () use ($session, $request) {
+                    $prompt = $request->get('prompt');
+                    // Use original Prism-based approach
+                    $request = app(GenerateChatResponse::class)->execute($session, $prompt);
+                    $fullAnswer = '';
 
-                foreach ($request->asStream() as $textChunk) {
-                    if ($textChunk->finishReason !== null) {
-                        // Save the complete response to database
-                        app(AddChatMessage::class)->addAssistantMessage($session, $fullAnswer);
-
-                        // Broadcast finished event
-                        Broadcast::channel($channel)->send([
-                            'event' => 'ChatResponseChunk',
-                            'data' => [
-                                'type' => 'finished',
-                                'reason' => $textChunk->finishReason->name
-                            ]
-                        ]);
-                        break;
-                    }
-
-                    switch ($textChunk->chunkType) {
-                        case ChunkType::Text:
-                            $fullAnswer .= $textChunk->text;
-                            Broadcast::channel($channel)->send([
-                                'event' => 'ChatResponseChunk',
-                                'data' => [
-                                    'type' => 'text',
-                                    'content' => $textChunk->text
-                                ]
-                            ]);
+                    /** @var \Prism\Prism\Text\Chunk $textChunk */
+                    foreach ($request->asStream() as $textChunk) {
+                        if ($textChunk->finishReason !== null) {
+                            // Save the complete response to database
+                            app(AddChatMessage::class)->addAssistantMessage($session, $fullAnswer);
                             break;
+                        }
 
-                        case ChunkType::Thinking:
-                            Broadcast::channel($channel)->send([
-                                'event' => 'ChatResponseChunk',
-                                'data' => ['type' => 'thinking']
-                            ]);
-                            break;
-
-                        case ChunkType::ToolCall:
-                            foreach ($textChunk->toolCalls as $toolCall) {
-                                Broadcast::channel($channel)->send([
-                                    'event' => 'ChatResponseChunk',
-                                    'data' => [
-                                        'type' => 'tool_call',
-                                        'tool_name' => $toolCall->name
-                                    ]
-                                ]);
-                            }
-                            break;
-
-                        case ChunkType::ToolResult:
-                            foreach ($textChunk->toolResults as $toolResult) {
-                                Broadcast::channel($channel)->send([
-                                    'event' => 'ChatResponseChunk',
-                                    'data' => [
-                                        'type' => 'tool_result',
-                                        'tool_name' => $toolResult->toolName
-                                    ]
-                                ]);
-                            }
-                            break;
-
-                        case ChunkType::Meta:
-                            Broadcast::channel($channel)->send([
-                                'event' => 'ChatResponseChunk',
-                                'data' => [
-                                    'type' => 'meta',
-                                    'model' => $textChunk->meta->model,
-                                    'id' => $textChunk->meta->id
-                                ]
-                            ]);
-                            break;
-                    }
-                }
-            } catch (PrismException $e) {
-                Broadcast::channel($channel)->send([
-                    'event' => 'ChatResponseChunk',
-                    'data' => [
-                        'type' => 'error',
-                        'message' => 'Connection Error: ' . $e->getMessage()
-                    ]
-                ]);
-                report($e);
-            } catch (\Exception $e) {
-                Broadcast::channel($channel)->send([
-                    'event' => 'ChatResponseChunk',
-                    'data' => [
-                        'type' => 'error',
-                        'message' => 'Reply Error: ' . $e->getMessage()
-                    ]
-                ]);
-                report($e);
-            }
+                        event(
+                            new NewChatMessage(
+                                session: $session,
+                                content: $textChunk->text ?? '',
+                                type: $textChunk->chunkType
+                            )
+                        );
+                    };
+                },
+            );
         });
 
         return response()->json([
