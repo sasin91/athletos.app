@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import OnboardingLayout from '@/components/onboarding-layout';
 
 interface ExperienceLevel {
   value: string;
@@ -26,7 +27,7 @@ interface MuscleGroup {
   label: string;
 }
 
-interface ProfileData {
+type ProfileData = {
   experience_level: string;
   primary_goal: string;
   muscle_groups: string[];
@@ -34,7 +35,7 @@ interface ProfileData {
   top_squat: string;
   top_bench: string;
   top_deadlift: string;
-}
+};
 
 interface Props {
   user: any;
@@ -73,20 +74,12 @@ export default function Profile({ user, athlete, onboarding, experienceLevels, t
     <>
       <Head title="Profile Setup - Athletos" />
       
-      <div className="relative min-h-full bg-white dark:bg-gray-900">
-        {/* Background gradients */}
-        <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80" aria-hidden="true">
-          <div className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#ff80b5] to-[#9089fc] opacity-30 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]" style={{ clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)' }}></div>
-        </div>
-        <div className="absolute inset-x-0 top-[calc(100%-13rem)] -z-10 transform-gpu overflow-hidden blur-3xl sm:top-[calc(100%-30rem)]" aria-hidden="true">
-          <div className="relative left-[calc(50%+3rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 bg-gradient-to-tr from-[#ff80b5] to-[#9089fc] opacity-30 sm:left-[calc(50%+36rem)] sm:w-[72.1875rem]" style={{ clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)' }}></div>
-        </div>
-
+      <OnboardingLayout title="Profile Setup">
         <div className="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8">
+          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-xl rounded-lg p-8 border border-gray-200/20 dark:border-gray-700/20">
             <div className="text-center mb-8">
               <div className="mx-auto h-16 w-16 bg-gradient-to-r from-pink-100 to-violet-100 dark:from-pink-900/20 dark:to-violet-900/20 rounded-full flex items-center justify-center mb-4">
-                <UserIcon className="h-8 w-8 bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent" />
+                <UserIcon className="h-8 w-8 text-pink-500" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Tell Us About Yourself</h2>
               <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
@@ -277,7 +270,7 @@ export default function Profile({ user, athlete, onboarding, experienceLevels, t
             </form>
           </div>
         </div>
-      </div>
+      </OnboardingLayout>
     </>
   );
 }

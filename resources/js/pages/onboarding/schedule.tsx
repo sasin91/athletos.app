@@ -1,6 +1,11 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { route } from '@/lib/wayfinder';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import OnboardingLayout from '@/components/onboarding-layout';
 
 interface Weekday {
   value: string;
@@ -13,12 +18,12 @@ interface TrainingTime {
   timeRange: string;
 }
 
-interface ScheduleData {
+type ScheduleData = {
   training_days: string[];
   training_frequency: string;
   preferred_time: string;
   session_duration: string;
-}
+};
 
 interface Props {
   user: any;
@@ -31,7 +36,7 @@ interface Props {
 export default function Schedule({ user, athlete, onboarding, weekdays, trainingTimes }: Props) {
   const { data, setData, post, processing, errors } = useForm<ScheduleData>({
     training_days: athlete?.training_days || [],
-    training_frequency: athlete?.training_frequency || '',
+    training_frequency: athlete?.training_frequency || '1w',
     preferred_time: athlete?.preferred_time || '',
     session_duration: athlete?.session_duration ? athlete.session_duration.toString() : '',
   });
@@ -46,7 +51,13 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    post(route['onboarding.schedule.store']().url);
+    
+    post(route['onboarding.schedule.store']().url, {
+      transform: (data) => ({
+        ...data,
+        training_frequency: data.training_frequency === '1w' ? '' : data.training_frequency,
+      }),
+    });
   };
 
   const sessionDurationOptions = [
@@ -58,7 +69,7 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
   ];
 
   const trainingFrequencyOptions = [
-    { value: '', label: 'Every week (standard)' },
+    { value: '1w', label: 'Every week' },
     { value: '2w', label: 'Every other week (1 week on, 1 week off)' },
     { value: '3w', label: 'Every 3 weeks (1 week on, 2 weeks off)' },
     { value: '4w', label: 'Every 4 weeks (1 week on, 3 weeks off)' },
@@ -68,12 +79,12 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
     <>
       <Head title="Training Schedule - Athletos" />
       
-      <div className="min-h-full bg-gray-50 dark:bg-gray-900">
+      <OnboardingLayout title="Set Your Training Schedule">
         <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8">
+          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-xl rounded-lg p-8 border border-gray-200/20 dark:border-gray-700/20">
             <div className="text-center mb-8">
-              <div className="mx-auto h-16 w-16 bg-purple-100 dark:bg-purple-900/20 rounded-full flex items-center justify-center mb-4">
-                <CalendarIcon className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+              <div className="mx-auto h-16 w-16 bg-gradient-to-r from-pink-100 to-violet-100 dark:from-pink-900/20 dark:to-violet-900/20 rounded-full flex items-center justify-center mb-4">
+                <CalendarIcon className="h-8 w-8 text-pink-500" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Set Your Training Schedule</h2>
               <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
@@ -94,7 +105,7 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
                         key={weekday.value}
                         className={`relative flex flex-col items-center justify-center rounded-lg border-2 bg-white dark:bg-gray-700 p-4 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600 cursor-pointer transition-all ${
                           data.training_days.includes(weekday.value)
-                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                            ? 'border-pink-600 bg-gradient-to-r from-pink-50 to-violet-50 dark:from-pink-900/20 dark:to-violet-900/20 text-pink-600 dark:text-pink-400'
                             : 'border-gray-300 dark:border-gray-600'
                         }`}
                       >
@@ -124,19 +135,18 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
                     <label htmlFor="training_frequency" className="block text-sm font-medium text-gray-900 dark:text-gray-100">
                       Training Pattern
                     </label>
-                    <select
-                      id="training_frequency"
-                      name="training_frequency"
-                      value={data.training_frequency}
-                      onChange={(e) => setData('training_frequency', e.target.value)}
-                      className="mt-2 w-full rounded-md bg-white dark:bg-gray-700 py-2 px-3 text-base text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                    >
-                      {trainingFrequencyOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <Select value={data.training_frequency} onValueChange={(value) => setData('training_frequency', value)}>
+                      <SelectTrigger className="mt-2">
+                        <SelectValue placeholder="Select training pattern" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {trainingFrequencyOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                       Choose a pattern that fits your recovery needs and schedule
                     </p>
@@ -151,20 +161,18 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
                     <label htmlFor="preferred_time" className="block text-sm font-medium text-gray-900 dark:text-gray-100">
                       Preferred Training Time
                     </label>
-                    <select
-                      id="preferred_time"
-                      name="preferred_time"
-                      value={data.preferred_time}
-                      onChange={(e) => setData('preferred_time', e.target.value)}
-                      className="mt-2 w-full rounded-md bg-white dark:bg-gray-700 py-2 px-3 text-base text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                    >
-                      <option value="">Select your preferred time</option>
-                      {trainingTimes.map((time) => (
-                        <option key={time.value} value={time.value}>
-                          {time.label} ({time.timeRange})
-                        </option>
-                      ))}
-                    </select>
+                    <Select value={data.preferred_time} onValueChange={(value) => setData('preferred_time', value)}>
+                      <SelectTrigger className="mt-2">
+                        <SelectValue placeholder="Select your preferred time" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {trainingTimes.map((time) => (
+                          <SelectItem key={time.value} value={time.value}>
+                            {time.label} ({time.timeRange})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {errors.preferred_time && (
                       <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.preferred_time}</p>
                     )}
@@ -174,20 +182,18 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
                     <label htmlFor="session_duration" className="block text-sm font-medium text-gray-900 dark:text-gray-100">
                       Session Duration (minutes)
                     </label>
-                    <select
-                      id="session_duration"
-                      name="session_duration"
-                      value={data.session_duration}
-                      onChange={(e) => setData('session_duration', e.target.value)}
-                      className="mt-2 w-full rounded-md bg-white dark:bg-gray-700 py-2 px-3 text-base text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                    >
-                      <option value="">Select duration</option>
-                      {sessionDurationOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <Select value={data.session_duration} onValueChange={(value) => setData('session_duration', value)}>
+                      <SelectTrigger className="mt-2">
+                        <SelectValue placeholder="Select duration" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sessionDurationOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {errors.session_duration && (
                       <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.session_duration}</p>
                     )}
@@ -196,26 +202,25 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
               </div>
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
-                <Link
-                  href={route['onboarding.plan']().url}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <ChevronLeftIcon className="mr-2 h-4 w-4" />
-                  Back
-                </Link>
-                <button
+                <Button variant="outline" asChild>
+                  <Link href={route['onboarding.plan']().url}>
+                    <ChevronLeftIcon className="mr-2 h-4 w-4" />
+                    Back
+                  </Link>
+                </Button>
+                <Button
                   type="submit"
                   disabled={processing}
-                  className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="px-6 py-3"
                 >
                   {processing ? 'Saving...' : 'Continue'}
                   <ChevronRightIcon className="ml-2 h-4 w-4" />
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
-      </div>
+      </OnboardingLayout>
     </>
   );
 }

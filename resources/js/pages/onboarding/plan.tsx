@@ -2,6 +2,8 @@ import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import { ChevronRightIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline';
 import { route } from '@/lib/wayfinder';
+import { Button } from '@/components/ui/button';
+import OnboardingLayout from '@/components/onboarding-layout';
 
 interface TrainingPlan {
   id: number;
@@ -10,9 +12,9 @@ interface TrainingPlan {
   phases?: any[];
 }
 
-interface PlanData {
+type PlanData = {
   selected_plan_id: string;
-}
+};
 
 interface Props {
   user: any;
@@ -45,12 +47,12 @@ export default function Plan({ user, athlete, onboarding, trainingPlans }: Props
     <>
       <Head title="Choose Training Plan - Athletos" />
       
-      <div className="min-h-full bg-gray-50 dark:bg-gray-900">
+      <OnboardingLayout title="Choose Your Training Plan">
         <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8">
+          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-xl rounded-lg p-8 border border-gray-200/20 dark:border-gray-700/20">
             <div className="text-center mb-8">
-              <div className="mx-auto h-16 w-16 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center mb-4">
-                <ClipboardDocumentListIcon className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              <div className="mx-auto h-16 w-16 bg-gradient-to-r from-pink-100 to-violet-100 dark:from-pink-900/20 dark:to-violet-900/20 rounded-full flex items-center justify-center mb-4">
+                <ClipboardDocumentListIcon className="h-8 w-8 text-pink-500" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Choose Your Training Plan</h2>
               <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
@@ -72,8 +74,8 @@ export default function Plan({ user, athlete, onboarding, trainingPlans }: Props
                       key={plan.id}
                       className={`relative rounded-lg border-2 p-6 cursor-pointer transition-all ${
                         selectedPlan?.id === plan.id
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                          ? 'border-pink-500 bg-gradient-to-r from-pink-50 to-violet-50 dark:from-pink-900/20 dark:to-violet-900/20 shadow-md'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-pink-300 dark:hover:border-pink-500 hover:shadow-md'
                       }`}
                       onClick={() => handlePlanSelection(plan)}
                     >
@@ -85,7 +87,7 @@ export default function Plan({ user, athlete, onboarding, trainingPlans }: Props
                             value={plan.id}
                             checked={selectedPlan?.id === plan.id}
                             onChange={() => handlePlanSelection(plan)}
-                            className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                            className="h-4 w-4 border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600 dark:bg-gray-700"
                           />
                         </div>
                         <div className="ml-3 flex-1">
@@ -116,25 +118,27 @@ export default function Plan({ user, athlete, onboarding, trainingPlans }: Props
               )}
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
-                <a
-                  href={route['onboarding.profile']().url}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                <Button
+                  variant="outline"
+                  asChild
                 >
-                  Back
-                </a>
-                <button
+                  <a href={route['onboarding.profile']().url}>
+                    Back
+                  </a>
+                </Button>
+                <Button
                   type="submit"
                   disabled={processing || !selectedPlan}
-                  className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="px-6 py-3"
                 >
                   {processing ? 'Saving...' : 'Continue'}
                   <ChevronRightIcon className="ml-2 h-4 w-4" />
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
-      </div>
+      </OnboardingLayout>
     </>
   );
 }

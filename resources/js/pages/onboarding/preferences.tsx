@@ -1,6 +1,10 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { CogIcon, ChevronLeftIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { route } from '@/lib/wayfinder';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import OnboardingLayout from '@/components/onboarding-layout';
 
 interface Difficulty {
   value: string;
@@ -8,10 +12,10 @@ interface Difficulty {
   description: string;
 }
 
-interface PreferencesData {
+type PreferencesData = {
   difficulty_preference: string;  
   notifications: string[];
-}
+};
 
 interface Props {
   user: any;
@@ -50,12 +54,12 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
     <>
       <Head title="Preferences - Athletos" />
       
-      <div className="min-h-full bg-gray-50 dark:bg-gray-900">
+      <OnboardingLayout title="Training Preferences">
         <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-8">
+          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-xl rounded-lg p-8 border border-gray-200/20 dark:border-gray-700/20">
             <div className="text-center mb-8">
-              <div className="mx-auto h-16 w-16 bg-indigo-100 dark:bg-indigo-900/20 rounded-full flex items-center justify-center mb-4">
-                <CogIcon className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+              <div className="mx-auto h-16 w-16 bg-gradient-to-r from-pink-100 to-violet-100 dark:from-pink-900/20 dark:to-violet-900/20 rounded-full flex items-center justify-center mb-4">
+                <CogIcon className="h-8 w-8 text-pink-500" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Set Your Preferences</h2>
               <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">
@@ -77,9 +81,9 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
                     {difficulties.map((difficulty) => (
                       <label
                         key={difficulty.value}
-                        className={`relative flex items-center p-4 rounded-lg border-2 hover:border-blue-300 dark:hover:border-blue-600 cursor-pointer transition-colors ${
+                        className={`relative flex items-center p-4 rounded-lg border-2 hover:border-pink-300 dark:hover:border-pink-600 cursor-pointer transition-colors ${
                           data.difficulty_preference === difficulty.value
-                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                            ? 'border-pink-600 bg-gradient-to-r from-pink-50 to-violet-50 dark:from-pink-900/20 dark:to-violet-900/20'
                             : 'border-gray-300 dark:border-gray-600'
                         }`}
                       >
@@ -89,7 +93,7 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
                           value={difficulty.value}
                           checked={data.difficulty_preference === difficulty.value}
                           onChange={(e) => setData('difficulty_preference', e.target.value)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
+                          className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 dark:border-gray-600"
                         />
                         <div className="ml-4">
                           <div className="text-base font-medium text-gray-900 dark:text-gray-100">
@@ -121,7 +125,7 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
                         key={option.value}
                         className={`relative flex items-center p-3 rounded-lg border hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors ${
                           data.notifications.includes(option.value)
-                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600'
+                            ? 'bg-gradient-to-r from-pink-50 to-violet-50 dark:from-pink-900/20 dark:to-violet-900/20 border-pink-300 dark:border-pink-600'
                             : 'border-gray-300 dark:border-gray-600'
                         }`}
                       >
@@ -130,7 +134,7 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
                           value={option.value}
                           checked={data.notifications.includes(option.value)}
                           onChange={(e) => handleNotificationChange(option.value, e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded"
+                          className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 dark:border-gray-600 rounded"
                         />
                         <div className="ml-3">
                           <div className="text-base font-medium text-gray-900 dark:text-gray-100">
@@ -147,26 +151,25 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
               </div>
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
-                <Link
-                  href={route['onboarding.stats']().url}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  <ChevronLeftIcon className="mr-2 h-4 w-4" />
-                  Back
-                </Link>
-                <button
+                <Button variant="outline" asChild>
+                  <Link href={route['onboarding.stats']().url}>
+                    <ChevronLeftIcon className="mr-2 h-4 w-4" />
+                    Back
+                  </Link>
+                </Button>
+                <Button
                   type="submit"
                   disabled={processing}
-                  className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+                  className="px-6 py-3 bg-gradient-to-r from-pink-500 to-violet-500 hover:from-pink-600 hover:to-violet-600"
                 >
                   {processing ? 'Completing...' : 'Complete Setup'}
                   <CheckIcon className="ml-2 h-4 w-4" />
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
-      </div>
+      </OnboardingLayout>
     </>
   );
 }

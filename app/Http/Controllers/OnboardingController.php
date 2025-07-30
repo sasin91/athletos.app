@@ -84,9 +84,8 @@ class OnboardingController extends Controller
             'top_deadlift' => (int) $validated['top_deadlift'],
         ]);
 
-        // Find next incomplete step or redirect to dashboard if all complete
-        $nextStep = $this->getNextIncompleteStep($user);
-        return redirect($nextStep)->with('success', 'Profile updated successfully!');
+        // Note: Athlete was already updated above, just need to redirect
+        return $this->next($user, 'Profile updated successfully!');
     }
 
     /**
@@ -123,15 +122,10 @@ class OnboardingController extends Controller
             'selected_plan_id' => 'required|exists:training_plans,id',
         ]);
 
-        $user->athlete()->update(
-            [
-                'current_plan_id' => $validated['selected_plan_id'],
-                'plan_start_date' => now(),
-            ]
-        );
-
-        $nextStep = $this->getNextIncompleteStep($user);
-        return redirect($nextStep)->with('success', 'Training plan selected!');
+        return $this->next($user, 'Training plan selected!', [
+            'current_plan_id' => $validated['selected_plan_id'],
+            'plan_start_date' => now(),
+        ]);
     }
 
     /**
@@ -168,15 +162,12 @@ class OnboardingController extends Controller
 
         $validated = $request->validate([
             'training_days' => 'required|array|min:1',
-            'training_frequency' => 'nullable|string|in:2w,3w,4w',
+            'training_frequency' => 'nullable|string|in:1w,2w,3w,4w',
             'preferred_time' => ['required', Rule::enum(TrainingTime::class)],
             'session_duration' => 'required|integer|in:45,60,75,90,120',
         ]);
 
-        $user->athlete()->update($validated);
-
-        $nextStep = $this->getNextIncompleteStep($user);
-        return redirect($nextStep)->with('success', 'Training schedule set!');
+        return $this->next($user, 'Training schedule set!', $validated);
     }
 
     /**
@@ -214,8 +205,8 @@ class OnboardingController extends Controller
             'current_deadlift' => (int) $validated['current_deadlift'],
         ]);
 
-        $nextStep = $this->getNextIncompleteStep($user);
-        return redirect($nextStep)->with('success', 'Stats updated!');
+        // Refresh and redirect (no athlete update needed, just performance indicators)
+        return $this->next($user, 'Stats updated!');
     }
 
     /**
@@ -255,6 +246,10 @@ class OnboardingController extends Controller
             'notification_preferences' => $validated['notifications'] ?? [],
             'difficulty_preference' => $validated['difficulty_preference']
         ]);
+        
+        // Refresh the user model to ensure onboarding status is current
+        $user->refresh();
+        $user->load('athlete');
 
         // If all onboarding steps are now complete, run the final setup
         if ($user->onboarding()->finished()) {
@@ -263,6 +258,23 @@ class OnboardingController extends Controller
 
         $nextStep = $this->getNextIncompleteStep($user);
         return redirect($nextStep)->with('success', 'Preferences saved!');
+    }
+
+    /**
+     * Update athlete data (if provided) and redirect to next onboarding step
+     */
+    private function next(User $user, string $successMessage, array $attributes = []): \Illuminate\Http\RedirectResponse
+    {
+        if (filled($attributes)) {
+            $user->athlete()->update($attributes);
+        }
+        
+        // Refresh the user model to ensure onboarding status is current
+        $user->refresh();
+        $user->load('athlete');
+
+        $nextStep = $this->getNextIncompleteStep($user);
+        return redirect($nextStep)->with('success', $successMessage);
     }
 
     /**
