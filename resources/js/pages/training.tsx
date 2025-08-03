@@ -1,7 +1,7 @@
 import { Head, useForm, router } from '@inertiajs/react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalStorage } from '@uidotdev/usehooks';
-import { route } from '@/lib/wayfinder';
+import { dashboard } from '@/routes';
 import AppLayout from '@/layouts/app-layout';
 
 type SavedCallback = (data?: any) => void;
@@ -1082,7 +1082,7 @@ export default function TrainingShow({
             {/* Back to Dashboard */}
             <div className="relative group">
               <a
-                href={route.dashboard().url}
+                href={dashboard.url()}
                 className="inline-flex items-center justify-center w-12 h-12 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-gray-100 bg-gray-800 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

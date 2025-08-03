@@ -4,7 +4,7 @@ import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { type User } from '@/types';
 import { Link, router } from '@inertiajs/react'; // Keep router for flushAll
 import { LogOut, Settings } from 'lucide-react';
-import { route } from '@/lib/wayfinder';
+import settings from '@/routes/settings';
 
 interface UserMenuContentProps {
     user: User;
@@ -28,7 +28,7 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
                 <DropdownMenuItem asChild>
-                    <Link className="block w-full" href={route['settings.profile.edit']().url} as="button" prefetch onClick={cleanup}>
+                    <Link className="block w-full" href={settings.profile.edit.url()} as="button" prefetch onClick={cleanup}>
                         <Settings className="mr-2" />
                         Settings
                     </Link>

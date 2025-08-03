@@ -1,6 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import SettingsLayout from '@/layouts/settings-layout';
-import { route } from '@/lib/wayfinder';
+import settings from '@/routes/settings';
 
 interface ExperienceLevel {
   value: string;
@@ -95,7 +95,7 @@ export default function AthleteProfile({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    put(route['settings.athlete-profile.update']().url);
+    put(settings.athleteProfile.update.url());
   };
 
   const weekdays = [

@@ -2,13 +2,15 @@ import { FormEventHandler } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
 import AuthLayout from '@/layouts/auth-layout';
 import { Button } from '@/components/ui/button';
+import verification from '@/routes/verification';
+import { logout } from '@/routes';
 
 export default function VerifyEmail({ status }: { status?: string }) {
     const { post, processing } = useForm({});
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        post(route('verification.send'));
+        post(verification.send.url());
     };
 
     return (
@@ -33,7 +35,7 @@ export default function VerifyEmail({ status }: { status?: string }) {
 
                 <div className="text-center">
                     <Link
-                        href={route('logout')}
+                        href={logout.url()}
                         method="post"
                         as="button"
                         className="text-sm text-muted-foreground hover:text-foreground underline"

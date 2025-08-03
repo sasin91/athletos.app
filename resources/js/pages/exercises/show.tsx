@@ -1,7 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
 import AppLayout from '@/layouts/app-layout';
-import { route } from '@/lib/wayfinder';
 
 interface Exercise {
   value: string;

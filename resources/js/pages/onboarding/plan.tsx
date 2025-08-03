@@ -1,7 +1,7 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import { ChevronRightIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline';
-import { route } from '@/lib/wayfinder';
+import onboarding from '@/routes/onboarding';
 import { Button } from '@/components/ui/button';
 import OnboardingLayout from '@/components/onboarding-layout';
 
@@ -40,7 +40,7 @@ export default function Plan({ user, athlete, onboarding, trainingPlans }: Props
     if (!data.selected_plan_id) {
       return;
     }
-    post(route['onboarding.plan.store']().url);
+    post(onboarding.plan.store.url());
   };
 
   return (
@@ -122,7 +122,7 @@ export default function Plan({ user, athlete, onboarding, trainingPlans }: Props
                   variant="outline"
                   asChild
                 >
-                  <a href={route['onboarding.profile']().url}>
+                  <a href={onboarding.profile.url()}>
                     Back
                   </a>
                 </Button>

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import HeadingSmall from '@/components/heading-small';
-import { route } from '@/lib/wayfinder';
+import settings from '@/routes/settings';
 
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
@@ -18,7 +18,7 @@ export default function DeleteUser() {
     const deleteUser: FormEventHandler = (e) => {
         e.preventDefault();
 
-        destroy(route['settings.profile.destroy']().url, {
+        destroy(settings.profile.destroy.url(), {
             preserveScroll: true,
             onSuccess: () => closeModal(),
             onError: () => passwordInput.current?.focus(),

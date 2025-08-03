@@ -2,10 +2,9 @@ import ChatHeader from '@/components/chat/chat-header';
 import ChatInput from '@/components/chat/chat-input';
 import ChatMessageList from '@/components/chat/chat-message-list';
 import ChatSidebar from '@/components/chat/chat-sidebar';
-import { Head, router } from '@inertiajs/react';
-import { useEcho } from '@laravel/echo-react';
+import { Head } from '@inertiajs/react';
+import { useEventStream } from '@laravel/stream-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 
 interface ChatMessage {
   id: number;
@@ -25,39 +24,18 @@ interface ChatPageProps {
   session: ChatSession;
   messages: ChatMessage[];
   sessions?: ChatSession[] | null;
+  basePlan?: { id: number } | null;
+  streamUrl: string;
 }
 
-export default function ChatPage({ session, messages, sessions = null }: ChatPageProps) {
-  const [answer, setAnswer] = useState<string>('');
-  const [question, setQuestion] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  useEcho<{ content: string }>(
-    `chat.${session.id}`,
-    'NewChatMessage',
-    (event) => {
-      setAnswer(prev => prev + event.content);
+export default function ChatPage({ session, messages, sessions = null, streamUrl }: ChatPageProps) {
+  const [question, setQuestion] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { message: answer } = useEventStream(streamUrl, {
+    onComplete: () => {
+      setIsLoading(false);
     }
-  );
-
-
-  const submitReply = async (reply: string) => {
-    setIsLoading(true);
-    router.post(`/chat/${session?.id}/reply`, {
-      content: reply,
-    }, {
-      onSuccess: () => {
-        // Clear the input after successful submission
-        setQuestion('');
-      },
-      onError: (error) => {
-        toast.error(error.message || 'An error occurred while sending your message.');
-      },
-      onFinish: () => {
-        setIsLoading(false);
-      }
-    })
-  }
+  });
 
   return (
     <>
@@ -76,7 +54,10 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
           />
 
           <ChatInput
-            onSubmit={submitReply}
+            onSubmit={(prompt) => {
+              setQuestion(prompt);
+              setIsLoading(true);
+            }}
             isLoading={isLoading}
             placeholder="Ask me anything about your training..."
           />

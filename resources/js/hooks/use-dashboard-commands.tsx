@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { routes } from '@/lib/wayfinder';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { Calendar, Dumbbell, TrendingUp, Search } from 'lucide-react';
 

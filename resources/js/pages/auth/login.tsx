@@ -1,11 +1,12 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 import AuthLayout from '@/layouts/auth-layout';
-import { route } from '@/lib/wayfinder';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { login, register } from '@/routes';
+import password from '@/routes/password';
 
 type LoginData = {
   email: string;
@@ -28,7 +29,7 @@ export default function Login({ status, canResetPassword }: Props) {
   const submit: FormEventHandler = (e) => {
     e.preventDefault();
 
-    post(route.login().url, {
+    post(login.url(), {
       onFinish: () => reset('password'),
     });
   };
@@ -91,7 +92,7 @@ export default function Login({ status, canResetPassword }: Props) {
               )}
               {canResetPassword && (
                 <Link
-                  href={route['password.request']().url}
+                  href={password.request.url()}
                   className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   Forgot password?
@@ -128,7 +129,7 @@ export default function Login({ status, canResetPassword }: Props) {
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Don't have an account?{' '}
               <Link
-                href={route.register().url}
+                href={register.url()}
                 className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
               >
                 Sign up

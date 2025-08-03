@@ -1,7 +1,7 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import SettingsLayout from '@/layouts/settings-layout';
-import { route } from '@/lib/wayfinder';
+import settings from '@/routes/settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,7 +31,7 @@ export default function Profile({ user }: Props) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    put(route['settings.profile.update']().url, {
+    put(settings.profile.update.url(), {
       onSuccess: () => {
         // Form will be reset automatically on successful update
       },
@@ -40,7 +40,7 @@ export default function Profile({ user }: Props) {
 
   const handleDeleteAccount = () => {
     if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-      deleteAccount(route['settings.profile.destroy']().url);
+      deleteAccount(settings.profile.destroy.url());
     }
   };
 

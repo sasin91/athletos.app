@@ -1,7 +1,7 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import { ChevronRightIcon, UserIcon } from '@heroicons/react/24/outline';
-import { route } from '@/lib/wayfinder';
+import onboarding from '@/routes/onboarding';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,7 +67,7 @@ export default function Profile({ user, athlete, onboarding, experienceLevels, t
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    post(route['onboarding.profile.store']().url);
+    post(onboarding.profile.store.url());
   };
 
   return (

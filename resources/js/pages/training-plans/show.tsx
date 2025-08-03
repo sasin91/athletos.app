@@ -1,7 +1,7 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
 import AppLayout from '@/layouts/app-layout';
-import { route } from '@/lib/wayfinder';
+import trainingPlans from '@/routes/training-plans';
 
 interface Exercise {
   exercise: string;
@@ -57,7 +57,7 @@ export default function Show({ trainingPlan, auth }: Props) {
   const isCurrentPlan = auth.user.athlete?.current_plan_id === trainingPlan.id;
 
   const assignPlan = () => {
-    post(route['training-plans.assign']({ trainingPlan: trainingPlan.id }).url);
+    post(trainingPlans.assign.url({ trainingPlan: trainingPlan.id }));
   };
 
   const getExerciseDisplayName = (exerciseValue: string): string => {

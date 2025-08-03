@@ -1,6 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ChartBarIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import { route } from '@/lib/wayfinder';
+import onboarding from '@/routes/onboarding';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,7 +27,7 @@ export default function Stats({ user, athlete, onboarding }: Props) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    post(route['onboarding.stats.store']().url);
+    post(onboarding.stats.store.url());
   };
 
   return (
@@ -126,7 +126,7 @@ export default function Stats({ user, athlete, onboarding }: Props) {
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="outline" asChild>
-                  <Link href={route['onboarding.schedule']().url}>
+                  <Link href={onboarding.schedule.url()}>
                     <ChevronLeftIcon className="mr-2 h-4 w-4" />
                     Back
                   </Link>

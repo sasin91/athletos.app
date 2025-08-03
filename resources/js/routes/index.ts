@@ -106,7 +106,7 @@ dashboard.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): 
 })
 
 /**
-* @see routes/web.php:72
+* @see routes/web.php:71
 * @route '/terms'
 */
 export const terms = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -123,7 +123,7 @@ terms.definition = {
 }
 
 /**
-* @see routes/web.php:72
+* @see routes/web.php:71
 * @route '/terms'
 */
 terms.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
@@ -131,7 +131,7 @@ terms.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
 }
 
 /**
-* @see routes/web.php:72
+* @see routes/web.php:71
 * @route '/terms'
 */
 terms.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -143,7 +143,7 @@ terms.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 })
 
 /**
-* @see routes/web.php:72
+* @see routes/web.php:71
 * @route '/terms'
 */
 terms.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -155,7 +155,7 @@ terms.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 })
 
 /**
-* @see routes/web.php:73
+* @see routes/web.php:72
 * @route '/privacy'
 */
 export const privacy = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -172,7 +172,7 @@ privacy.definition = {
 }
 
 /**
-* @see routes/web.php:73
+* @see routes/web.php:72
 * @route '/privacy'
 */
 privacy.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
@@ -180,7 +180,7 @@ privacy.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
 }
 
 /**
-* @see routes/web.php:73
+* @see routes/web.php:72
 * @route '/privacy'
 */
 privacy.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -192,7 +192,7 @@ privacy.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 })
 
 /**
-* @see routes/web.php:73
+* @see routes/web.php:72
 * @route '/privacy'
 */
 privacy.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -204,7 +204,7 @@ privacy.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 })
 
 /**
-* @see routes/web.php:74
+* @see routes/web.php:73
 * @route '/about'
 */
 export const about = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -221,7 +221,7 @@ about.definition = {
 }
 
 /**
-* @see routes/web.php:74
+* @see routes/web.php:73
 * @route '/about'
 */
 about.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
@@ -229,7 +229,7 @@ about.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
 }
 
 /**
-* @see routes/web.php:74
+* @see routes/web.php:73
 * @route '/about'
 */
 about.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -241,7 +241,7 @@ about.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 })
 
 /**
-* @see routes/web.php:74
+* @see routes/web.php:73
 * @route '/about'
 */
 about.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {

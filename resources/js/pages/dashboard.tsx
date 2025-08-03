@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
-import { routes } from '@/lib/wayfinder';
+import { dashboard } from '@/routes';
+import dashboardRoutes from '@/routes/dashboard';
 import WeightProgressionChart from '@/components/weight-progression-chart';
 import ExerciseSummary from '@/components/exercise-summary';
 import DashboardHeader from '@/components/dashboard/dashboard-header';
@@ -80,9 +81,9 @@ export default function DashboardPage({
     setCurrentDate(newDate);
     setIsNavigating(true);
 
-    routes.dashboard({
-      date: newDate.toISOString().split('T')[0]
-    }, {
+    router.visit(dashboard.url({
+      query: { date: newDate.toISOString().split('T')[0] }
+    }), {
       preserveState: true,
       preserveScroll: true,
       onFinish: () => setIsNavigating(false),
@@ -90,7 +91,7 @@ export default function DashboardPage({
   };
 
   const handleStartTraining = () => {
-    routes.startTraining({
+    router.post(dashboardRoutes.startTraining.url(), {
       date: currentDate.toISOString().split('T')[0]
     });
   };
@@ -113,7 +114,7 @@ export default function DashboardPage({
 
   const handleSetTimeframe = (newTimeframe: string) => {
     setTimeframe(newTimeframe);
-    routes.dashboard({}, {
+    router.visit(dashboard.url(), {
       data: { timeframe: newTimeframe },
       preserveState: true,
       preserveScroll: true,

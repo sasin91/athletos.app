@@ -1,7 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 import AuthLayout from '@/layouts/auth-layout';
-import { route } from '@/lib/wayfinder';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

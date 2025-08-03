@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router } from '@inertiajs/react';
-import { route } from '@/lib/wayfinder';
+import chat from '@/routes/chat';
 import { PlusIcon, ChatBubbleLeftIcon, TrashIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface ChatSession {
@@ -98,7 +98,7 @@ export default function ChatSidebar({ currentSession = null, sessions = null }: 
                     }
                   `}
                   onClick={() => {
-                    router.visit(route['chat.show']({ session: session.id }).url);
+                    router.visit(chat.show.url({ session: session.id }));
                     setIsOpen(false);
                   }}
                 >
@@ -119,7 +119,7 @@ export default function ChatSidebar({ currentSession = null, sessions = null }: 
                         e.stopPropagation();
                         if (confirm('Are you sure you want to delete this chat?')) {
                           // TODO: Implement delete session API call
-                          router.delete(route['chat.show']({ session: session.id }).url);
+                          router.delete(chat.show.url({ session: session.id }));
                         }
                       }}
                       className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"

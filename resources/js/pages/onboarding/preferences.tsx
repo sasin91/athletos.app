@@ -1,6 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { CogIcon, ChevronLeftIcon, CheckIcon } from '@heroicons/react/24/outline';
-import { route } from '@/lib/wayfinder';
+import onboarding from '@/routes/onboarding';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -40,7 +40,7 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    post(route['onboarding.preferences.store']().url);
+    post(onboarding.preferences.store.url());
   };
 
   const notificationOptions = [
@@ -152,7 +152,7 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="outline" asChild>
-                  <Link href={route['onboarding.stats']().url}>
+                  <Link href={onboarding.stats.url()}>
                     <ChevronLeftIcon className="mr-2 h-4 w-4" />
                     Back
                   </Link>

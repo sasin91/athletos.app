@@ -9,23 +9,25 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { UserMenuContent } from '@/components/user-menu-content';
 import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
-import { routes } from '@/lib/wayfinder';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
-import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, Menu, Search, MessageCircle, Dumbbell } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { Dumbbell, LayoutGrid, Menu, MessageCircle, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
+import { dashboard } from '@/routes';
+import trainings from '@/routes/trainings';
+import chat from '@/routes/chat';
 
 const mainNavItems: NavItem[] = [
     {
         title: 'Dashboard',
-        href: '/dashboard',
+        href: dashboard.url(),
         icon: LayoutGrid,
     },
     {
         title: 'Trainings',
-        href: '/trainings',
+        href: trainings.index.url(),
         icon: Dumbbell,
     },
 ];
@@ -78,10 +80,6 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
             localStorage.setItem('appearance', 'light');
             setLight();
         }
-    };
-
-    const handleChatOpen = () => {
-        routes.chat();
     };
 
     return (
@@ -208,7 +206,9 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            onClick={handleChatOpen}
+                                            onClick={() => {
+                                                router.visit(chat.index.url());
+                                            }}
                                             className="group h-9 w-9 cursor-pointer relative"
                                         >
                                             <MessageCircle className="!size-5 opacity-80 group-hover:opacity-100" />

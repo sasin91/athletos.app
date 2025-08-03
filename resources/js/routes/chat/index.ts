@@ -1,7 +1,7 @@
 import { queryParams, type QueryParams } from './../../wayfinder'
 /**
 * @see \App\Http\Controllers\ChatController::index
-* @see app/Http/Controllers/ChatController.php:29
+* @see app/Http/Controllers/ChatController.php:28
 * @route '/chat'
 */
 export const index = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -19,7 +19,7 @@ index.definition = {
 
 /**
 * @see \App\Http\Controllers\ChatController::index
-* @see app/Http/Controllers/ChatController.php:29
+* @see app/Http/Controllers/ChatController.php:28
 * @route '/chat'
 */
 index.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
@@ -28,7 +28,7 @@ index.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
 
 /**
 * @see \App\Http\Controllers\ChatController::index
-* @see app/Http/Controllers/ChatController.php:29
+* @see app/Http/Controllers/ChatController.php:28
 * @route '/chat'
 */
 index.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -41,7 +41,7 @@ index.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\ChatController::index
-* @see app/Http/Controllers/ChatController.php:29
+* @see app/Http/Controllers/ChatController.php:28
 * @route '/chat'
 */
 index.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
@@ -129,70 +129,54 @@ show.head = (args: { session: number | { id: number } } | [session: number | { i
 
 /**
 * @see \App\Http\Controllers\ChatController::stream
-* @see app/Http/Controllers/ChatController.php:117
-* @route '/chat/stream/{streamId}'
+* @see app/Http/Controllers/ChatController.php:73
+* @route '/chat/stream'
 */
-export const stream = (args: { streamId: string | number } | [streamId: string | number ] | string | number, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
+export const stream = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
 } => ({
-    url: stream.url(args, options),
+    url: stream.url(options),
     method: 'get',
 })
 
 stream.definition = {
     methods: ['get','head'],
-    url: '/chat/stream/{streamId}',
+    url: '/chat/stream',
 }
 
 /**
 * @see \App\Http\Controllers\ChatController::stream
-* @see app/Http/Controllers/ChatController.php:117
-* @route '/chat/stream/{streamId}'
+* @see app/Http/Controllers/ChatController.php:73
+* @route '/chat/stream'
 */
-stream.url = (args: { streamId: string | number } | [streamId: string | number ] | string | number, options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
-    if (typeof args === 'string' || typeof args === 'number') {
-        args = { streamId: args }
-    }
-
-    if (Array.isArray(args)) {
-        args = {
-            streamId: args[0],
-        }
-    }
-
-    const parsedArgs = {
-        streamId: args.streamId,
-    }
-
-    return stream.definition.url
-            .replace('{streamId}', parsedArgs.streamId.toString())
-            .replace(/\/+$/, '') + queryParams(options)
+stream.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
+    return stream.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\ChatController::stream
-* @see app/Http/Controllers/ChatController.php:117
-* @route '/chat/stream/{streamId}'
+* @see app/Http/Controllers/ChatController.php:73
+* @route '/chat/stream'
 */
-stream.get = (args: { streamId: string | number } | [streamId: string | number ] | string | number, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
+stream.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
 } => ({
-    url: stream.url(args, options),
+    url: stream.url(options),
     method: 'get',
 })
 
 /**
 * @see \App\Http\Controllers\ChatController::stream
-* @see app/Http/Controllers/ChatController.php:117
-* @route '/chat/stream/{streamId}'
+* @see app/Http/Controllers/ChatController.php:73
+* @route '/chat/stream'
 */
-stream.head = (args: { streamId: string | number } | [streamId: string | number ] | string | number, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
+stream.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
 } => ({
-    url: stream.url(args, options),
+    url: stream.url(options),
     method: 'head',
 })
 

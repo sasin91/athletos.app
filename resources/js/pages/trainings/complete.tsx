@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, Clock, Target, Zap } from 'lucide-react';
+import { dashboard } from '@/routes';
+import trainings from '@/routes/trainings';
 
 interface Training {
     id: number;
@@ -127,12 +129,12 @@ export default function TrainingComplete({
 
                     {/* Actions */}
                     <div className="flex gap-4 justify-center">
-                        <Button onClick={() => window.location.href = route('dashboard')}>
+                        <Button onClick={() => window.location.href = dashboard.url()}>
                             Back to Dashboard
                         </Button>
                         <Button 
                             variant="outline"
-                            onClick={() => window.location.href = route('trainings.index')}
+                            onClick={() => window.location.href = trainings.index.url()}
                         >
                             View All Trainings
                         </Button>

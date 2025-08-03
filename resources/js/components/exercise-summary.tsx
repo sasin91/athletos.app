@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { route } from '@/lib/wayfinder';
+import trainings from '@/routes/trainings';
 
 interface ExerciseSummaryItem {
   name: string;
@@ -37,13 +37,11 @@ export default function ExerciseSummary({
   };
 
   const handleStartTraining = () => {
-    const { url } = route['trainings.index']();
-    window.location.href = url;
+    window.location.href = trainings.index.url();
   };
 
   const handleViewTraining = (trainingId: number) => {
-    const { url } = route['trainings.show']({ training: trainingId });
-    window.location.href = url;
+    window.location.href = trainings.show.url({ training: trainingId });
   };
 
   if (!isVisible) return null;

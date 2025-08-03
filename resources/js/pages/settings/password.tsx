@@ -1,6 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import SettingsLayout from '@/layouts/settings-layout';
-import { route } from '@/lib/wayfinder';
+import settings from '@/routes/settings';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,7 +28,7 @@ export default function Password({ user }: Props) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    put(route['settings.password.update']().url, {
+    put(settings.password.update.url(), {
       onSuccess: () => {
         reset();
       },

@@ -1,6 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import { route } from '@/lib/wayfinder';
+import onboarding from '@/routes/onboarding';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -52,7 +52,7 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    post(route['onboarding.schedule.store']().url, {
+    post(onboarding.schedule.store.url(), {
       transform: (data) => ({
         ...data,
         training_frequency: data.training_frequency === '1w' ? '' : data.training_frequency,
@@ -203,7 +203,7 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="outline" asChild>
-                  <Link href={route['onboarding.plan']().url}>
+                  <Link href={onboarding.plan.url()}>
                     <ChevronLeftIcon className="mr-2 h-4 w-4" />
                     Back
                   </Link>

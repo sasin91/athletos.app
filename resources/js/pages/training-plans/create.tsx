@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { FormEventHandler } from 'react';
+import trainingPlans from '@/routes/training-plans';
 
 export default function CreateTrainingPlan() {
     const { data, setData, post, processing, errors } = useForm({
@@ -17,7 +18,7 @@ export default function CreateTrainingPlan() {
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        post(route('training-plans.store'));
+        post(trainingPlans.store.url());
     };
 
     return (

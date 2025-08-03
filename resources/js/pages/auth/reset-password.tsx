@@ -4,6 +4,7 @@ import AuthLayout from '@/layouts/auth-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import password from '@/routes/password';
 
 export default function ResetPassword({ 
     token, 
@@ -23,7 +24,7 @@ export default function ResetPassword({
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        post(route('password.store'), {
+        post(password.store.url(), {
             onFinish: () => reset('password', 'password_confirmation'),
         });
     };
