@@ -211,7 +211,7 @@ export default function Show({ trainingPlan, auth }: Props) {
               {/* Back Button */}
               <div className="mt-8">
                 <Link
-                  href={route.dashboard().url}
+                  href={dashboard.url()}
                   className="inline-flex items-center px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 text-sm font-medium rounded-lg transition-colors"
                 >
                   <ChevronLeftIcon className="w-4 h-4 mr-2" />

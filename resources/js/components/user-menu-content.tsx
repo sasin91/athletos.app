@@ -5,6 +5,7 @@ import { type User } from '@/types';
 import { Link, router } from '@inertiajs/react'; // Keep router for flushAll
 import { LogOut, Settings } from 'lucide-react';
 import settings from '@/routes/settings';
+import { logout } from '@/routes';
 
 interface UserMenuContentProps {
     user: User;
@@ -36,7 +37,7 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-                <Link className="block w-full" method="post" href={route.logout().url} as="button" onClick={handleLogout}>
+                <Link className="block w-full" method="post" href={logout.url()} as="button" onClick={handleLogout}>
                     <LogOut className="mr-2" />
                     Log out
                 </Link>

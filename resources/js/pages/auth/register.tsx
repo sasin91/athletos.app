@@ -4,6 +4,7 @@ import AuthLayout from '@/layouts/auth-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { register, login } from '@/routes';
 
 interface RegisterData {
   name: string;
@@ -23,7 +24,7 @@ export default function Register() {
   const submit: FormEventHandler = (e) => {
     e.preventDefault();
 
-    post(route.register().url, {
+    post(register.url(), {
       onFinish: () => reset('password', 'password_confirmation'),
     });
   };
@@ -137,7 +138,7 @@ export default function Register() {
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Already have an account?{' '}
               <Link
-                href={route.login().url}
+                href={login.url()}
                 className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
               >
                 Sign in

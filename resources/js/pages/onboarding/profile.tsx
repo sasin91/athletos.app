@@ -2,6 +2,7 @@ import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import { ChevronRightIcon, UserIcon } from '@heroicons/react/24/outline';
 import onboarding from '@/routes/onboarding';
+import { dashboard } from '@/routes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -254,7 +255,7 @@ export default function Profile({ user, athlete, onboarding, experienceLevels, t
                   variant="outline"
                   asChild
                 >
-                  <a href={route.dashboard().url}>
+                  <a href={dashboard.url()}>
                     Skip Setup
                   </a>
                 </Button>

@@ -1,6 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
 import AppLayout from '@/layouts/app-layout';
+import { dashboard } from '@/routes';
 
 interface Exercise {
   value: string;
@@ -31,7 +32,7 @@ export default function Show({ exercise, exerciseData }: Props) {
             {/* Back Button */}
             <div className="mb-6">
               <Link
-                href={route.dashboard().url}
+                href={dashboard.url()}
                 className="inline-flex items-center text-blue-600 dark:text-blue-400 hover:underline"
               >
                 <ChevronLeftIcon className="w-4 h-4 mr-1" />
