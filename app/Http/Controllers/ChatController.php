@@ -10,6 +10,7 @@ use App\Models\TrainingPlan;
 use App\Models\User;
 use App\Services\PrismFactory;
 use Illuminate\Container\Attributes\CurrentUser;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Response as IlluminateResponse;
@@ -40,8 +41,7 @@ class ChatController extends Controller
             'session' => $session,
             'messages' => $messages,
             'basePlan' => $user->athlete->currentPlan,
-            'sessions' => $sessions,
-            'streamUrl' => route('chat.stream', $session),
+            'sessions' => $sessions
         ]);
     }
 
@@ -60,93 +60,17 @@ class ChatController extends Controller
             'messages' => $messages,
             'basePlan' => null, // No base plan in this context
             'sessions' => $sessions,
-            'streamUrl' => route('chat.stream', $session),
         ]);
     }
 
-    /**
-     * Handle chat streaming using Laravel's SSE
-     */
-    public function stream(
-        ChatSession $session,    
-    )
-    {
+    public function create(
+        #[CurrentUser] User $user
+    ): RedirectResponse {
         Gate::authorize('isAthlete');
 
-        return IlluminateResponse::eventStream(function () use ($session) {
-            try {
-                $chatRequest = app(GenerateChatResponse::class)->execute($session, '');
-                $fullAnswer = '';
+        // Create a new chat session
+        $session = app(CreateChatSession::class)->execute($user->athlete->id);
 
-                foreach ($chatRequest->asStream() as $textChunk) {
-                    if ($textChunk->finishReason !== null) {
-                        // Save the complete response to database
-                        app(AddChatMessage::class)->addAssistantMessage($session, $fullAnswer);
-
-                        yield [
-                            'type' => 'finished',
-                            'reason' => $textChunk->finishReason->name,
-                            'session_id' => $session->id
-                        ];
-                        break;
-                    }
-
-                    switch ($textChunk->chunkType) {
-                        case ChunkType::Text:
-                            $fullAnswer .= $textChunk->text;
-                            yield [
-                                'type' => 'text',
-                                'content' => $textChunk->text
-                            ];
-                            break;
-
-                        case ChunkType::Thinking:
-                            yield [
-                                'type' => 'thinking'
-                            ];
-                            break;
-
-                        case ChunkType::ToolCall:
-                            foreach ($textChunk->toolCalls as $toolCall) {
-                                yield [
-                                    'type' => 'tool_call',
-                                    'tool_name' => $toolCall->name
-                                ];
-                            }
-                            break;
-
-                        case ChunkType::ToolResult:
-                            foreach ($textChunk->toolResults as $toolResult) {
-                                yield [
-                                    'type' => 'tool_result',
-                                    'tool_name' => $toolResult->toolName
-                                ];
-                            }
-                            break;
-
-                        case ChunkType::Meta:
-                            yield [
-                                'type' => 'meta',
-                                'model' => $textChunk->meta->model,
-                                'id' => $textChunk->meta->id
-                            ];
-                            break;
-                    }
-                }
-            } catch (PrismException $e) {
-                yield [
-                    'type' => 'error',
-                    'message' => 'Connection Error: ' . $e->getMessage()
-                ];
-                report($e);
-            } catch (\Exception $e) {
-                yield [
-                    'type' => 'error',
-                    'message' => 'Reply Error: ' . $e->getMessage()
-                ];
-                report($e);
-            }
-        });
+        return redirect()->route('chat.show', ['session' => $session]);
     }
-
 }

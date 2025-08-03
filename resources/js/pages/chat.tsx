@@ -2,9 +2,12 @@ import ChatHeader from '@/components/chat/chat-header';
 import ChatInput from '@/components/chat/chat-input';
 import ChatMessageList from '@/components/chat/chat-message-list';
 import ChatSidebar from '@/components/chat/chat-sidebar';
-import { Head } from '@inertiajs/react';
+import chat from '@/routes/chat';
+import { SharedData } from '@/types';
+import { Head, usePage } from '@inertiajs/react';
 import { useEventStream } from '@laravel/stream-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 interface ChatMessage {
   id: number;
@@ -28,14 +31,111 @@ interface ChatPageProps {
   streamUrl: string;
 }
 
-export default function ChatPage({ session, messages, sessions = null, streamUrl }: ChatPageProps) {
+type PrismTextChunk = {
+  text: string;
+  toolCalls: Array<{
+    id: string;
+    name: string;
+    arguments: Record<string, any>;
+    resultId?: string;
+    reasoningId?: string;
+    reasoningSummary?: string;
+  }>;
+  toolResults: Array<{
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    result: number | string | Record<string, any>;
+    toolCallResultId?: string;
+  }>;
+  meta: {
+    id: string;
+    model: string;
+    rateLimits: Array<{
+      name: string;
+      limit?: number;
+      remaining?: number;
+      resetsAt?: Date;
+    }>;
+  },
+  chunkType: 'text' | 'thinking' | 'meta' | 'tool_call' | 'tool_result';
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    cacheWriteInputTokens?: number;
+    cacheReadInputTokens?: number;
+    thoughtTokens?: number;
+  }
+}
+
+export default function ChatPage({ session, messages, sessions = null }: ChatPageProps) {
+  const $page = usePage<SharedData>();
   const [question, setQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { message: answer } = useEventStream(streamUrl, {
-    onComplete: () => {
+  const [answer, setAnswer] = useState<string>('');
+  const submit = async (prompt: string) => {
+    try {
+      setIsLoading(true);
+
+      const response = await fetch(
+        chat.message.store.url(session),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': $page.props.csrf_token
+          },
+          body: JSON.stringify({ message: prompt }),
+          credentials: 'include'
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
+
+      const { answerUrl } = await response.json();
+
+      const source = new EventSource(answerUrl);
+
+      source.addEventListener('update', (event: MessageEvent<string | PrismTextChunk>) => {
+        if (event.data === '</stream>') {
+          source.close();
+
+          return;
+        }
+
+        if (typeof event.data === 'object') {
+          const chunk = event.data as PrismTextChunk;
+          switch (chunk.chunkType) {
+            case 'text':
+              setAnswer((prev) => prev + chunk.text);
+              break;
+            case 'thinking':
+              // Handle thinking state if needed
+              break;
+            case 'tool_call':
+              // Handle tool calls if needed
+              break;
+            case 'tool_result':
+              // Handle tool results if needed
+              break;
+            case 'meta':
+              // Handle meta information if needed
+              break;
+          }
+        }
+      });
+    } catch (err) {
+      console.error(err);
+
+      if (err instanceof Error) {
+        toast.error(err.message);
+      }
+    } finally {
       setIsLoading(false);
     }
-  });
+  };
 
   return (
     <>
@@ -54,10 +154,7 @@ export default function ChatPage({ session, messages, sessions = null, streamUrl
           />
 
           <ChatInput
-            onSubmit={(prompt) => {
-              setQuestion(prompt);
-              setIsLoading(true);
-            }}
+            onSubmit={(prompt) => submit(prompt)}
             isLoading={isLoading}
             placeholder="Ask me anything about your training..."
           />

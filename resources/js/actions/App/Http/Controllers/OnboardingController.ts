@@ -1,9 +1,9 @@
 import { queryParams, type QueryParams } from './../../../../wayfinder'
 /**
 * @see \App\Http\Controllers\OnboardingController::profile
-* @see app/Http/Controllers/OnboardingController.php:30
-* @route '/onboarding/profile'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:30
+ * @route '/onboarding/profile'
+ */
 export const profile = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -19,18 +19,18 @@ profile.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::profile
-* @see app/Http/Controllers/OnboardingController.php:30
-* @route '/onboarding/profile'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:30
+ * @route '/onboarding/profile'
+ */
 profile.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return profile.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::profile
-* @see app/Http/Controllers/OnboardingController.php:30
-* @route '/onboarding/profile'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:30
+ * @route '/onboarding/profile'
+ */
 profile.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -38,12 +38,11 @@ profile.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: profile.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\OnboardingController::profile
-* @see app/Http/Controllers/OnboardingController.php:30
-* @route '/onboarding/profile'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:30
+ * @route '/onboarding/profile'
+ */
 profile.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -54,9 +53,9 @@ profile.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storeProfile
-* @see app/Http/Controllers/OnboardingController.php:58
-* @route '/onboarding/profile'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:58
+ * @route '/onboarding/profile'
+ */
 export const storeProfile = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -72,18 +71,18 @@ storeProfile.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storeProfile
-* @see app/Http/Controllers/OnboardingController.php:58
-* @route '/onboarding/profile'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:58
+ * @route '/onboarding/profile'
+ */
 storeProfile.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return storeProfile.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storeProfile
-* @see app/Http/Controllers/OnboardingController.php:58
-* @route '/onboarding/profile'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:58
+ * @route '/onboarding/profile'
+ */
 storeProfile.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -94,9 +93,9 @@ storeProfile.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::plan
-* @see app/Http/Controllers/OnboardingController.php:94
-* @route '/onboarding/plan'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:94
+ * @route '/onboarding/plan'
+ */
 export const plan = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -112,18 +111,18 @@ plan.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::plan
-* @see app/Http/Controllers/OnboardingController.php:94
-* @route '/onboarding/plan'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:94
+ * @route '/onboarding/plan'
+ */
 plan.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return plan.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::plan
-* @see app/Http/Controllers/OnboardingController.php:94
-* @route '/onboarding/plan'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:94
+ * @route '/onboarding/plan'
+ */
 plan.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -131,12 +130,11 @@ plan.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: plan.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\OnboardingController::plan
-* @see app/Http/Controllers/OnboardingController.php:94
-* @route '/onboarding/plan'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:94
+ * @route '/onboarding/plan'
+ */
 plan.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -147,9 +145,9 @@ plan.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storePlan
-* @see app/Http/Controllers/OnboardingController.php:115
-* @route '/onboarding/plan'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:115
+ * @route '/onboarding/plan'
+ */
 export const storePlan = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -165,18 +163,18 @@ storePlan.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storePlan
-* @see app/Http/Controllers/OnboardingController.php:115
-* @route '/onboarding/plan'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:115
+ * @route '/onboarding/plan'
+ */
 storePlan.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return storePlan.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storePlan
-* @see app/Http/Controllers/OnboardingController.php:115
-* @route '/onboarding/plan'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:115
+ * @route '/onboarding/plan'
+ */
 storePlan.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -187,9 +185,9 @@ storePlan.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): 
 
 /**
 * @see \App\Http\Controllers\OnboardingController::schedule
-* @see app/Http/Controllers/OnboardingController.php:134
-* @route '/onboarding/schedule'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:134
+ * @route '/onboarding/schedule'
+ */
 export const schedule = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -205,18 +203,18 @@ schedule.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::schedule
-* @see app/Http/Controllers/OnboardingController.php:134
-* @route '/onboarding/schedule'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:134
+ * @route '/onboarding/schedule'
+ */
 schedule.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return schedule.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::schedule
-* @see app/Http/Controllers/OnboardingController.php:134
-* @route '/onboarding/schedule'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:134
+ * @route '/onboarding/schedule'
+ */
 schedule.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -224,12 +222,11 @@ schedule.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: schedule.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\OnboardingController::schedule
-* @see app/Http/Controllers/OnboardingController.php:134
-* @route '/onboarding/schedule'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:134
+ * @route '/onboarding/schedule'
+ */
 schedule.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -240,9 +237,9 @@ schedule.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storeSchedule
-* @see app/Http/Controllers/OnboardingController.php:157
-* @route '/onboarding/schedule'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:157
+ * @route '/onboarding/schedule'
+ */
 export const storeSchedule = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -258,18 +255,18 @@ storeSchedule.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storeSchedule
-* @see app/Http/Controllers/OnboardingController.php:157
-* @route '/onboarding/schedule'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:157
+ * @route '/onboarding/schedule'
+ */
 storeSchedule.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return storeSchedule.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storeSchedule
-* @see app/Http/Controllers/OnboardingController.php:157
-* @route '/onboarding/schedule'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:157
+ * @route '/onboarding/schedule'
+ */
 storeSchedule.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -280,9 +277,9 @@ storeSchedule.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams 
 
 /**
 * @see \App\Http\Controllers\OnboardingController::stats
-* @see app/Http/Controllers/OnboardingController.php:176
-* @route '/onboarding/stats'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:176
+ * @route '/onboarding/stats'
+ */
 export const stats = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -298,18 +295,18 @@ stats.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::stats
-* @see app/Http/Controllers/OnboardingController.php:176
-* @route '/onboarding/stats'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:176
+ * @route '/onboarding/stats'
+ */
 stats.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return stats.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::stats
-* @see app/Http/Controllers/OnboardingController.php:176
-* @route '/onboarding/stats'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:176
+ * @route '/onboarding/stats'
+ */
 stats.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -317,12 +314,11 @@ stats.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: stats.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\OnboardingController::stats
-* @see app/Http/Controllers/OnboardingController.php:176
-* @route '/onboarding/stats'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:176
+ * @route '/onboarding/stats'
+ */
 stats.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -333,9 +329,9 @@ stats.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storeStats
-* @see app/Http/Controllers/OnboardingController.php:190
-* @route '/onboarding/stats'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:190
+ * @route '/onboarding/stats'
+ */
 export const storeStats = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -351,18 +347,18 @@ storeStats.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storeStats
-* @see app/Http/Controllers/OnboardingController.php:190
-* @route '/onboarding/stats'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:190
+ * @route '/onboarding/stats'
+ */
 storeStats.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return storeStats.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storeStats
-* @see app/Http/Controllers/OnboardingController.php:190
-* @route '/onboarding/stats'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:190
+ * @route '/onboarding/stats'
+ */
 storeStats.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -373,9 +369,9 @@ storeStats.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }):
 
 /**
 * @see \App\Http\Controllers\OnboardingController::preferences
-* @see app/Http/Controllers/OnboardingController.php:215
-* @route '/onboarding/preferences'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:215
+ * @route '/onboarding/preferences'
+ */
 export const preferences = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -391,18 +387,18 @@ preferences.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::preferences
-* @see app/Http/Controllers/OnboardingController.php:215
-* @route '/onboarding/preferences'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:215
+ * @route '/onboarding/preferences'
+ */
 preferences.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return preferences.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::preferences
-* @see app/Http/Controllers/OnboardingController.php:215
-* @route '/onboarding/preferences'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:215
+ * @route '/onboarding/preferences'
+ */
 preferences.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -410,12 +406,11 @@ preferences.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }):
     url: preferences.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\OnboardingController::preferences
-* @see app/Http/Controllers/OnboardingController.php:215
-* @route '/onboarding/preferences'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:215
+ * @route '/onboarding/preferences'
+ */
 preferences.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -426,9 +421,9 @@ preferences.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams })
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storePreferences
-* @see app/Http/Controllers/OnboardingController.php:234
-* @route '/onboarding/preferences'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:234
+ * @route '/onboarding/preferences'
+ */
 export const storePreferences = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -444,18 +439,18 @@ storePreferences.definition = {
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storePreferences
-* @see app/Http/Controllers/OnboardingController.php:234
-* @route '/onboarding/preferences'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:234
+ * @route '/onboarding/preferences'
+ */
 storePreferences.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return storePreferences.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\OnboardingController::storePreferences
-* @see app/Http/Controllers/OnboardingController.php:234
-* @route '/onboarding/preferences'
-*/
+ * @see app/Http/Controllers/OnboardingController.php:234
+ * @route '/onboarding/preferences'
+ */
 storePreferences.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -463,7 +458,6 @@ storePreferences.post = (options?: { query?: QueryParams, mergeQuery?: QueryPara
     url: storePreferences.url(options),
     method: 'post',
 })
-
 const OnboardingController = { profile, storeProfile, plan, storePlan, schedule, storeSchedule, stats, storeStats, preferences, storePreferences }
 
 export default OnboardingController

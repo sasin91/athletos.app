@@ -1,9 +1,9 @@
 import { queryParams, type QueryParams } from './../../../../wayfinder'
 /**
 * @see \App\Http\Controllers\TrainingPlanController::create
-* @see app/Http/Controllers/TrainingPlanController.php:35
-* @route '/training-plans/create'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:35
+ * @route '/training-plans/create'
+ */
 export const create = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -19,18 +19,18 @@ create.definition = {
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::create
-* @see app/Http/Controllers/TrainingPlanController.php:35
-* @route '/training-plans/create'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:35
+ * @route '/training-plans/create'
+ */
 create.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return create.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::create
-* @see app/Http/Controllers/TrainingPlanController.php:35
-* @route '/training-plans/create'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:35
+ * @route '/training-plans/create'
+ */
 create.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -38,12 +38,11 @@ create.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: create.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\TrainingPlanController::create
-* @see app/Http/Controllers/TrainingPlanController.php:35
-* @route '/training-plans/create'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:35
+ * @route '/training-plans/create'
+ */
 create.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -54,9 +53,9 @@ create.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::store
-* @see app/Http/Controllers/TrainingPlanController.php:42
-* @route '/training-plans'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:42
+ * @route '/training-plans'
+ */
 export const store = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -72,18 +71,18 @@ store.definition = {
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::store
-* @see app/Http/Controllers/TrainingPlanController.php:42
-* @route '/training-plans'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:42
+ * @route '/training-plans'
+ */
 store.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return store.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::store
-* @see app/Http/Controllers/TrainingPlanController.php:42
-* @route '/training-plans'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:42
+ * @route '/training-plans'
+ */
 store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -94,9 +93,9 @@ store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::show
-* @see app/Http/Controllers/TrainingPlanController.php:118
-* @route '/training-plans/{trainingPlan}'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:118
+ * @route '/training-plans/{trainingPlan}'
+ */
 export const show = (args: { trainingPlan: number | { id: number } } | [trainingPlan: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -112,29 +111,29 @@ show.definition = {
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::show
-* @see app/Http/Controllers/TrainingPlanController.php:118
-* @route '/training-plans/{trainingPlan}'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:118
+ * @route '/training-plans/{trainingPlan}'
+ */
 show.url = (args: { trainingPlan: number | { id: number } } | [trainingPlan: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     if (typeof args === 'string' || typeof args === 'number') {
         args = { trainingPlan: args }
     }
 
-    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
-        args = { trainingPlan: args.id }
-    }
-
+            if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
+            args = { trainingPlan: args.id }
+        }
+    
     if (Array.isArray(args)) {
         args = {
-            trainingPlan: args[0],
-        }
+                    trainingPlan: args[0],
+                }
     }
 
     const parsedArgs = {
-        trainingPlan: typeof args.trainingPlan === 'object'
-        ? args.trainingPlan.id
-        : args.trainingPlan,
-    }
+                        trainingPlan: typeof args.trainingPlan === 'object'
+                ? args.trainingPlan.id
+                : args.trainingPlan,
+                }
 
     return show.definition.url
             .replace('{trainingPlan}', parsedArgs.trainingPlan.toString())
@@ -143,9 +142,9 @@ show.url = (args: { trainingPlan: number | { id: number } } | [trainingPlan: num
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::show
-* @see app/Http/Controllers/TrainingPlanController.php:118
-* @route '/training-plans/{trainingPlan}'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:118
+ * @route '/training-plans/{trainingPlan}'
+ */
 show.get = (args: { trainingPlan: number | { id: number } } | [trainingPlan: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -153,12 +152,11 @@ show.get = (args: { trainingPlan: number | { id: number } } | [trainingPlan: num
     url: show.url(args, options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\TrainingPlanController::show
-* @see app/Http/Controllers/TrainingPlanController.php:118
-* @route '/training-plans/{trainingPlan}'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:118
+ * @route '/training-plans/{trainingPlan}'
+ */
 show.head = (args: { trainingPlan: number | { id: number } } | [trainingPlan: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -169,9 +167,9 @@ show.head = (args: { trainingPlan: number | { id: number } } | [trainingPlan: nu
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::assign
-* @see app/Http/Controllers/TrainingPlanController.php:23
-* @route '/training-plans/{trainingPlan}/assign'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:23
+ * @route '/training-plans/{trainingPlan}/assign'
+ */
 export const assign = (args: { trainingPlan: number | { id: number } } | [trainingPlan: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -187,29 +185,29 @@ assign.definition = {
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::assign
-* @see app/Http/Controllers/TrainingPlanController.php:23
-* @route '/training-plans/{trainingPlan}/assign'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:23
+ * @route '/training-plans/{trainingPlan}/assign'
+ */
 assign.url = (args: { trainingPlan: number | { id: number } } | [trainingPlan: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     if (typeof args === 'string' || typeof args === 'number') {
         args = { trainingPlan: args }
     }
 
-    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
-        args = { trainingPlan: args.id }
-    }
-
+            if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
+            args = { trainingPlan: args.id }
+        }
+    
     if (Array.isArray(args)) {
         args = {
-            trainingPlan: args[0],
-        }
+                    trainingPlan: args[0],
+                }
     }
 
     const parsedArgs = {
-        trainingPlan: typeof args.trainingPlan === 'object'
-        ? args.trainingPlan.id
-        : args.trainingPlan,
-    }
+                        trainingPlan: typeof args.trainingPlan === 'object'
+                ? args.trainingPlan.id
+                : args.trainingPlan,
+                }
 
     return assign.definition.url
             .replace('{trainingPlan}', parsedArgs.trainingPlan.toString())
@@ -218,9 +216,9 @@ assign.url = (args: { trainingPlan: number | { id: number } } | [trainingPlan: n
 
 /**
 * @see \App\Http\Controllers\TrainingPlanController::assign
-* @see app/Http/Controllers/TrainingPlanController.php:23
-* @route '/training-plans/{trainingPlan}/assign'
-*/
+ * @see app/Http/Controllers/TrainingPlanController.php:23
+ * @route '/training-plans/{trainingPlan}/assign'
+ */
 assign.post = (args: { trainingPlan: number | { id: number } } | [trainingPlan: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -228,7 +226,6 @@ assign.post = (args: { trainingPlan: number | { id: number } } | [trainingPlan: 
     url: assign.url(args, options),
     method: 'post',
 })
-
 const TrainingPlanController = { create, store, show, assign }
 
 export default TrainingPlanController

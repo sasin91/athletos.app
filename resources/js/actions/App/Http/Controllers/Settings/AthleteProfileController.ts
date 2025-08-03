@@ -1,9 +1,9 @@
 import { queryParams, type QueryParams } from './../../../../../wayfinder'
 /**
 * @see \App\Http\Controllers\Settings\AthleteProfileController::edit
-* @see app/Http/Controllers/Settings/AthleteProfileController.php:21
-* @route '/settings/athlete-profile'
-*/
+ * @see app/Http/Controllers/Settings/AthleteProfileController.php:21
+ * @route '/settings/athlete-profile'
+ */
 export const edit = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -19,18 +19,18 @@ edit.definition = {
 
 /**
 * @see \App\Http\Controllers\Settings\AthleteProfileController::edit
-* @see app/Http/Controllers/Settings/AthleteProfileController.php:21
-* @route '/settings/athlete-profile'
-*/
+ * @see app/Http/Controllers/Settings/AthleteProfileController.php:21
+ * @route '/settings/athlete-profile'
+ */
 edit.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return edit.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Settings\AthleteProfileController::edit
-* @see app/Http/Controllers/Settings/AthleteProfileController.php:21
-* @route '/settings/athlete-profile'
-*/
+ * @see app/Http/Controllers/Settings/AthleteProfileController.php:21
+ * @route '/settings/athlete-profile'
+ */
 edit.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -38,12 +38,11 @@ edit.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: edit.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\Settings\AthleteProfileController::edit
-* @see app/Http/Controllers/Settings/AthleteProfileController.php:21
-* @route '/settings/athlete-profile'
-*/
+ * @see app/Http/Controllers/Settings/AthleteProfileController.php:21
+ * @route '/settings/athlete-profile'
+ */
 edit.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -54,9 +53,9 @@ edit.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\Settings\AthleteProfileController::update
-* @see app/Http/Controllers/Settings/AthleteProfileController.php:59
-* @route '/settings/athlete-profile'
-*/
+ * @see app/Http/Controllers/Settings/AthleteProfileController.php:59
+ * @route '/settings/athlete-profile'
+ */
 export const update = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'put',
@@ -72,18 +71,18 @@ update.definition = {
 
 /**
 * @see \App\Http\Controllers\Settings\AthleteProfileController::update
-* @see app/Http/Controllers/Settings/AthleteProfileController.php:59
-* @route '/settings/athlete-profile'
-*/
+ * @see app/Http/Controllers/Settings/AthleteProfileController.php:59
+ * @route '/settings/athlete-profile'
+ */
 update.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return update.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Settings\AthleteProfileController::update
-* @see app/Http/Controllers/Settings/AthleteProfileController.php:59
-* @route '/settings/athlete-profile'
-*/
+ * @see app/Http/Controllers/Settings/AthleteProfileController.php:59
+ * @route '/settings/athlete-profile'
+ */
 update.put = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'put',
@@ -91,7 +90,6 @@ update.put = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: update.url(options),
     method: 'put',
 })
-
 const AthleteProfileController = { edit, update }
 
 export default AthleteProfileController

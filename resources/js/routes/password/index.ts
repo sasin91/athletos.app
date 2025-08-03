@@ -1,9 +1,9 @@
 import { queryParams, type QueryParams } from './../../wayfinder'
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::request
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
+ * @route '/forgot-password'
+ */
 export const request = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -19,18 +19,18 @@ request.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::request
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
+ * @route '/forgot-password'
+ */
 request.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return request.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::request
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
+ * @route '/forgot-password'
+ */
 request.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -38,12 +38,11 @@ request.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: request.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::request
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
+ * @route '/forgot-password'
+ */
 request.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -54,9 +53,9 @@ request.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::email
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
+ * @route '/forgot-password'
+ */
 export const email = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -72,18 +71,18 @@ email.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::email
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
+ * @route '/forgot-password'
+ */
 email.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return email.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::email
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
+ * @route '/forgot-password'
+ */
 email.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -94,9 +93,9 @@ email.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\Auth\NewPasswordController::reset
-* @see app/Http/Controllers/Auth/NewPasswordController.php:19
-* @route '/reset-password/{token}'
-*/
+ * @see app/Http/Controllers/Auth/NewPasswordController.php:19
+ * @route '/reset-password/{token}'
+ */
 export const reset = (args: { token: string | number } | [token: string | number ] | string | number, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -112,23 +111,24 @@ reset.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\NewPasswordController::reset
-* @see app/Http/Controllers/Auth/NewPasswordController.php:19
-* @route '/reset-password/{token}'
-*/
+ * @see app/Http/Controllers/Auth/NewPasswordController.php:19
+ * @route '/reset-password/{token}'
+ */
 reset.url = (args: { token: string | number } | [token: string | number ] | string | number, options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     if (typeof args === 'string' || typeof args === 'number') {
         args = { token: args }
     }
 
+    
     if (Array.isArray(args)) {
         args = {
-            token: args[0],
-        }
+                    token: args[0],
+                }
     }
 
     const parsedArgs = {
-        token: args.token,
-    }
+                        token: args.token,
+                }
 
     return reset.definition.url
             .replace('{token}', parsedArgs.token.toString())
@@ -137,9 +137,9 @@ reset.url = (args: { token: string | number } | [token: string | number ] | stri
 
 /**
 * @see \App\Http\Controllers\Auth\NewPasswordController::reset
-* @see app/Http/Controllers/Auth/NewPasswordController.php:19
-* @route '/reset-password/{token}'
-*/
+ * @see app/Http/Controllers/Auth/NewPasswordController.php:19
+ * @route '/reset-password/{token}'
+ */
 reset.get = (args: { token: string | number } | [token: string | number ] | string | number, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -147,12 +147,11 @@ reset.get = (args: { token: string | number } | [token: string | number ] | stri
     url: reset.url(args, options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\Auth\NewPasswordController::reset
-* @see app/Http/Controllers/Auth/NewPasswordController.php:19
-* @route '/reset-password/{token}'
-*/
+ * @see app/Http/Controllers/Auth/NewPasswordController.php:19
+ * @route '/reset-password/{token}'
+ */
 reset.head = (args: { token: string | number } | [token: string | number ] | string | number, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -163,9 +162,9 @@ reset.head = (args: { token: string | number } | [token: string | number ] | str
 
 /**
 * @see \App\Http\Controllers\Auth\NewPasswordController::store
-* @see app/Http/Controllers/Auth/NewPasswordController.php:24
-* @route '/reset-password'
-*/
+ * @see app/Http/Controllers/Auth/NewPasswordController.php:24
+ * @route '/reset-password'
+ */
 export const store = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -181,18 +180,18 @@ store.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\NewPasswordController::store
-* @see app/Http/Controllers/Auth/NewPasswordController.php:24
-* @route '/reset-password'
-*/
+ * @see app/Http/Controllers/Auth/NewPasswordController.php:24
+ * @route '/reset-password'
+ */
 store.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return store.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\NewPasswordController::store
-* @see app/Http/Controllers/Auth/NewPasswordController.php:24
-* @route '/reset-password'
-*/
+ * @see app/Http/Controllers/Auth/NewPasswordController.php:24
+ * @route '/reset-password'
+ */
 store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -203,9 +202,9 @@ store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\Auth\ConfirmationController::confirm
-* @see app/Http/Controllers/Auth/ConfirmationController.php:15
-* @route '/confirm-password'
-*/
+ * @see app/Http/Controllers/Auth/ConfirmationController.php:15
+ * @route '/confirm-password'
+ */
 export const confirm = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -221,18 +220,18 @@ confirm.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\ConfirmationController::confirm
-* @see app/Http/Controllers/Auth/ConfirmationController.php:15
-* @route '/confirm-password'
-*/
+ * @see app/Http/Controllers/Auth/ConfirmationController.php:15
+ * @route '/confirm-password'
+ */
 confirm.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return confirm.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\ConfirmationController::confirm
-* @see app/Http/Controllers/Auth/ConfirmationController.php:15
-* @route '/confirm-password'
-*/
+ * @see app/Http/Controllers/Auth/ConfirmationController.php:15
+ * @route '/confirm-password'
+ */
 confirm.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -240,12 +239,11 @@ confirm.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: confirm.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\Auth\ConfirmationController::confirm
-* @see app/Http/Controllers/Auth/ConfirmationController.php:15
-* @route '/confirm-password'
-*/
+ * @see app/Http/Controllers/Auth/ConfirmationController.php:15
+ * @route '/confirm-password'
+ */
 confirm.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -253,13 +251,12 @@ confirm.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: confirm.url(options),
     method: 'head',
 })
-
 const password = {
     request,
-    email,
-    reset,
-    store,
-    confirm,
+email,
+reset,
+store,
+confirm,
 }
 
 export default password

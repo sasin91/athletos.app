@@ -4,14 +4,13 @@ import PasswordResetLinkController from './PasswordResetLinkController'
 import NewPasswordController from './NewPasswordController'
 import VerificationController from './VerificationController'
 import ConfirmationController from './ConfirmationController'
-
 const Auth = {
     RegistrationController,
-    LoginController,
-    PasswordResetLinkController,
-    NewPasswordController,
-    VerificationController,
-    ConfirmationController,
+LoginController,
+PasswordResetLinkController,
+NewPasswordController,
+VerificationController,
+ConfirmationController,
 }
 
 export default Auth

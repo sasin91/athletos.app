@@ -1,9 +1,9 @@
 import { queryParams, type QueryParams } from './../../../../../wayfinder'
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::create
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
+ * @route '/forgot-password'
+ */
 export const create = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -19,18 +19,18 @@ create.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::create
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
+ * @route '/forgot-password'
+ */
 create.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return create.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::create
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
+ * @route '/forgot-password'
+ */
 create.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -38,12 +38,11 @@ create.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: create.url(options),
     method: 'get',
 })
-
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::create
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:14
+ * @route '/forgot-password'
+ */
 create.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -54,9 +53,9 @@ create.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::store
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
+ * @route '/forgot-password'
+ */
 export const store = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -72,18 +71,18 @@ store.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::store
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
+ * @route '/forgot-password'
+ */
 store.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return store.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\PasswordResetLinkController::store
-* @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
-* @route '/forgot-password'
-*/
+ * @see app/Http/Controllers/Auth/PasswordResetLinkController.php:19
+ * @route '/forgot-password'
+ */
 store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -91,7 +90,6 @@ store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: store.url(options),
     method: 'post',
 })
-
 const PasswordResetLinkController = { create, store }
 
 export default PasswordResetLinkController

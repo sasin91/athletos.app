@@ -1,5 +1,4 @@
 import Sanctum from './Sanctum'
-
 const Laravel = {
     Sanctum,
 }

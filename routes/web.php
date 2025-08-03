@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExerciseController;
 use App\Http\Controllers\HomeController;
@@ -30,9 +31,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Chat routes
         Route::get('chat', [ChatController::class, 'index'])->name('chat.index');
+        Route::get('chat/new', [ChatController::class, 'create'])->name('chat.new');
         Route::get('chat/{session}', [ChatController::class, 'show'])->name('chat.show');
         Route::get('chat/{session}/stream', [ChatController::class, 'stream'])->name('chat.stream');
-
+        Route::post('chat/{session}/message', [ChatMessageController::class, 'store'])->name('chat.message.store');
+        Route::get('chat-message/{chatMessage}/answer', [ChatMessageController::class, 'answer'])->name('chat.answer');
+        
         // Dashboard actions
         Route::post('dashboard/start-training', [DashboardController::class, 'startTraining'])->name('dashboard.start-training');
 

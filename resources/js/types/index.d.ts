@@ -26,6 +26,7 @@ export interface SharedData {
     quote: { message: string; author: string };
     auth: Auth;
     sidebarOpen: boolean;
+    csrf_token: string;
     [key: string]: unknown;
 }
 

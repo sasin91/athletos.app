@@ -1,5 +1,4 @@
 import CsrfCookieController from './CsrfCookieController'
-
 const Controllers = {
     CsrfCookieController,
 }
