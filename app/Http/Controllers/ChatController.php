@@ -41,7 +41,7 @@ class ChatController extends Controller
             'messages' => $messages,
             'basePlan' => $user->athlete->currentPlan,
             'sessions' => $sessions,
-            'streamUrl' => route('chat.stream'),
+            'streamUrl' => route('chat.stream', $session),
         ]);
     }
 
@@ -60,42 +60,22 @@ class ChatController extends Controller
             'messages' => $messages,
             'basePlan' => null, // No base plan in this context
             'sessions' => $sessions,
-            'streamUrl' => route('chat.stream'),
+            'streamUrl' => route('chat.stream', $session),
         ]);
     }
 
     /**
      * Handle chat streaming using Laravel's SSE
      */
-    public function stream(Request $request, #[CurrentUser] User $user)
+    public function stream(
+        ChatSession $session,    
+    )
     {
         Gate::authorize('isAthlete');
 
-        $request->validate([
-            'prompt' => 'required|string|min:3|max:1000',
-            'session_id' => 'nullable|exists:chat_sessions,id',
-            'base_plan_id' => 'nullable|exists:training_plans,id',
-        ]);
-
-        $sessionId = $request->get('session_id');
-        $basePlanId = $request->get('base_plan_id');
-
-        if ($sessionId) {
-            $session = ChatSession::findOrFail($sessionId);
-        } else {
-            $basePlan = $basePlanId ? TrainingPlan::find($basePlanId) : null;
-            $session = app(CreateChatSession::class)->execute(
-                $user->athlete->id,
-                $basePlan
-            );
-        }
-
-        // Add user message to session
-        app(AddChatMessage::class)->addUserMessage($session, $request->get('prompt'));
-
-        return IlluminateResponse::eventStream(function () use ($session, $request) {
+        return IlluminateResponse::eventStream(function () use ($session) {
             try {
-                $chatRequest = app(GenerateChatResponse::class)->execute($session, $request->get('prompt'));
+                $chatRequest = app(GenerateChatResponse::class)->execute($session, '');
                 $fullAnswer = '';
 
                 foreach ($chatRequest->asStream() as $textChunk) {

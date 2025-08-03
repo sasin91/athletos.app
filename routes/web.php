@@ -31,7 +31,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Chat routes
         Route::get('chat', [ChatController::class, 'index'])->name('chat.index');
         Route::get('chat/{session}', [ChatController::class, 'show'])->name('chat.show');
-        Route::get('chat/stream', [ChatController::class, 'stream'])->name('chat.stream');
+        Route::get('chat/{session}/stream', [ChatController::class, 'stream'])->name('chat.stream');
 
         // Dashboard actions
         Route::post('dashboard/start-training', [DashboardController::class, 'startTraining'])->name('dashboard.start-training');

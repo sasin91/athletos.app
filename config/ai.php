@@ -11,7 +11,7 @@ return [
     | Supported: "openai", "ollama"
     |
     */
-    'default_provider' => env('AI_PROVIDER', 'ollama'),
+    'default_provider' => env('AI_PROVIDER', 'openai'),
 
     /*
     |--------------------------------------------------------------------------
@@ -24,9 +24,9 @@ return [
     */
     'providers' => [
         'openai' => [
-            'chat_model' => env('AI_OPENAI_CHAT_MODEL', 'gpt-4o-mini'),
-            'extraction_model' => env('AI_OPENAI_EXTRACTION_MODEL', 'gpt-4o-mini'),
-            'subject_model' => env('AI_OPENAI_SUBJECT_MODEL', 'gpt-4o-mini'),
+            'chat_model' => env('AI_OPENAI_CHAT_MODEL', 'gpt-4.1'),
+            'extraction_model' => env('AI_OPENAI_EXTRACTION_MODEL', 'gpt-4.1'),
+            'subject_model' => env('AI_OPENAI_SUBJECT_MODEL', 'gpt-4.1'),
             'temperature' => env('AI_OPENAI_TEMPERATURE', 0.7),
             'max_tokens' => env('AI_OPENAI_MAX_TOKENS', 1200),
         ],
