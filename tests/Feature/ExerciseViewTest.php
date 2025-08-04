@@ -18,16 +18,6 @@ class ExerciseViewTest extends TestCase
     public function test_all_exercises_have_react_pages(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
 
         $exercises = Exercise::cases();
         
@@ -46,16 +36,6 @@ class ExerciseViewTest extends TestCase
     public function test_exercise_pages_are_accessible(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
 
         $exercise = Exercise::Deadlift;
         $this->assertNotNull($exercise, 'Deadlift exercise not found');
@@ -71,17 +51,7 @@ class ExerciseViewTest extends TestCase
     public function test_all_exercise_pages_return_200(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
-
+        
         $exercises = Exercise::cases();
         
         foreach ($exercises as $exercise) {

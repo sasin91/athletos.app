@@ -14,16 +14,6 @@ class PasswordConfirmationTest extends TestCase
     public function test_confirm_password_screen_can_be_rendered(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
 
         $response = $this->actingAs($user)->get('/confirm-password');
 
@@ -45,17 +35,7 @@ class PasswordConfirmationTest extends TestCase
     public function test_password_is_not_confirmed_with_invalid_password(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
-
+        
         $response = $this->actingAs($user)->post('/confirm-password', [
             'password' => 'wrong-password',
         ]);

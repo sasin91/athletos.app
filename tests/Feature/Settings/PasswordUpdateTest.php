@@ -15,16 +15,6 @@ class PasswordUpdateTest extends TestCase
     public function test_password_can_be_updated(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
 
         $response = $this
             ->actingAs($user)
@@ -44,17 +34,7 @@ class PasswordUpdateTest extends TestCase
     public function test_correct_password_must_be_provided_to_update_password(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
-
+        
         $response = $this
             ->actingAs($user)
             ->put('/settings/password', [

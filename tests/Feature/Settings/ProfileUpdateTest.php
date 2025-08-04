@@ -14,16 +14,6 @@ class ProfileUpdateTest extends TestCase
     public function test_profile_page_is_displayed(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
 
         $this->actingAs($user)->get('/settings/profile')->assertOk();
     }
@@ -31,16 +21,6 @@ class ProfileUpdateTest extends TestCase
     public function test_profile_information_can_be_updated(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
 
         $response = $this->actingAs($user)
             ->patch('/settings/profile', [
@@ -62,16 +42,6 @@ class ProfileUpdateTest extends TestCase
     public function test_email_verification_status_is_unchanged_when_email_address_is_unchanged(): void
     {
         $user = User::factory()->athlete()->create();
-        $athlete = Athlete::factory()->create([
-            'user_id' => $user->id,
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'current_plan_id' => 1,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-        ]);
 
         $response = $this->actingAs($user)
             ->patch('/settings/profile', [
