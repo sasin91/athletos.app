@@ -4,9 +4,10 @@ namespace App\Data;
 
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Contracts\Support\Arrayable;
 
-class DashboardMetrics implements Wireable
+class DashboardMetrics implements Jsonable, Arrayable
 {
     public function __construct(
         public int $totalWorkouts,
@@ -114,35 +115,34 @@ class DashboardMetrics implements Wireable
         return $this->getWeeklyProgressPercentage() < 50;
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
-            'total_workouts' => $this->totalWorkouts,
-            'current_streak' => $this->currentStreak,
-            'completed_this_week' => $this->completedThisWeek,
-            'weekly_goal' => $this->weeklyGoal,
-            'phase_progress' => $this->phaseProgress,
-            'current_phase_name' => $this->currentPhaseName,
-            'current_phase_week' => $this->currentPhaseWeek,
-            'total_phase_weeks' => $this->totalPhaseWeeks,
-            'last_workout_date' => $this->lastWorkoutDate?->toISOString(),
-            'next_workout_date' => $this->nextWorkoutDate?->toISOString(),
+            'totalWorkouts' => $this->totalWorkouts,
+            'currentStreak' => $this->currentStreak,
+            'completedThisWeek' => $this->completedThisWeek,
+            'weeklyGoal' => $this->weeklyGoal,
+            'phaseProgress' => $this->phaseProgress,
+            'currentPhaseName' => $this->currentPhaseName,
+            'currentPhaseWeek' => $this->currentPhaseWeek,
+            'totalPhaseWeeks' => $this->totalPhaseWeeks,
+            'lastWorkoutDate' => $this->lastWorkoutDate?->toISOString(),
+            'nextWorkoutDate' => $this->nextWorkoutDate?->toISOString(),
+            'weeklyProgressPercentage' => $this->getWeeklyProgressPercentage(),
+            'phaseProgressPercentage' => $this->getPhaseProgressPercentage(),
+            'weeklyProgressColor' => $this->getWeeklyProgressColor(),
+            'phaseProgressColor' => $this->getPhaseProgressColor(),
+            'streakColor' => $this->getStreakColor(),
+            'streakIcon' => $this->getStreakIcon(),
+            'daysSinceLastWorkout' => $this->getDaysSinceLastWorkout(),
+            'daysUntilNextWorkout' => $this->getDaysUntilNextWorkout(),
+            'isOnTrack' => $this->isOnTrack(),
+            'needsAttention' => $this->needsAttention(),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        return new self(
-            totalWorkouts: $value['total_workouts'],
-            currentStreak: $value['current_streak'],
-            completedThisWeek: $value['completed_this_week'],
-            weeklyGoal: $value['weekly_goal'],
-            phaseProgress: $value['phase_progress'],
-            currentPhaseName: $value['current_phase_name'],
-            currentPhaseWeek: $value['current_phase_week'],
-            totalPhaseWeeks: $value['total_phase_weeks'],
-            lastWorkoutDate: $value['last_workout_date'] ? Carbon::parse($value['last_workout_date']) : null,
-            nextWorkoutDate: $value['next_workout_date'] ? Carbon::parse($value['next_workout_date']) : null,
-        );
+        return json_encode($this->toArray(), $options);
     }
 } 

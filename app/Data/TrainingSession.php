@@ -5,9 +5,10 @@ namespace App\Data;
 use App\Enums\Exercise;
 use App\Models\Training;
 use Carbon\Carbon;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class TrainingSession implements Wireable
+class TrainingSession implements Jsonable, Arrayable
 {
     public function __construct(
         public ?int $id,
@@ -148,37 +149,37 @@ class TrainingSession implements Wireable
         return min(100, intval(($this->getCompletedSetsCount() / $totalSets) * 100));
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
             'id' => $this->id,
-            'scheduled_at' => $this->scheduledAt->toISOString(),
-            'completed_at' => $this->completedAt?->toISOString(),
+            'scheduledAt' => $this->scheduledAt->toISOString(),
+            'completedAt' => $this->completedAt?->toISOString(),
             'postponed' => $this->postponed,
             'progress' => $this->progress,
             'mood' => $this->mood,
-            'energy_level' => $this->energyLevel,
-            'training_plan' => $this->trainingPlan?->toLivewire(),
-            'planned_exercises' => $this->plannedExercises,
-            'completed_sets' => $this->completedSets,
-            'exercise_notes' => $this->exerciseNotes,
+            'energyLevel' => $this->energyLevel,
+            'trainingPlan' => $this->trainingPlan?->toArray(),
+            'plannedExercises' => $this->plannedExercises,
+            'completedSets' => $this->completedSets,
+            'exerciseNotes' => $this->exerciseNotes,
+            // Computed properties for React components
+            'isVirtual' => $this->isVirtual(),
+            'isCompleted' => $this->isCompleted(),
+            'isInProgress' => $this->isInProgress(),
+            'canStart' => $this->canStart(),
+            'durationMinutes' => $this->getDurationMinutes(),
+            'formattedDuration' => $this->getFormattedDuration(),
+            'statusColor' => $this->getStatusColor(),
+            'statusText' => $this->getStatusText(),
+            'completedSetsCount' => $this->getCompletedSetsCount(),
+            'totalPlannedSets' => $this->getTotalPlannedSets(),
+            'progressPercentage' => $this->getProgressPercentage(),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        return new self(
-            id: $value['id'],
-            scheduledAt: Carbon::parse($value['scheduled_at']),
-            completedAt: $value['completed_at'] ? Carbon::parse($value['completed_at']) : null,
-            postponed: $value['postponed'],
-            progress: $value['progress'],
-            mood: $value['mood'],
-            energyLevel: $value['energy_level'],
-            trainingPlan: $value['training_plan'] ? TrainingPlanData::fromLivewire($value['training_plan']) : null,
-            plannedExercises: $value['planned_exercises'] ?? [],
-            completedSets: $value['completed_sets'] ?? [],
-            exerciseNotes: $value['exercise_notes'] ?? [],
-        );
+        return json_encode($this->toArray(), $options);
     }
 } 

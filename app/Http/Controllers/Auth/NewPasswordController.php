@@ -11,13 +11,14 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
-use Illuminate\View\View;
+use Illuminate\Http\Response;
+use Inertia\Response as InertiaResponse;
 
 class NewPasswordController extends Controller
 {
-    public function create(Request $request): View
+    public function create(Request $request): Response|InertiaResponse
     {
-        return view('auth.reset-password', ['request' => $request]);
+        return inertia('auth/reset-password', ['request' => $request]);
     }
 
     public function store(Request $request): RedirectResponse

@@ -17,7 +17,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('athlete_id')->constrained();
             $table->foreignId('training_plan_id')->constrained();
-            $table->foreignId('training_phase_id')->constrained();
+            $table->foreignId('training_phase_id')->nullable()->constrained();
             $table->timestamp('scheduled_at');
             $table->boolean('postponed')->default(false);
             $table->text('reschedule_reason')->nullable();

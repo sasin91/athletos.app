@@ -3,10 +3,11 @@
 namespace App\Settings;
 
 use App\Enums\Exercise;
+use App\Enums\WeightType;
 use Illuminate\Contracts\Support\Arrayable;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class ExerciseConfig implements Arrayable, Wireable
+class ExerciseConfig implements Arrayable, Jsonable
 {
     public function __construct(
         public string $exercise,
@@ -18,11 +19,22 @@ class ExerciseConfig implements Arrayable, Wireable
         public array $metadata = [],
         public int $day = 1,
         /**
+         * Ramping percentages for progressive weight loading across sets
+         * Format: [percentage1, percentage2, ...]
+         * Example: [0.80, 0.90, 1.00] for 3 sets
+         * If null, will use default ramping based on number of sets
+         * 
+         * @var array<int, float>|null
+         */
+        public ?array $rampingPercentages = null,
+        /**
          * Phase-specific exercise cues and technique tips
          *
          * @var array<string>|null
          */
         public ?array $cues = null,
+
+        public ?WeightType $weight_type = null, // Optional weight type override
     ) {}
 
     /**
@@ -58,33 +70,17 @@ class ExerciseConfig implements Arrayable, Wireable
             'metadata' => $this->metadata,
             'day' => $this->day,
             'cues' => $this->cues,
+            'rampingPercentages' => $this->rampingPercentages,
+            'weight_type' => $this->weight_type?->value
         ];
     }
 
     /**
-     * Convert to Livewire format
+     * Convert to JSON
      */
-    public function toLivewire(): array
+    public function toJson($options = 0): string
     {
-        return $this->toArray();
-    }
-
-    /**
-     * Create from Livewire format
-     */
-    public static function fromLivewire($value): self
-    {
-        return new self(
-            exercise: $value['exercise'] ?? $value['exercise_slug'] ?? $value['exercise_id'] ?? '', // Backward compatibility
-            sets: (int) $value['sets'],
-            reps: (int) $value['reps'],
-            weight: (float) $value['weight'],
-            rest_seconds: $value['rest_seconds'] ?? 120,
-            notes: $value['notes'] ?? null,
-            metadata: $value['metadata'] ?? [],
-            day: $value['day'] ?? 1,
-            cues: $value['cues'] ?? null,
-        );
+        return json_encode($this->toArray(), $options);
     }
 
     /**
@@ -134,6 +130,28 @@ class ExerciseConfig implements Arrayable, Wireable
             5 => [0.60, 0.70, 0.80, 0.90, 1.00],
             default => $this->generateLinearRamping(0.50),
         };
+    }
+
+
+    /**
+     * Get ramping percentages for this exercise
+     * Returns configured percentages or defaults based on exercise type
+     * 
+     * @return array<int, float>|null
+     */
+    public function getRampingPercentages(): ?array
+    {
+        return $this->rampingPercentages;
+    }
+
+    /**
+     * Set ramping percentages for this exercise
+     * 
+     * @param array<int, float>|null $percentages
+     */
+    public function setRampingPercentages(?array $percentages): void
+    {
+        $this->rampingPercentages = $percentages;
     }
 
     /**

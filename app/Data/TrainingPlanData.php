@@ -3,9 +3,10 @@
 namespace App\Data;
 
 use App\Models\TrainingPlan;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class TrainingPlanData implements Wireable
+class TrainingPlanData implements Jsonable, Arrayable
 {
     public function __construct(
         public int $id,
@@ -25,7 +26,7 @@ class TrainingPlanData implements Wireable
         );
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
             'id' => $this->id,
@@ -35,13 +36,8 @@ class TrainingPlanData implements Wireable
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        return new self(
-            id: $value['id'],
-            name: $value['name'],
-            description: $value['description'],
-            phases: $value['phases'] ?? [],
-        );
+        return json_encode($this->toArray(), $options);
     }
 } 

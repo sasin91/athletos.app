@@ -3,9 +3,10 @@
 namespace App\Data;
 
 use App\Data\PlannedExercise;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class PlannedSet implements Wireable
+class PlannedSet implements Jsonable, Arrayable
 {
     public function __construct(
         public int $setNumber,
@@ -28,31 +29,26 @@ class PlannedSet implements Wireable
             timeSpent: $data['time_spent'] ?? 0,
             explosiveness: $data['explosiveness'] ?? 0.0,
             notes: $data['notes'] ?? '',
-            meta: $data['meta'] instanceof PlannedExercise ? $data['meta'] : PlannedExercise::fromLivewire($data['meta']),
+            meta: $data['meta'] instanceof PlannedExercise ? $data['meta'] : PlannedExercise::fromArray($data['meta']),
         );
     }
 
     public function toArray(): array
     {
         return [
-            'set_number' => $this->setNumber,
+            'setNumber' => $this->setNumber,
             'reps' => $this->reps,
             'weight' => $this->weight,
             'rpe' => $this->rpe,
-            'time_spent' => $this->timeSpent,
+            'timeSpent' => $this->timeSpent,
             'explosiveness' => $this->explosiveness,
             'notes' => $this->notes,
-            'meta' => $this->meta->toLivewire(),
+            'meta' => $this->meta->toArray(),
         ];
     }
 
-    public function toLivewire(): array
+    public function toJson($options = 0): string
     {
-        return $this->toArray();
-    }
-
-    public static function fromLivewire($value): self
-    {
-        return self::fromArray($value);
+        return json_encode($this->toArray(), $options);
     }
 } 

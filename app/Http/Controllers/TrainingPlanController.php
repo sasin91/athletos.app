@@ -15,6 +15,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\Rule;
+use Illuminate\Http\Response;
+use Inertia\Inertia;
 
 class TrainingPlanController extends Controller
 {
@@ -33,8 +35,8 @@ class TrainingPlanController extends Controller
     public function create(#[CurrentUser] User $user)
     {
         Gate::authorize('create', TrainingPlan::class);
-        
-        return view('training-plans.create');
+
+        return inertia('training-plans/create');
     }
 
     public function store(Request $request, #[CurrentUser] User $user)
@@ -116,9 +118,11 @@ class TrainingPlanController extends Controller
     public function show(TrainingPlan $trainingPlan)
     {
         Gate::authorize('view', $trainingPlan);
-        
+
         $trainingPlan->load('phases');
-        
-        return view('training-plans.show', compact('trainingPlan'));
+
+        return inertia('training-plans/show', [
+            'trainingPlan' => $trainingPlan,
+        ]);
     }
 }

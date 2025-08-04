@@ -2,27 +2,32 @@
 
 namespace App\Data;
 
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Contracts\Support\Arrayable;
 
-class WeightProgressions implements Wireable
+class WeightProgressions implements Jsonable, Arrayable
 {
     public function __construct(
         public array $progressions = [],
     ) {
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
-            'progressions' => array_map(fn($progression) => $progression->toLivewire(), $this->progressions),
+            'progressions' => array_map(fn($progression) => $progression instanceof Arrayable ? $progression->toArray() : $progression, $this->progressions),
+            // Computed properties for React components
+            'hasData' => $this->hasData(),
+            'exercisesWithData' => $this->getExercisesWithData(),
+            'onTrackExercises' => $this->getOnTrackExercises(),
+            'behindExercises' => $this->getBehindExercises(),
+            'aheadExercises' => $this->getAheadExercises(),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        $progressions = array_map(fn($progressionData) => WeightProgression::fromLivewire($progressionData), $value['progressions']);
-        
-        return new self(progressions: $progressions);
+        return json_encode($this->toArray(), $options);
     }
 
     public function add(WeightProgression $progression): void

@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Enums\Difficulty;
 use App\Enums\Exercise;
 use App\Enums\ExperienceLevel;
+use App\Enums\MuscleGroup;
 use App\Enums\TrainingGoal;
 use App\Enums\TrainingTime;
+use App\Enums\Weekday;
 use App\Models\Athlete;
 use App\Models\PerformanceIndicator;
 use App\Models\TrainingPlan;
@@ -17,20 +19,36 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Inertia\Response;
+use Inertia\Inertia;
 
 class OnboardingController extends Controller
 {
     /**
      * Show the profile setup page
      */
-    public function profile(): \Illuminate\View\View
+    public function profile(): Response
     {
         Gate::authorize('isAthlete');
 
-        return view('onboarding.profile', [
+        return inertia('onboarding/profile', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding()
+            'onboarding' => Auth::user()->onboarding(),
+            'experienceLevels' => collect(ExperienceLevel::cases())->map(fn($level) => [
+                'value' => $level->value,
+                'label' => $level->getLabel(),
+                'description' => $level->getDescription(),
+            ]),
+            'trainingGoals' => collect(TrainingGoal::cases())->map(fn($goal) => [
+                'value' => $goal->value,
+                'label' => $goal->getLabel(),
+                'description' => $goal->getDescription(),
+            ]),
+            'muscleGroups' => collect(MuscleGroup::onboardingOptions())->map(fn($group) => [
+                'value' => $group->value,
+                'label' => $group->label(),
+            ]),
         ]);
     }
 
@@ -66,15 +84,14 @@ class OnboardingController extends Controller
             'top_deadlift' => (int) $validated['top_deadlift'],
         ]);
 
-        // Find next incomplete step or redirect to dashboard if all complete
-        $nextStep = $this->getNextIncompleteStep($user);
-        return redirect($nextStep)->with('success', 'Profile updated successfully!');
+        // Note: Athlete was already updated above, just need to redirect
+        return $this->next($user, 'Profile updated successfully!');
     }
 
     /**
      * Show the training plan selection page
      */
-    public function plan(): \Illuminate\View\View
+    public function plan(): Response
     {
         Gate::authorize('isAthlete');
 
@@ -84,11 +101,11 @@ class OnboardingController extends Controller
         // Filter training plans based on athlete preferences (experience level, goal, muscle groups)
         $trainingPlans = $allTrainingPlans->filter(fn(TrainingPlan $plan) => $plan->isSuitableForAthlete($athlete));
 
-        return view('onboarding.plan', [
+        return inertia('onboarding/plan', [
             'user' => Auth::user(),
             'athlete' => $athlete,
             'onboarding' => Auth::user()->onboarding(),
-            'trainingPlans' => $trainingPlans
+            'trainingPlans' => $trainingPlans->values()
         ]);
     }
 
@@ -105,28 +122,32 @@ class OnboardingController extends Controller
             'selected_plan_id' => 'required|exists:training_plans,id',
         ]);
 
-        $user->athlete()->update(
-            [
-                'current_plan_id' => $validated['selected_plan_id'],
-                'plan_start_date' => now(),
-            ]
-        );
-
-        $nextStep = $this->getNextIncompleteStep($user);
-        return redirect($nextStep)->with('success', 'Training plan selected!');
+        return $this->next($user, 'Training plan selected!', [
+            'current_plan_id' => $validated['selected_plan_id'],
+            'plan_start_date' => now(),
+        ]);
     }
 
     /**
      * Show the schedule setup page
      */
-    public function schedule(): \Illuminate\View\View
+    public function schedule(): Response
     {
         Gate::authorize('isAthlete');
 
-        return view('onboarding.schedule', [
+        return inertia('onboarding/schedule', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding()
+            'onboarding' => Auth::user()->onboarding(),
+            'weekdays' => collect(Weekday::cases())->map(fn($day) => [
+                'value' => $day->value,
+                'label' => $day->label('en'),
+            ]),
+            'trainingTimes' => collect(TrainingTime::cases())->map(fn($time) => [
+                'value' => $time->value,
+                'label' => $time->getLabel(),
+                'timeRange' => $time->getTimeRange(),
+            ]),
         ]);
     }
 
@@ -141,28 +162,25 @@ class OnboardingController extends Controller
 
         $validated = $request->validate([
             'training_days' => 'required|array|min:1',
-            'training_frequency' => 'nullable|string|in:2w,3w,4w',
+            'training_frequency' => 'nullable|string|in:1w,2w,3w,4w',
             'preferred_time' => ['required', Rule::enum(TrainingTime::class)],
             'session_duration' => 'required|integer|in:45,60,75,90,120',
         ]);
 
-        $user->athlete()->update($validated);
-
-        $nextStep = $this->getNextIncompleteStep($user);
-        return redirect($nextStep)->with('success', 'Training schedule set!');
+        return $this->next($user, 'Training schedule set!', $validated);
     }
 
     /**
      * Show the stats entry page
      */
-    public function stats(): \Illuminate\View\View
+    public function stats(): Response
     {
         Gate::authorize('isAthlete');
 
-        return view('onboarding.stats', [
+        return inertia('onboarding/stats', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding()
+            'onboarding' => Auth::user()->onboarding(),
         ]);
     }
 
@@ -187,21 +205,26 @@ class OnboardingController extends Controller
             'current_deadlift' => (int) $validated['current_deadlift'],
         ]);
 
-        $nextStep = $this->getNextIncompleteStep($user);
-        return redirect($nextStep)->with('success', 'Stats updated!');
+        // Refresh and redirect (no athlete update needed, just performance indicators)
+        return $this->next($user, 'Stats updated!');
     }
 
     /**
      * Show the preferences setup page
      */
-    public function preferences(): \Illuminate\View\View
+    public function preferences(): Response
     {
         Gate::authorize('isAthlete');
 
-        return view('onboarding.preferences', [
+        return inertia('onboarding/preferences', [
             'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding()
+            'onboarding' => Auth::user()->onboarding(),
+            'difficulties' => collect(Difficulty::cases())->map(fn($difficulty) => [
+                'value' => $difficulty->value,
+                'label' => $difficulty->getLabel(),
+                'description' => $difficulty->getDescription(),
+            ]),
         ]);
     }
 
@@ -223,6 +246,10 @@ class OnboardingController extends Controller
             'notification_preferences' => $validated['notifications'] ?? [],
             'difficulty_preference' => $validated['difficulty_preference']
         ]);
+        
+        // Refresh the user model to ensure onboarding status is current
+        $user->refresh();
+        $user->load('athlete');
 
         // If all onboarding steps are now complete, run the final setup
         if ($user->onboarding()->finished()) {
@@ -231,6 +258,23 @@ class OnboardingController extends Controller
 
         $nextStep = $this->getNextIncompleteStep($user);
         return redirect($nextStep)->with('success', 'Preferences saved!');
+    }
+
+    /**
+     * Update athlete data (if provided) and redirect to next onboarding step
+     */
+    private function next(User $user, string $successMessage, array $attributes = []): \Illuminate\Http\RedirectResponse
+    {
+        if (filled($attributes)) {
+            $user->athlete()->update($attributes);
+        }
+        
+        // Refresh the user model to ensure onboarding status is current
+        $user->refresh();
+        $user->load('athlete');
+
+        $nextStep = $this->getNextIncompleteStep($user);
+        return redirect($nextStep)->with('success', $successMessage);
     }
 
     /**

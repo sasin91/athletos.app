@@ -160,6 +160,11 @@ class Athlete extends Model
         return $this->hasMany(PerformanceIndicator::class);
     }
 
+    public function chatSessions(): HasMany
+    {
+        return $this->hasMany(ChatSession::class);
+    }
+
     public function completedExercises(): HasManyThrough
     {
         return $this->hasManyThrough(

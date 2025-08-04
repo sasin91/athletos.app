@@ -2,9 +2,10 @@
 
 namespace App\Data;
 
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class OneRepMaxes implements Wireable
+class OneRepMaxes implements Jsonable, Arrayable
 {
     /**
      * @param OneRepMax[] $oneRepMaxes
@@ -14,18 +15,23 @@ class OneRepMaxes implements Wireable
     ) {
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
-            'oneRepMaxes' => array_map(fn($max) => $max->toLivewire(), $this->oneRepMaxes),
+            'oneRepMaxes' => array_map(fn($max) => $max->toArray(), $this->oneRepMaxes),
+            // Computed properties for React components
+            'count' => $this->count(),
+            'isEmpty' => $this->isEmpty(),
+            'isNotEmpty' => $this->isNotEmpty(),
+            'improved' => array_map(fn($max) => $max->toArray(), $this->getImproved()->oneRepMaxes),
+            'declined' => array_map(fn($max) => $max->toArray(), $this->getDeclined()->oneRepMaxes),
+            'stable' => array_map(fn($max) => $max->toArray(), $this->getStable()->oneRepMaxes),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        $oneRepMaxes = array_map(fn($maxData) => OneRepMax::fromLivewire($maxData), $value['oneRepMaxes']);
-        
-        return new self(oneRepMaxes: $oneRepMaxes);
+        return json_encode($this->toArray(), $options);
     }
 
     public function add(OneRepMax $oneRepMax): void
@@ -73,11 +79,6 @@ class OneRepMaxes implements Wireable
     public function map(callable $callback): array
     {
         return array_map($callback, $this->oneRepMaxes);
-    }
-
-    public function toArray(): array
-    {
-        return $this->oneRepMaxes;
     }
 
     public function getImproved(): self

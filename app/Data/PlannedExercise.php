@@ -3,9 +3,10 @@
 namespace App\Data;
 
 use App\Enums\Exercise;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class PlannedExercise implements Wireable
+class PlannedExercise implements Jsonable, Arrayable
 {
     public function __construct(
         public Exercise $exercise,
@@ -24,50 +25,60 @@ class PlannedExercise implements Wireable
     ) {
     }
 
-    public function toLivewire(): array
+    public static function fromArray(array $data): self
+    {
+        return new self(
+            exercise: $data['exercise'] instanceof Exercise ? $data['exercise'] : Exercise::from($data['exercise']),
+            exerciseSlug: $data['exerciseSlug'] ?? $data['exercise_slug'] ?? '',
+            priority: $data['priority'] ?? $data['order'] ?? 0,
+            sets: $data['sets'] ?? 0,
+            reps: $data['reps'] ?? 0,
+            weight: $data['weight'] ?? 0,
+            restSeconds: $data['restSeconds'] ?? $data['rest_seconds'] ?? 0,
+            displayName: $data['displayName'] ?? $data['display_name'] ?? '',
+            category: $data['category'] ?? '',
+            difficulty: $data['difficulty'] ?? 'medium',
+            tags: $data['tags'] ?? [],
+            notes: $data['notes'] ?? null,
+            cues: $data['cues'] ?? null,
+        );
+    }
+
+    public function toArray(): array
     {
         return [
             'exercise' => [
                 'value' => $this->exercise->value,
-                'display_name' => $this->exercise->displayName(),
+                'displayName' => $this->exercise->displayName(),
                 'category' => $this->exercise->category()->value,
                 'difficulty' => $this->exercise->difficulty()->value,
                 'tags' => $this->exercise->tags(),
             ],
-            'exercise_slug' => $this->exerciseSlug,
+            'exerciseSlug' => $this->exerciseSlug,
             'order' => $this->priority,
             'sets' => $this->sets,
             'reps' => $this->reps,
             'weight' => $this->weight,
-            'rest_seconds' => $this->restSeconds,
-            'display_name' => $this->displayName,
+            'restSeconds' => $this->restSeconds,
+            'displayName' => $this->displayName,
             'category' => $this->category,
             'difficulty' => $this->difficulty,
             'tags' => $this->tags,
             'notes' => $this->notes,
             'cues' => $this->cues,
+            // Computed properties for React components
+            'effectiveCues' => $this->getEffectiveCues(),
+            'estimatedDurationMinutes' => $this->getEstimatedDurationMinutes(),
+            'isStrengthExercise' => $this->isStrengthExercise(),
+            'isRecoveryExercise' => $this->isRecoveryExercise(),
+            'difficultyLevel' => $this->getDifficultyLevel(),
+            'difficultyColorClass' => $this->getDifficultyColorClass(),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        $exercise = Exercise::from($value['exercise']['value']);
-        
-        return new self(
-            exercise: $exercise,
-            exerciseSlug: $value['exercise_slug'],
-            priority: $value['order'],
-            sets: $value['sets'],
-            reps: $value['reps'],
-            weight: $value['weight'],
-            restSeconds: $value['rest_seconds'],
-            displayName: $value['display_name'],
-            category: $value['category'],
-            difficulty: $value['difficulty'],
-            tags: $value['tags'],
-            notes: $value['notes'] ?? null,
-            cues: $value['cues'] ?? null,
-        );
+        return json_encode($this->toArray(), $options);
     }
 
     /**

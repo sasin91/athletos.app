@@ -4,9 +4,10 @@ namespace App\Data;
 
 use App\Enums\Exercise;
 use Carbon\Carbon;
-use Livewire\Wireable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 
-class CompletedSet implements Wireable
+class CompletedSet implements Jsonable, Arrayable
 {
     public function __construct(
         public Exercise $exercise,
@@ -102,34 +103,34 @@ class CompletedSet implements Wireable
         };
     }
 
-    public function toLivewire(): array
+    public function toArray(): array
     {
         return [
             'exercise' => [
                 'value' => $this->exercise->value,
-                'display_name' => $this->exercise->displayName(),
+                'displayName' => $this->exercise->displayName(),
             ],
-            'set_number' => $this->setNumber,
+            'setNumber' => $this->setNumber,
             'reps' => $this->reps,
             'weight' => $this->weight,
             'rpe' => $this->rpe,
             'notes' => $this->notes,
-            'completed_at' => $this->completedAt->toISOString(),
+            'completedAt' => $this->completedAt->toISOString(),
+            // Computed properties for React components
+            'hasData' => $this->hasData(),
+            'isComplete' => $this->isComplete(),
+            'formattedWeight' => $this->getFormattedWeight(),
+            'formattedReps' => $this->getFormattedReps(),
+            'formattedRpe' => $this->getFormattedRPE(),
+            'volume' => $this->getVolume(),
+            'formattedVolume' => $this->getFormattedVolume(),
+            'intensityLevel' => $this->getIntensityLevel(),
+            'intensityColor' => $this->getIntensityColor(),
         ];
     }
 
-    public static function fromLivewire($value): self
+    public function toJson($options = 0): string
     {
-        $exercise = Exercise::from($value['exercise']['value']);
-        
-        return new self(
-            exercise: $exercise,
-            setNumber: $value['set_number'],
-            reps: $value['reps'],
-            weight: $value['weight'],
-            rpe: $value['rpe'],
-            notes: $value['notes'],
-            completedAt: Carbon::parse($value['completed_at']),
-        );
+        return json_encode($this->toArray(), $options);
     }
 } 
