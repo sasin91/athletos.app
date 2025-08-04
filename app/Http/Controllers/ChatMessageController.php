@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Response;
 use Prism\Prism\Enums\ChunkType;
+use Prism\Prism\Text\Chunk;
 use Symfony\Component\HttpFoundation\EventStreamResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatMessageController
 {
@@ -42,18 +44,19 @@ class ChatMessageController
 
     public function answer(
         ChatMessage $chatMessage
-    ): EventStreamResponse {
+    ): StreamedResponse
+    {
         Gate::authorize('isAthlete');
 
         return Response::eventStream(function () use ($chatMessage) {
             $chatRequest = app(GenerateChatResponse::class)->execute(
-                $chatMessage->session,
+                $chatMessage->chatSession,
                 $chatMessage->content,
             );
 
             $fullAnswer = '';
 
-            /** @var \Prism\Prism\Text\Chunk $textChunk */
+            /** @var Chunk $textChunk */
             foreach ($chatRequest->asStream() as $textChunk) {
                 if ($textChunk->chunkType === ChunkType::Text) {
                     $fullAnswer .= $textChunk->text;
@@ -62,9 +65,9 @@ class ChatMessageController
                 yield $textChunk;
             }
 
-            // Save the complete response to database
+            // Save the complete response to a database
             app(AddChatMessage::class)->addAssistantMessage(
-                $chatMessage->session, 
+                $chatMessage->chatSession,
                 $fullAnswer
             );
         });
