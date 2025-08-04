@@ -1,39 +1,27 @@
 <?php
 
-namespace Tests\Feature;
-
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 
-class AuthTest extends TestCase
-{
-    use RefreshDatabase;
+uses(RefreshDatabase::class);
 
-    /** @test */
-    public function auth_login_returns_inertia_response()
-    {
-        $response = $this->get('/login');
+it('returns inertia response for login page', function () {
+    $response = $this->get('/login');
 
-        $response->assertOk();
-    }
+    $response->assertOk();
+});
 
-    /** @test */
-    public function auth_register_returns_inertia_response()
-    {
-        $response = $this->get('/register');
+it('returns inertia response for register page', function () {
+    $response = $this->get('/register');
 
-        $response->assertOk();
-    }
+    $response->assertOk();
+});
 
-    /** @test */
-    public function login_form_submission_handles_validation_errors()
-    {
-        $response = $this->post('/login', [
-            'email' => 'test@example.com',
-            'password' => 'wrongpassword',
-        ]);
+it('handles validation errors on login form submission', function () {
+    $response = $this->post('/login', [
+        'email' => 'test@example.com',
+        'password' => 'wrongpassword',
+    ]);
 
-        $response->assertStatus(302); // Redirect due to validation error
-        $response->assertSessionHasErrors(['email']);
-    }
-}
+    $response->assertStatus(302); // Redirect due to validation error
+    $response->assertSessionHasErrors(['email']);
+});

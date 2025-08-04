@@ -1,74 +1,64 @@
 <?php
 
-namespace Tests\Feature\Settings;
-
 use App\Models\User;
 use App\Models\Athlete;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 
-class ProfileUpdateTest extends TestCase
-{
-    use RefreshDatabase;
+uses(RefreshDatabase::class);
 
-    public function test_profile_page_is_displayed(): void
-    {
-        $user = User::factory()->athlete()->create();
+it('displays profile page', function () {
+    $user = User::factory()->athlete()->create();
 
-        $this->actingAs($user)->get('/settings/profile')->assertOk();
-    }
+    $this->actingAs($user)->get('/settings/profile')->assertOk();
+});
 
-    public function test_profile_information_can_be_updated(): void
-    {
-        $user = User::factory()->athlete()->create();
+it('allows profile information to be updated', function () {
+    $user = User::factory()->athlete()->create();
 
-        $response = $this->actingAs($user)
-            ->patch('/settings/profile', [
-                'name' => 'Test User',
-                'email' => 'test@example.com',
-            ]);
+    $response = $this->actingAs($user)
+        ->patch('/settings/profile', [
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+        ]);
 
-        $response
-            ->assertSessionHasNoErrors()
-            ->assertRedirect('/settings/profile');
+    $response
+        ->assertSessionHasNoErrors()
+        ->assertRedirect('/settings/profile');
 
-        $user->refresh();
+    $user->refresh();
 
-        $this->assertSame('Test User', $user->name);
-        $this->assertSame('test@example.com', $user->email);
-        $this->assertNull($user->email_verified_at);
-    }
+    expect($user->name)->toBe('Test User');
+    expect($user->email)->toBe('test@example.com');
+    expect($user->email_verified_at)->toBeNull();
+});
 
-    public function test_email_verification_status_is_unchanged_when_email_address_is_unchanged(): void
-    {
-        $user = User::factory()->athlete()->create();
+it('keeps email verification status unchanged when email address is unchanged', function () {
+    $user = User::factory()->athlete()->create();
 
-        $response = $this->actingAs($user)
-            ->patch('/settings/profile', [
-                'name' => 'Test User',
-                'email' => $user->email,
-            ]);
+    $response = $this->actingAs($user)
+        ->patch('/settings/profile', [
+            'name' => 'Test User',
+            'email' => $user->email,
+        ]);
 
-        $response
-            ->assertSessionHasNoErrors()
-            ->assertRedirect('/settings/profile');
+    $response
+        ->assertSessionHasNoErrors()
+        ->assertRedirect('/settings/profile');
 
-        $this->assertNotNull($user->refresh()->email_verified_at);
-    }
+    expect($user->refresh()->email_verified_at)->not->toBeNull();
+});
 
-    public function test_user_can_delete_their_account(): void
-    {
-        $user = User::factory()->create();
-        // Create a simple user without athlete profile to avoid foreign key constraints
-        
-        $response = $this->actingAs($user)
-            ->delete('/settings/profile');
+it('allows user to delete their account', function () {
+    $user = User::factory()->create();
+    // Create a simple user without athlete profile to avoid foreign key constraints
+    
+    $response = $this->actingAs($user)
+        ->delete('/settings/profile');
 
-        $response
-            ->assertSessionHasNoErrors()
-            ->assertRedirect('/');
+    $response
+        ->assertSessionHasNoErrors()
+        ->assertRedirect('/');
 
-        $this->assertGuest();
-        $this->assertNull($user->fresh());
-    }
-}
+    $this->assertGuest();
+    expect($user->fresh())->toBeNull();
+});

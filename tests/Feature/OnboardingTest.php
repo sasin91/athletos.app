@@ -1,88 +1,69 @@
 <?php
 
-namespace Tests\Feature;
-
 use App\Models\User;
 use App\Models\Athlete;
 use App\Models\TrainingPlan;
 use App\Enums\UserRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 
-class OnboardingTest extends TestCase
-{
-    use RefreshDatabase;
+uses(RefreshDatabase::class);
 
-    protected function setUp(): void
-    {
-        parent::setUp();
+beforeEach(function () {
+    $this->user = User::factory()->create(['roles' => [UserRole::Athlete]]);
+    $this->trainingPlan = TrainingPlan::factory()->create();
 
-        $this->user = User::factory()->create(['roles' => [UserRole::Athlete]]);
-        $this->trainingPlan = TrainingPlan::factory()->create();
+    \App\Models\TrainingPhase::factory()->create([
+        'training_plan_id' => $this->trainingPlan->id,
+        'order' => 0,
+        'duration_weeks' => 4,
+    ]);
 
-        \App\Models\TrainingPhase::factory()->create([
-            'training_plan_id' => $this->trainingPlan->id,
-            'order' => 0,
-            'duration_weeks' => 4,
-        ]);
+    $this->athlete = Athlete::factory()->create([
+        'user_id' => $this->user->id,
+        'training_days' => ['monday', 'wednesday', 'friday'],
+        'experience_level' => 'intermediate',
+        'primary_goal' => 'strength',
+        'preferred_time' => 'evening',
+        'session_duration' => 60,
+        'difficulty_preference' => 'challenging',
+        'current_plan_id' => $this->trainingPlan->id,
+        'plan_start_date' => now(),
+    ]);
+});
 
-        $this->athlete = Athlete::factory()->create([
-            'user_id' => $this->user->id,
-            'training_days' => ['monday', 'wednesday', 'friday'],
-            'experience_level' => 'intermediate',
-            'primary_goal' => 'strength',
-            'preferred_time' => 'evening',
-            'session_duration' => 60,
-            'difficulty_preference' => 'challenging',
-            'current_plan_id' => $this->trainingPlan->id,
-            'plan_start_date' => now(),
-        ]);
-    }
+it('returns inertia response for onboarding profile', function () {
+    $user = User::factory()->create(['roles' => [UserRole::Athlete]]);
 
-    /** @test */
-    public function onboarding_profile_returns_inertia_response()
-    {
-        $user = User::factory()->create(['roles' => [UserRole::Athlete]]);
+    $response = $this->actingAs($user)
+        ->get('/onboarding/profile');
 
-        $response = $this->actingAs($user)
-            ->get('/onboarding/profile');
+    $response->assertOk();
+});
 
-        $response->assertOk();
-    }
+it('returns inertia response for onboarding schedule', function () {
+    $response = $this->actingAs($this->user)
+        ->get('/onboarding/schedule');
 
-    /** @test */
-    public function onboarding_schedule_returns_inertia_response()
-    {
-        $response = $this->actingAs($this->user)
-            ->get('/onboarding/schedule');
+    $response->assertOk();
+});
 
-        $response->assertOk();
-    }
+it('returns inertia response for onboarding stats', function () {
+    $response = $this->actingAs($this->user)
+        ->get('/onboarding/stats');
 
-    /** @test */
-    public function onboarding_stats_returns_inertia_response()
-    {
-        $response = $this->actingAs($this->user)
-            ->get('/onboarding/stats');
+    $response->assertOk();
+});
 
-        $response->assertOk();
-    }
+it('returns inertia response for onboarding preferences', function () {
+    $response = $this->actingAs($this->user)
+        ->get('/onboarding/preferences');
 
-    /** @test */
-    public function onboarding_preferences_returns_inertia_response()
-    {
-        $response = $this->actingAs($this->user)
-            ->get('/onboarding/preferences');
+    $response->assertOk();
+});
 
-        $response->assertOk();
-    }
+it('formats all enum data properly', function () {
+    $response = $this->actingAs($this->user)
+        ->get('/onboarding/profile');
 
-    /** @test */
-    public function all_enum_data_is_properly_formatted()
-    {
-        $response = $this->actingAs($this->user)
-            ->get('/onboarding/profile');
-
-        $response->assertOk();
-    }
-}
+    $response->assertOk();
+});

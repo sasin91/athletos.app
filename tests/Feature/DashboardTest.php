@@ -1,42 +1,31 @@
 <?php
 
-namespace Tests\Feature;
-
 use App\Models\User;
 use App\Models\Athlete;
 use App\Models\TrainingPlan;
 use App\Enums\UserRole;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\Test;
-use Tests\TestCase;
 
-class DashboardTest extends TestCase
-{
-    use RefreshDatabase;
+uses(RefreshDatabase::class);
 
-    #[Test]
-    public function dashboard_returns_inertia_response()
-    {
-        $user = User::factory()
-            ->athlete()
-            ->create(['email' => 'jonas.kerwin.hansen@gmail.com']);
+it('returns inertia response for dashboard', function () {
+    $user = User::factory()
+        ->athlete()
+        ->create(['email' => 'jonas.kerwin.hansen@gmail.com']);
 
-        $response = $this->actingAs($user)
-            ->get('/dashboard');
+    $response = $this->actingAs($user)
+        ->get('/dashboard');
 
-        $response->assertOk();
-    }
+    $response->assertOk();
+});
 
-    #[Test]
-    public function chat_returns_inertia_response()
-    {
-        $user = User::factory()
-            ->athlete()
-            ->create(['email' => 'jonas.kerwin.hansen@gmail.com']);
+it('returns inertia response for chat', function () {
+    $user = User::factory()
+        ->athlete()
+        ->create(['email' => 'jonas.kerwin.hansen@gmail.com']);
 
-        $response = $this->actingAs($user)
-            ->get('/chat');
+    $response = $this->actingAs($user)
+        ->get('/chat');
 
-        $response->assertOk();
-    }
-}
+    $response->assertOk();
+});
