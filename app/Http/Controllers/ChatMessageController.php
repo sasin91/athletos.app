@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Actions\AddChatMessage;
 use App\Actions\GenerateChatResponse;
 use App\Enums\ChatMessageRole;
+use App\Http\Resources\PrismTextChunk;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use Illuminate\Http\JsonResponse;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Response;
 use Prism\Prism\Enums\ChunkType;
 use Prism\Prism\Text\Chunk;
+use Prism\Prism\ValueObjects\ToolCall;
+use Prism\Prism\ValueObjects\ToolResult;
 use Symfony\Component\HttpFoundation\EventStreamResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -62,7 +65,7 @@ class ChatMessageController
                     $fullAnswer .= $textChunk->text;
                 }
 
-                yield $textChunk;
+                yield new PrismTextChunk($textChunk);
             }
 
             // Save the complete response to a database
