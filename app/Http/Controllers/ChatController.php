@@ -26,7 +26,7 @@ class ChatController extends Controller
     public function index(
         #[CurrentUser] User $user
     ): Response {
-        Gate::authorize('isAthlete');
+        Gate::authorize('index', ChatSession::class);
 
         $session = $user->athlete->chatSessions()->latest()->firstOr(function () use ($user) {
             // Create a new session if none exists
@@ -49,7 +49,7 @@ class ChatController extends Controller
         ChatSession $session,
         #[CurrentUser] User $user
     ): Response {
-        Gate::authorize('isAthlete');
+        Gate::authorize('show', $session);
 
         // Load messages for the session
         $messages = $session->messages()->latest()->get();
@@ -66,7 +66,7 @@ class ChatController extends Controller
     public function create(
         #[CurrentUser] User $user
     ): RedirectResponse {
-        Gate::authorize('isAthlete');
+        Gate::authorize('create', ChatSession::class);
 
         // Create a new chat session
         $session = app(CreateChatSession::class)->execute($user->athlete->id);
