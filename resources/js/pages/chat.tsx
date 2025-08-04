@@ -1,12 +1,11 @@
-import ChatHeader from '@/components/chat/chat-header';
 import ChatInput from '@/components/chat/chat-input';
 import ChatMessageList from '@/components/chat/chat-message-list';
-import ChatSidebar from '@/components/chat/chat-sidebar';
 import chat from '@/routes/chat';
 import { SharedData } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import ChatSidebarLayout from '@/layouts/app/chat-sidebar-layout';
 
 interface ChatMessage {
     id: number;
@@ -162,15 +161,22 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
         }
     };
 
+    const breadcrumbs = [
+        { title: 'Chat', href: chat.index.url() },
+        ...(session?.subject ? [{ title: session.subject, href: chat.show.url({ session: session.id }) }] : [])
+    ];
+
     return (
-        <>
+        <ChatSidebarLayout 
+            breadcrumbs={breadcrumbs}
+            currentSession={session}
+            sessions={sessions}
+        >
             <Head title={session?.subject || 'Chat'} />
-            <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
-                <ChatSidebar currentSession={session} sessions={sessions} />
-
-                <div className="flex flex-1 flex-col bg-white dark:bg-gray-900">
-                    <ChatHeader title={session?.subject || 'New Chat'} />
-
+            
+            <div className="flex h-full flex-col">
+                {/* Chat Messages */}
+                <div className="flex-1 overflow-hidden">
                     <ChatMessageList 
                         messages={messages} 
                         currentQuestion={question} 
@@ -179,7 +185,10 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
                         isThinking={isThinking}
                         currentToolCalls={currentToolCalls}
                     />
+                </div>
 
+                {/* Chat Input */}
+                <div className="border-t border-sidebar-border p-6">
                     <ChatInput
                         onSubmit={(prompt) => {
                             setQuestion(prompt);
@@ -190,6 +199,6 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
                     />
                 </div>
             </div>
-        </>
+        </ChatSidebarLayout>
     );
 }
