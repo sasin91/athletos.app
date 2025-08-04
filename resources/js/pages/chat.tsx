@@ -35,7 +35,7 @@ type PrismTextChunk = {
     toolCalls: Array<{
         id: string;
         name: string;
-        arguments: Record<string, any>;
+        arguments: Record<string, unknown>;
         resultId?: string;
         reasoningId?: string;
         reasoningSummary?: string;
@@ -72,6 +72,14 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
     const [question, setQuestion] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [answer, setAnswer] = useState<string>('');
+    const [isThinking, setIsThinking] = useState(false);
+    const [currentToolCalls, setCurrentToolCalls] = useState<Array<{
+        id: string;
+        name: string;
+        arguments: Record<string, unknown>;
+        status: 'calling' | 'completed';
+        result?: unknown;
+    }>>([]);
     const submit = async (prompt: string) => {
         try {
             setIsLoading(true);
@@ -106,15 +114,35 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
                 switch (chunk.chunkType) {
                     case 'text':
                         setAnswer((prev) => prev + chunk.text);
+                        setIsThinking(false);
                         break;
                     case 'thinking':
-                        // Handle thinking state if needed
+                        setIsThinking(true);
                         break;
                     case 'tool_call':
-                        // Handle tool calls if needed
+                        chunk.toolCalls.forEach(toolCall => {
+                            setCurrentToolCalls(prev => {
+                                const existing = prev.find(tc => tc.id === toolCall.id);
+                                if (existing) return prev;
+                                return [...prev, {
+                                    id: toolCall.id,
+                                    name: toolCall.name,
+                                    arguments: toolCall.arguments,
+                                    status: 'calling' as const
+                                }];
+                            });
+                        });
                         break;
                     case 'tool_result':
-                        // Handle tool results if needed
+                        chunk.toolResults.forEach(toolResult => {
+                            setCurrentToolCalls(prev => 
+                                prev.map(tc => 
+                                    tc.id === toolResult.toolCallId 
+                                        ? { ...tc, status: 'completed' as const, result: toolResult.result }
+                                        : tc
+                                )
+                            );
+                        });
                         break;
                     case 'meta':
                         // Handle meta information if needed
@@ -129,6 +157,8 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
             }
         } finally {
             setIsLoading(false);
+            setIsThinking(false);
+            setCurrentToolCalls([]);
         }
     };
 
@@ -141,7 +171,14 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
                 <div className="flex flex-1 flex-col bg-white dark:bg-gray-900">
                     <ChatHeader title={session?.subject || 'New Chat'} />
 
-                    <ChatMessageList messages={messages} currentQuestion={question} currentAnswer={answer} isLoading={isLoading} />
+                    <ChatMessageList 
+                        messages={messages} 
+                        currentQuestion={question} 
+                        currentAnswer={answer} 
+                        isLoading={isLoading}
+                        isThinking={isThinking}
+                        currentToolCalls={currentToolCalls}
+                    />
 
                     <ChatInput
                         onSubmit={(prompt) => {

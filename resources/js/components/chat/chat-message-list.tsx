@@ -13,13 +13,23 @@ interface ChatMessageListProps {
   currentQuestion?: string;
   currentAnswer?: string;
   isLoading?: boolean;
+  isThinking?: boolean;
+  currentToolCalls?: Array<{
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+    status: 'calling' | 'completed';
+    result?: unknown;
+  }>;
 }
 
 export default function ChatMessageList({ 
   messages, 
   currentQuestion, 
   currentAnswer, 
-  isLoading = false 
+  isLoading = false,
+  isThinking = false,
+  currentToolCalls = []
 }: ChatMessageListProps) {
   const messagesRef = useRef<HTMLDivElement>(null);
 
@@ -54,11 +64,13 @@ export default function ChatMessageList({
         />
       )}
 
-      {(currentAnswer || isLoading) && (
+      {(currentAnswer || isLoading || isThinking || currentToolCalls.length > 0) && (
         <ChatMessage
           role="assistant"
           content={currentAnswer || ''}
-          isLoading={!currentAnswer && isLoading}
+          isLoading={!currentAnswer && isLoading && !isThinking}
+          isThinking={isThinking}
+          toolCalls={currentToolCalls}
         />
       )}
     </div>
