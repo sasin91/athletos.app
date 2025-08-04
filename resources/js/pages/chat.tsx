@@ -5,7 +5,7 @@ import { SharedData } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import ChatSidebarLayout from '@/layouts/app/chat-sidebar-layout';
+import AppLayout from '@/layouts/app-layout';
 
 interface ChatMessage {
     id: number;
@@ -167,16 +167,12 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
     ];
 
     return (
-        <ChatSidebarLayout 
-            breadcrumbs={breadcrumbs}
-            currentSession={session}
-            sessions={sessions}
-        >
+        <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={session?.subject || 'Chat'} />
             
-            <div className="flex h-full flex-col">
+            <div className="flex flex-col h-screen bg-white dark:bg-gray-900">
                 {/* Chat Messages */}
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-hidden">
                     <ChatMessageList 
                         messages={messages} 
                         currentQuestion={question} 
@@ -188,17 +184,19 @@ export default function ChatPage({ session, messages, sessions = null }: ChatPag
                 </div>
 
                 {/* Chat Input */}
-                <div className="border-t border-sidebar-border p-6">
-                    <ChatInput
-                        onSubmit={(prompt) => {
-                            setQuestion(prompt);
-                            return submit(prompt);
-                        }}
-                        isLoading={isLoading}
-                        placeholder="Ask me anything about your training..."
-                    />
+                <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+                    <div className="max-w-4xl mx-auto">
+                        <ChatInput
+                            onSubmit={(prompt) => {
+                                setQuestion(prompt);
+                                return submit(prompt);
+                            }}
+                            isLoading={isLoading}
+                            placeholder="Ask me anything about your training..."
+                        />
+                    </div>
                 </div>
             </div>
-        </ChatSidebarLayout>
+        </AppLayout>
     );
 }

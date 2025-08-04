@@ -18,11 +18,11 @@ interface ChatSidebarLayoutProps {
     sessions?: ChatSession[] | null;
 }
 
-export default function ChatSidebarLayout({ 
-    children, 
-    breadcrumbs = [], 
-    currentSession = null, 
-    sessions = null 
+export default function ChatSidebarLayout({
+    children,
+    breadcrumbs = [],
+    currentSession = null,
+    sessions = null
 }: PropsWithChildren<ChatSidebarLayoutProps>) {
     return (
         <AppShell variant="sidebar">

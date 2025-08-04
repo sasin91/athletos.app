@@ -46,33 +46,35 @@ export default function ChatMessageList({
   return (
     <div 
       ref={messagesRef}
-      className="flex-1 overflow-y-auto px-6 py-4 space-y-4"
+      className="h-full overflow-y-auto space-y-6"
     >
-      {messages.map((message) => (
-        <ChatMessage
-          key={message.id}
-          role={message.role}
-          content={message.content}
-        />
-      ))}
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+        {messages.map((message) => (
+          <ChatMessage
+            key={message.id}
+            role={message.role}
+            content={message.content}
+          />
+        ))}
 
-      {/* Current question/answer pair */}
-      {currentQuestion && (
-        <ChatMessage
-          role="user"
-          content={currentQuestion}
-        />
-      )}
+        {/* Current question/answer pair */}
+        {currentQuestion && (
+          <ChatMessage
+            role="user"
+            content={currentQuestion}
+          />
+        )}
 
-      {(currentAnswer || isLoading || isThinking || currentToolCalls.length > 0) && (
-        <ChatMessage
-          role="assistant"
-          content={currentAnswer || ''}
-          isLoading={!currentAnswer && isLoading && !isThinking}
-          isThinking={isThinking}
-          toolCalls={currentToolCalls}
-        />
-      )}
+        {(currentAnswer || isLoading || isThinking || currentToolCalls.length > 0) && (
+          <ChatMessage
+            role="assistant"
+            content={currentAnswer || ''}
+            isLoading={!currentAnswer && isLoading && !isThinking}
+            isThinking={isThinking}
+            toolCalls={currentToolCalls}
+          />
+        )}
+      </div>
     </div>
   );
 }
