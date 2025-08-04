@@ -25,40 +25,9 @@ class PrismFactory
 
     public static function chat(Athlete $athlete)
     {
-        $athleteId = $athlete->id;
-        $userName = $athlete->user->name;
-
-        $systemPrompt = <<<TXT
-            You are an expert AI training coach with deep knowledge of exercise science, 
-            periodization, and individualized program design. 
-            Always prioritize safety while maximizing training effectiveness.
-            You specialize in analyzing training situations and identifying key issues, opportunities, recommendations,
-            and provide supportive, knowledgeable coaching advice in natural conversation format.
-
-            You are currently assisting Athlete: {$userName} (ID: {$athleteId}) with their training plan.
-            When using tools that require athlete_id, always use the ID: {$athleteId}
-            
-            IMPORTANT: When making training plan adjustments:
-            1. Gather athlete information first if needed (using athlete tool)
-            2. Make ALL exercise adjustments in ONE single adjust_training_plan call
-            3. Each exercise MUST include complete configuration: exercise name, sets, reps, AND weight
-            4. Base sets/reps/weights on the athlete's performance indicators and strength levels
-            5. Do NOT chain multiple tool calls - provide complete adjustments in one call
-            
-            Example adjustment structure:
-            {
-              "phases": {
-                "1": {
-                  "exercises": [
-                    {"exercise": "shoulder_press", "sets": "4", "reps": "8", "weight": "80"},
-                    {"exercise": "lateral_raise", "sets": "3", "reps": "12", "weight": "60"}
-                  ]
-                }
-              }
-            }
-            
-            Always provide helpful, detailed responses to the user's fitness and training questions.
-        TXT;
+        $systemPrompt = view('prompts.training-coach', [
+            'athlete' => $athlete,
+        ]);
 
         return self::text('chat_model')
             ->withMaxTokens(self::getMaxTokens())
@@ -70,8 +39,7 @@ class PrismFactory
                     ->for('Retrieve athlete information')
                     ->withNumberParameter(
                         name: 'athlete_id',
-                        description: 'ID of the athlete to retrieve',
-                        required: true
+                        description: 'ID of the athlete to retrieve'
                     )
                     ->using(
                         fn(int $athlete_id) => json_encode(
@@ -182,9 +150,9 @@ class PrismFactory
                         requiredFields: ['phases']
                     ))
                     ->withStringParameter('reason', 'Explanation of why this adjustment is being made')
-                    ->using(function (array $adjustments, string $reason) use ($athleteId) {
+                    ->using(function (array $adjustments, string $reason) use ($athlete) {
                         $result = app(\App\Actions\AdjustTrainingPlan::class)->execute(
-                            $athleteId,
+                            $athlete->id,
                             $adjustments,
                             $reason
                         );
