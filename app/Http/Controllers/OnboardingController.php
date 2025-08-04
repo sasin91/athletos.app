@@ -96,16 +96,13 @@ class OnboardingController extends Controller
         Gate::authorize('isAthlete');
 
         $athlete = Auth::user()->athlete;
-        $allTrainingPlans = TrainingPlan::with('phases')->get();
-
-        // Filter training plans based on athlete preferences (experience level, goal, muscle groups)
-        $trainingPlans = $allTrainingPlans->filter(fn(TrainingPlan $plan) => $plan->isSuitableForAthlete($athlete));
+        $trainingPlans = TrainingPlan::with('phases')->get();
 
         return inertia('onboarding/plan', [
             'user' => Auth::user(),
             'athlete' => $athlete,
             'onboarding' => Auth::user()->onboarding(),
-            'trainingPlans' => $trainingPlans->values()
+            'trainingPlans' => $trainingPlans
         ]);
     }
 
