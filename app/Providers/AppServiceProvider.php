@@ -4,10 +4,14 @@ namespace App\Providers;
 
 use App\Enums\UserRole;
 use App\Models\Athlete;
+use App\Models\ChatMessage;
+use App\Models\ChatSession;
 use App\Models\Training;
 use App\Models\TrainingPlan;
 use App\Models\User;
 use App\Policies\AthletePolicy;
+use App\Policies\ChatMessagePolicy;
+use App\Policies\ChatSessionPolicy;
 use App\Policies\TrainingPolicy;
 use App\Policies\TrainingPlanPolicy;
 use Illuminate\Support\Facades\Blade;
@@ -34,6 +38,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Training::class, TrainingPolicy::class);
         Gate::policy(Athlete::class, AthletePolicy::class);
         Gate::policy(TrainingPlan::class, TrainingPlanPolicy::class);
+        Gate::policy(ChatSession::class, ChatSessionPolicy::class);
+        Gate::policy(ChatMessage::class, ChatMessagePolicy::class);
 
         // Define a gate for athlete dashboard access
         Gate::define('isAthlete', function (User $user) {

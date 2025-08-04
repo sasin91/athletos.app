@@ -26,7 +26,7 @@ class ChatMessageController
         ChatSession $session,
         Request $request
     ) {
-        Gate::authorize('isAthlete');
+        Gate::authorize('view', $session);
 
         $request->validate([
             'message' => 'required|string|max:5000',
@@ -49,7 +49,7 @@ class ChatMessageController
         ChatMessage $chatMessage
     ): StreamedResponse
     {
-        Gate::authorize('isAthlete');
+        Gate::authorize('view', $chatMessage);
 
         return Response::eventStream(function () use ($chatMessage) {
             $chatRequest = app(GenerateChatResponse::class)->execute(

@@ -46,6 +46,10 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
     const getInitials = useInitials();
     const [theme, setTheme] = useState('system');
 
+    // Check if user has access to chat feature
+    const authorizedChatEmails = ['jonas.kerwin.hansen@gmail.com'];
+    const hasChatAccess = authorizedChatEmails.includes(auth.user.email);
+
     useEffect(() => {
         const savedTheme = localStorage.getItem('appearance') || 'system';
         setTheme(savedTheme);
@@ -199,27 +203,29 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                 </Tooltip>
                             </TooltipProvider>
 
-                            {/* AI Chat Button */}
-                            <TooltipProvider delayDuration={0}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => {
-                                                router.visit(chat.index.url());
-                                            }}
-                                            className="group h-9 w-9 cursor-pointer relative"
-                                        >
-                                            <MessageCircle className="!size-5 opacity-80 group-hover:opacity-100" />
-                                            <span className="absolute -top-1 -right-1 h-3 w-3 bg-blue-500 rounded-full animate-pulse"></span>
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>Chat with AI Training Coach</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
+                            {/* AI Chat Button - Only show for authorized users */}
+                            {hasChatAccess && (
+                                <TooltipProvider delayDuration={0}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => {
+                                                    router.visit(chat.index.url());
+                                                }}
+                                                className="group h-9 w-9 cursor-pointer relative"
+                                            >
+                                                <MessageCircle className="!size-5 opacity-80 group-hover:opacity-100" />
+                                                <span className="absolute -top-1 -right-1 h-3 w-3 bg-blue-500 rounded-full animate-pulse"></span>
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Chat with AI Training Coach</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
                             
                             <div className="hidden lg:flex">
                                 {rightNavItems.map((item) => (
