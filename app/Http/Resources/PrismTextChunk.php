@@ -43,21 +43,21 @@ class PrismTextChunk extends JsonResource
                 ],
                 array: $this->toolResults
             ),
-            'finishReason' => $this->finishReason?->name,
-            'meta' => [
+            'finishReason' => $this->when($this->finishReason !== null, fn () => $this->finishReason->name),
+            'meta' => $this->when($this->meta !== null, fn () => [
                 'id' => $this->meta->id,
                 'model' => $this->meta->model,
                 'rateLimits' => $this->meta->rateLimits,
-            ],
+            ]),
             'additionalContent' => $this->additionalContent,
             'chunkType' => $this->chunkType->value,
-            'usage' => [
+            'usage' => $this->when($this->usage !== null, fn () => [
                 'promptTokens' => $this->usage->promptTokens,
                 'completionTokens' => $this->usage->completionTokens,
                 'cacheWriteInputTokens' => $this->usage->cacheWriteInputTokens,
                 'cacheReadInputTokens' => $this->usage->cacheReadInputTokens,
                 'thoughtTokens' => $this->usage->thoughtTokens,
-            ]
+            ])
         ];
     }
 }
