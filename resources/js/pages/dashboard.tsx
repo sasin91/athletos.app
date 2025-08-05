@@ -9,9 +9,6 @@ import DashboardHeader from '@/components/dashboard/dashboard-header';
 import DashboardStats from '@/components/dashboard/dashboard-stats';
 import TodaysTraining from '@/components/dashboard/todays-training';
 import DashboardSidebar from '@/components/dashboard/dashboard-sidebar';
-import { CommandPalette } from '@/components/ui/command-palette';
-import { QuickActionButton } from '@/components/ui/action-sheet';
-import { useDashboardCommands } from '@/hooks/use-dashboard-commands';
 import PageTransition from '@/components/ui/page-transition';
 
 interface DashboardPageProps {
@@ -30,7 +27,6 @@ interface DashboardPageProps {
   };
   weightProgressions: any;
   plannedExercises: any[];
-  oneRepMaxes: any;
   recoveryExercises: any[];
   date: string;
   formattedDate: string;
@@ -41,14 +37,13 @@ export default function DashboardPage({
   metrics,
   weightProgressions,
   plannedExercises,
-  oneRepMaxes,
   recoveryExercises,
   date,
   formattedDate
 }: DashboardPageProps) {
   const [currentDate, setCurrentDate] = useState(new Date(date));
   const [showExerciseSummary, setShowExerciseSummary] = useState(false);
-  const [exerciseSummaryDate, setExerciseSummaryDate] = useState<string | null>(null);
+  const [exerciseSummaryDate] = useState<string | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<string | null>(
     weightProgressions?.progressions?.[0]?.exercise?.value || null
   );
@@ -96,17 +91,7 @@ export default function DashboardPage({
     });
   };
 
-  const {
-    showCommandPalette,
-    setShowCommandPalette,
-    commands,
-    quickActions
-  } = useDashboardCommands({ onStartTraining: handleStartTraining });
 
-  const showExerciseSummaryModal = (date: string) => {
-    setExerciseSummaryDate(date);
-    setShowExerciseSummary(true);
-  };
 
   const handleSelectExercise = (exercise: string) => {
     setSelectedExercise(exercise);
@@ -171,13 +156,6 @@ export default function DashboardPage({
             </div>
           </div>
 
-          <CommandPalette
-            open={showCommandPalette}
-            onOpenChange={setShowCommandPalette}
-            commands={commands}
-          />
-
-          <QuickActionButton actions={quickActions} />
         </div>
       </PageTransition>
 
