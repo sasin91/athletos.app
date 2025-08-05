@@ -33,7 +33,7 @@ class PrismTextChunk extends JsonResource
                 ],
                 array: $this->toolCalls
             ),
-            'textResults' => array_map(
+            'toolResults' => array_map(
                 callback: fn (ToolResult $toolResult) => [
                     'toolCallId' => $toolResult->toolCallId,
                     'toolName' => $toolResult->toolName,
