@@ -47,6 +47,9 @@
     # Build assets
     npm run build
 
+    # Stop SSR service before switching symlink
+    sudo systemctl stop laravel-ssr
+
     # Symlink the current release
     rm -rf {{ $app_dir }}/current
     ln -s {{ $new_release_dir }} {{ $app_dir }}/current
@@ -56,6 +59,7 @@
 
     # reload php-fpm
     sudo systemctl restart php8.4-fpm
+    sudo systemctl start laravel-ssr
 
     echo "Deployment completed successfully!"
 @endtask
@@ -73,11 +77,18 @@
         exit 1
     fi
 
+    # Stop SSR service before switching symlink
+    sudo systemctl stop laravel-ssr
+
     # Remove the current symlink
     rm -rf {{ $app_dir }}/current
 
     # Create a new symlink to the previous release
     ln -s {{ $releases_dir }}/$previous_release {{ $app_dir }}/current
+
+    # reload php-fpm
+    sudo systemctl restart php8.4-fpm
+    sudo systemctl start laravel-ssr
 
     echo "Rollback completed successfully!"
 @endtask

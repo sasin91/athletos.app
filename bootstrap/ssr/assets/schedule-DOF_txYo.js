@@ -1,0 +1,149 @@
+import { jsxs, Fragment, jsx } from "react/jsx-runtime";
+import { useForm, Head, Link } from "@inertiajs/react";
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { B as Button } from "./button-hAi0Fg-Q.js";
+import { S as Select, a as SelectTrigger, b as SelectValue, c as SelectContent, d as SelectItem } from "./select-D4PbFH-j.js";
+import { O as OnboardingLayout } from "./onboarding-layout-BrSXrppm.js";
+import "@radix-ui/react-slot";
+import "class-variance-authority";
+import "clsx";
+import "tailwind-merge";
+import "@radix-ui/react-select";
+import "lucide-react";
+import "./dropdown-menu-BtKPamvc.js";
+import "@radix-ui/react-dropdown-menu";
+import "react";
+function Schedule({ user, athlete, onboarding: onboarding2, weekdays, trainingTimes }) {
+  const { data, setData, post, processing, errors } = useForm({
+    training_days: (athlete == null ? void 0 : athlete.training_days) || [],
+    training_frequency: (athlete == null ? void 0 : athlete.training_frequency) || "1w",
+    preferred_time: (athlete == null ? void 0 : athlete.preferred_time) || "",
+    session_duration: (athlete == null ? void 0 : athlete.session_duration) ? athlete.session_duration.toString() : ""
+  });
+  const handleTrainingDayChange = (day, checked) => {
+    if (checked) {
+      setData("training_days", [...data.training_days, day]);
+    } else {
+      setData("training_days", data.training_days.filter((d) => d !== day));
+    }
+  };
+  const submit = (e) => {
+    e.preventDefault();
+    post(onboarding2.schedule.store.url(), {
+      transform: (data2) => ({
+        ...data2,
+        training_frequency: data2.training_frequency === "1w" ? "" : data2.training_frequency
+      })
+    });
+  };
+  const sessionDurationOptions = [
+    { value: "45", label: "45 minutes" },
+    { value: "60", label: "1 hour" },
+    { value: "75", label: "1 hour 15 minutes" },
+    { value: "90", label: "1 hour 30 minutes" },
+    { value: "120", label: "2 hours" }
+  ];
+  const trainingFrequencyOptions = [
+    { value: "1w", label: "Every week" },
+    { value: "2w", label: "Every other week (1 week on, 1 week off)" },
+    { value: "3w", label: "Every 3 weeks (1 week on, 2 weeks off)" },
+    { value: "4w", label: "Every 4 weeks (1 week on, 3 weeks off)" }
+  ];
+  return /* @__PURE__ */ jsxs(Fragment, { children: [
+    /* @__PURE__ */ jsx(Head, { title: "Training Schedule - Athletos" }),
+    /* @__PURE__ */ jsx(OnboardingLayout, { title: "Set Your Training Schedule", children: /* @__PURE__ */ jsx("div", { className: "mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8", children: /* @__PURE__ */ jsxs("div", { className: "bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-xl rounded-lg p-8 border border-gray-200/20 dark:border-gray-700/20", children: [
+      /* @__PURE__ */ jsxs("div", { className: "text-center mb-8", children: [
+        /* @__PURE__ */ jsx("div", { className: "mx-auto h-16 w-16 bg-gradient-to-r from-pink-100 to-violet-100 dark:from-pink-900/20 dark:to-violet-900/20 rounded-full flex items-center justify-center mb-4", children: /* @__PURE__ */ jsx(CalendarIcon, { className: "h-8 w-8 text-pink-500" }) }),
+        /* @__PURE__ */ jsx("h2", { className: "text-2xl font-bold text-gray-900 dark:text-gray-100", children: "Set Your Training Schedule" }),
+        /* @__PURE__ */ jsx("p", { className: "mt-2 text-lg text-gray-600 dark:text-gray-400", children: "When do you prefer to train? This helps us schedule your sessions" })
+      ] }),
+      /* @__PURE__ */ jsxs("form", { onSubmit: submit, children: [
+        /* @__PURE__ */ jsxs("div", { className: "space-y-8", children: [
+          /* @__PURE__ */ jsxs("fieldset", { children: [
+            /* @__PURE__ */ jsx("legend", { className: "text-lg font-semibold text-gray-900 dark:text-gray-100", children: "Training Days" }),
+            /* @__PURE__ */ jsx("p", { className: "mt-1 text-sm text-gray-600 dark:text-gray-400", children: "Select the days you want to train each week" }),
+            /* @__PURE__ */ jsx("div", { className: "mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-7", children: weekdays.map((weekday) => /* @__PURE__ */ jsxs(
+              "label",
+              {
+                className: `relative flex flex-col items-center justify-center rounded-lg border-2 bg-white dark:bg-gray-700 p-4 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600 cursor-pointer transition-all ${data.training_days.includes(weekday.value) ? "border-pink-600 bg-gradient-to-r from-pink-50 to-violet-50 dark:from-pink-900/20 dark:to-violet-900/20 text-pink-600 dark:text-pink-400" : "border-gray-300 dark:border-gray-600"}`,
+                children: [
+                  /* @__PURE__ */ jsx(
+                    "input",
+                    {
+                      type: "checkbox",
+                      value: weekday.value,
+                      checked: data.training_days.includes(weekday.value),
+                      onChange: (e) => handleTrainingDayChange(weekday.value, e.target.checked),
+                      className: "sr-only"
+                    }
+                  ),
+                  /* @__PURE__ */ jsx(CalendarIcon, { className: "mb-2 h-6 w-6" }),
+                  weekday.label
+                ]
+              },
+              weekday.value
+            )) }),
+            errors.training_days && /* @__PURE__ */ jsx("p", { className: "mt-2 text-sm text-red-600 dark:text-red-400", children: errors.training_days })
+          ] }),
+          /* @__PURE__ */ jsxs("fieldset", { children: [
+            /* @__PURE__ */ jsx("legend", { className: "text-lg font-semibold text-gray-900 dark:text-gray-100", children: "Training Frequency" }),
+            /* @__PURE__ */ jsx("p", { className: "mt-1 text-sm text-gray-600 dark:text-gray-400", children: "How often do you want to train? This helps us schedule recovery weeks" }),
+            /* @__PURE__ */ jsxs("div", { className: "mt-4", children: [
+              /* @__PURE__ */ jsx("label", { htmlFor: "training_frequency", className: "block text-sm font-medium text-gray-900 dark:text-gray-100", children: "Training Pattern" }),
+              /* @__PURE__ */ jsxs(Select, { value: data.training_frequency, onValueChange: (value) => setData("training_frequency", value), children: [
+                /* @__PURE__ */ jsx(SelectTrigger, { className: "mt-2", children: /* @__PURE__ */ jsx(SelectValue, { placeholder: "Select training pattern" }) }),
+                /* @__PURE__ */ jsx(SelectContent, { children: trainingFrequencyOptions.map((option) => /* @__PURE__ */ jsx(SelectItem, { value: option.value, children: option.label }, option.value)) })
+              ] }),
+              /* @__PURE__ */ jsx("p", { className: "mt-2 text-sm text-gray-500 dark:text-gray-400", children: "Choose a pattern that fits your recovery needs and schedule" }),
+              errors.training_frequency && /* @__PURE__ */ jsx("p", { className: "mt-2 text-sm text-red-600 dark:text-red-400", children: errors.training_frequency })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-1 gap-6 sm:grid-cols-2", children: [
+            /* @__PURE__ */ jsxs("div", { children: [
+              /* @__PURE__ */ jsx("label", { htmlFor: "preferred_time", className: "block text-sm font-medium text-gray-900 dark:text-gray-100", children: "Preferred Training Time" }),
+              /* @__PURE__ */ jsxs(Select, { value: data.preferred_time, onValueChange: (value) => setData("preferred_time", value), children: [
+                /* @__PURE__ */ jsx(SelectTrigger, { className: "mt-2", children: /* @__PURE__ */ jsx(SelectValue, { placeholder: "Select your preferred time" }) }),
+                /* @__PURE__ */ jsx(SelectContent, { children: trainingTimes.map((time) => /* @__PURE__ */ jsxs(SelectItem, { value: time.value, children: [
+                  time.label,
+                  " (",
+                  time.timeRange,
+                  ")"
+                ] }, time.value)) })
+              ] }),
+              errors.preferred_time && /* @__PURE__ */ jsx("p", { className: "mt-2 text-sm text-red-600 dark:text-red-400", children: errors.preferred_time })
+            ] }),
+            /* @__PURE__ */ jsxs("div", { children: [
+              /* @__PURE__ */ jsx("label", { htmlFor: "session_duration", className: "block text-sm font-medium text-gray-900 dark:text-gray-100", children: "Session Duration (minutes)" }),
+              /* @__PURE__ */ jsxs(Select, { value: data.session_duration, onValueChange: (value) => setData("session_duration", value), children: [
+                /* @__PURE__ */ jsx(SelectTrigger, { className: "mt-2", children: /* @__PURE__ */ jsx(SelectValue, { placeholder: "Select duration" }) }),
+                /* @__PURE__ */ jsx(SelectContent, { children: sessionDurationOptions.map((option) => /* @__PURE__ */ jsx(SelectItem, { value: option.value, children: option.label }, option.value)) })
+              ] }),
+              errors.session_duration && /* @__PURE__ */ jsx("p", { className: "mt-2 text-sm text-red-600 dark:text-red-400", children: errors.session_duration })
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700", children: [
+          /* @__PURE__ */ jsx(Button, { variant: "outline", asChild: true, children: /* @__PURE__ */ jsxs(Link, { href: onboarding2.plan.url(), children: [
+            /* @__PURE__ */ jsx(ChevronLeftIcon, { className: "mr-2 h-4 w-4" }),
+            "Back"
+          ] }) }),
+          /* @__PURE__ */ jsxs(
+            Button,
+            {
+              type: "submit",
+              disabled: processing,
+              className: "px-6 py-3",
+              children: [
+                processing ? "Saving..." : "Continue",
+                /* @__PURE__ */ jsx(ChevronRightIcon, { className: "ml-2 h-4 w-4" })
+              ]
+            }
+          )
+        ] })
+      ] })
+    ] }) }) })
+  ] });
+}
+export {
+  Schedule as default
+};

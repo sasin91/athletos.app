@@ -1,0 +1,289 @@
+{
+  "node_modules/laravel-vite-plugin/inertia-helpers/index.js": [],
+  "resources/js/components/app-content.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/app-footer.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/app-header.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/app-logo-icon.tsx": [
+    "/build/assets/app-logo-icon-wMAVxvx3.js"
+  ],
+  "resources/js/components/app-logo.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/app-shell.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/appearance-dropdown.tsx": [
+    "/build/assets/onboarding-layout-BrSXrppm.js"
+  ],
+  "resources/js/components/breadcrumbs.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/chat/chat-input.tsx": [
+    "/build/assets/chat-CWmWPQr7.js"
+  ],
+  "resources/js/components/chat/chat-message-list.tsx": [
+    "/build/assets/chat-CWmWPQr7.js"
+  ],
+  "resources/js/components/chat/chat-message.tsx": [
+    "/build/assets/chat-CWmWPQr7.js"
+  ],
+  "resources/js/components/dashboard/dashboard-header.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/components/dashboard/dashboard-sidebar.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/components/dashboard/dashboard-stats.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/components/dashboard/todays-training.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/components/exercise-summary.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/components/heading.tsx": [
+    "/build/assets/settings-layout-DvcHR2Gt.js"
+  ],
+  "resources/js/components/icon.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/onboarding-layout.tsx": [
+    "/build/assets/onboarding-layout-BrSXrppm.js"
+  ],
+  "resources/js/components/pwa/install-prompt.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/pwa/update-notification.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/ui/avatar.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/ui/badge.tsx": [
+    "/build/assets/badge-qfXdiv_u.js"
+  ],
+  "resources/js/components/ui/breadcrumb.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/ui/button.tsx": [
+    "/build/assets/button-hAi0Fg-Q.js"
+  ],
+  "resources/js/components/ui/card.tsx": [
+    "/build/assets/card-D-y9wdAs.js"
+  ],
+  "resources/js/components/ui/checkbox.tsx": [
+    "/build/assets/checkbox-D07xazED.js"
+  ],
+  "resources/js/components/ui/dropdown-menu.tsx": [
+    "/build/assets/dropdown-menu-BtKPamvc.js"
+  ],
+  "resources/js/components/ui/empty-state.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/components/ui/input.tsx": [
+    "/build/assets/label-qls5No9M.js"
+  ],
+  "resources/js/components/ui/label.tsx": [
+    "/build/assets/label-qls5No9M.js"
+  ],
+  "resources/js/components/ui/loading-skeleton.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/components/ui/navigation-menu.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/ui/page-transition.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/components/ui/progress.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/components/ui/select.tsx": [
+    "/build/assets/select-D4PbFH-j.js"
+  ],
+  "resources/js/components/ui/separator.tsx": [
+    "/build/assets/settings-layout-DvcHR2Gt.js"
+  ],
+  "resources/js/components/ui/sheet.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/ui/sidebar.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/ui/textarea.tsx": [
+    "/build/assets/textarea-CMuAavpa.js"
+  ],
+  "resources/js/components/ui/toast.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/ui/tooltip.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/user-info.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/user-menu-content.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/components/weight-progression-chart.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/hooks/use-appearance.tsx": [
+    "/build/assets/onboarding-layout-BrSXrppm.js"
+  ],
+  "resources/js/hooks/use-initials.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/hooks/use-mobile-navigation.ts": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/hooks/use-mobile.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/layouts/app-layout.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/layouts/app/app-header-layout.tsx": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/layouts/auth-layout.tsx": [
+    "/build/assets/auth-layout-B3uNWcJG.js"
+  ],
+  "resources/js/layouts/auth/auth-simple-layout.tsx": [
+    "/build/assets/auth-layout-B3uNWcJG.js"
+  ],
+  "resources/js/layouts/settings-layout.tsx": [
+    "/build/assets/settings-layout-DvcHR2Gt.js"
+  ],
+  "resources/js/lib/utils.ts": [
+    "/build/assets/button-hAi0Fg-Q.js"
+  ],
+  "resources/js/pages/about.tsx": [
+    "/build/assets/about-sxVwHPrg.js"
+  ],
+  "resources/js/pages/auth/confirm-password.tsx": [
+    "/build/assets/confirm-password-B3fxMSz9.js"
+  ],
+  "resources/js/pages/auth/forgot-password.tsx": [
+    "/build/assets/forgot-password-QPOrYlka.js"
+  ],
+  "resources/js/pages/auth/login.tsx": [
+    "/build/assets/login-BgCUyDj-.js"
+  ],
+  "resources/js/pages/auth/register.tsx": [
+    "/build/assets/register-D9PJ3tDZ.js"
+  ],
+  "resources/js/pages/auth/reset-password.tsx": [
+    "/build/assets/reset-password-BHoAsxkV.js"
+  ],
+  "resources/js/pages/auth/verify-email.tsx": [
+    "/build/assets/verify-email-BWWuwq8t.js"
+  ],
+  "resources/js/pages/chat.tsx": [
+    "/build/assets/chat-CWmWPQr7.js"
+  ],
+  "resources/js/pages/dashboard.tsx": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/pages/exercises/show.tsx": [
+    "/build/assets/show-CM7kqyN6.js"
+  ],
+  "resources/js/pages/onboarding/plan.tsx": [
+    "/build/assets/plan-Cd5NmwAR.js"
+  ],
+  "resources/js/pages/onboarding/preferences.tsx": [
+    "/build/assets/preferences-UQeAgY-m.js"
+  ],
+  "resources/js/pages/onboarding/profile.tsx": [
+    "/build/assets/profile-DUoKNo0y.js"
+  ],
+  "resources/js/pages/onboarding/schedule.tsx": [
+    "/build/assets/schedule-DOF_txYo.js"
+  ],
+  "resources/js/pages/onboarding/stats.tsx": [
+    "/build/assets/stats-DGhFTpqA.js"
+  ],
+  "resources/js/pages/privacy.tsx": [
+    "/build/assets/privacy-Dl39q5l8.js"
+  ],
+  "resources/js/pages/settings/appearance.tsx": [
+    "/build/assets/appearance-CMNdKvUF.js"
+  ],
+  "resources/js/pages/settings/athlete-profile.tsx": [
+    "/build/assets/athlete-profile-BXyon5Ff.js"
+  ],
+  "resources/js/pages/settings/password.tsx": [
+    "/build/assets/password-DW9WGLPS.js"
+  ],
+  "resources/js/pages/settings/profile.tsx": [
+    "/build/assets/profile-DFCqQo7d.js"
+  ],
+  "resources/js/pages/terms.tsx": [
+    "/build/assets/terms-CcozOrR6.js"
+  ],
+  "resources/js/pages/training-plans/create.tsx": [
+    "/build/assets/create-DMKd5i7i.js"
+  ],
+  "resources/js/pages/training-plans/show.tsx": [
+    "/build/assets/show-B-Nlc57D.js"
+  ],
+  "resources/js/pages/training.tsx": [
+    "/build/assets/training-DUIQjfB2.js"
+  ],
+  "resources/js/pages/trainings/complete.tsx": [
+    "/build/assets/complete-nm5biqpK.js"
+  ],
+  "resources/js/pages/trainings/index.tsx": [
+    "/build/assets/index-CeCPiCCp.js"
+  ],
+  "resources/js/pages/welcome.tsx": [
+    "/build/assets/welcome-Bk3h0cLD.js"
+  ],
+  "resources/js/routes/chat/index.ts": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/routes/chat/message/index.ts": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/routes/dashboard/index.ts": [
+    "/build/assets/dashboard-C4NSqMej.js"
+  ],
+  "resources/js/routes/index.ts": [
+    "/build/assets/index-CrXrSpq1.js"
+  ],
+  "resources/js/routes/password/index.ts": [
+    "/build/assets/index-CAndY3nf.js"
+  ],
+  "resources/js/routes/settings/athlete-profile/index.ts": [
+    "/build/assets/index-BAFHCEvX.js"
+  ],
+  "resources/js/routes/settings/index.ts": [
+    "/build/assets/index-BAFHCEvX.js"
+  ],
+  "resources/js/routes/settings/password/index.ts": [
+    "/build/assets/index-BAFHCEvX.js"
+  ],
+  "resources/js/routes/settings/profile/index.ts": [
+    "/build/assets/index-BAFHCEvX.js"
+  ],
+  "resources/js/routes/training-plans/index.ts": [
+    "/build/assets/index-VEfDRYSW.js"
+  ],
+  "resources/js/routes/trainings/index.ts": [
+    "/build/assets/app-layout-CUuxNbvK.js"
+  ],
+  "resources/js/routes/verification/index.ts": [
+    "/build/assets/verify-email-BWWuwq8t.js"
+  ],
+  "resources/js/ssr.tsx": [],
+  "resources/js/wayfinder/index.ts": [
+    "/build/assets/index-ID1znBf5.js"
+  ]
+}

@@ -1,0 +1,22 @@
+[Unit]
+Description=Laravel Inertia SSR Server
+After=network.target
+Requires=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=www-data
+WorkingDirectory=/var/www/athletos.app/current
+ExecStart=/usr/bin/php artisan inertia:start-ssr
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=laravel-ssr
+
+# Environment variables
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
