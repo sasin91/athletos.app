@@ -152,7 +152,7 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="outline" asChild>
-                  <Link href={onboarding.stats.url()}>
+                  <Link href={onboarding.stats.url()} prefetch>
                     <ChevronLeftIcon className="mr-2 h-4 w-4" />
                     Back
                   </Link>

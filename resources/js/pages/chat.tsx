@@ -1,25 +1,11 @@
 import ChatInput from '@/components/chat/chat-input';
 import ChatMessageList from '@/components/chat/chat-message-list';
 import chat from '@/routes/chat';
-import { SharedData } from '@/types';
+import type { SharedData, ChatMessage, ChatSession, PrismTextChunk } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import AppLayout from '@/layouts/app-layout';
-
-interface ChatMessage {
-    id: number;
-    role: 'user' | 'assistant';
-    content: string;
-    created_at: string;
-}
-
-interface ChatSession {
-    id: number;
-    subject: string | null;
-    updated_at: string;
-    messages_count?: number;
-}
 
 interface ChatPageProps {
     session: ChatSession;
@@ -29,7 +15,8 @@ interface ChatPageProps {
     streamUrl: string;
 }
 
-type PrismTextChunk = {
+// Extended type specific to this component
+type ExtendedPrismTextChunk = {
     text: string;
     toolCalls: Array<{
         id: string;

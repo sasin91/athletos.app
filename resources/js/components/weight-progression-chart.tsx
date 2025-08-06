@@ -1,38 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
-
-interface WeightProgression {
-  exercise: {
-    value: string;
-    displayName: string;
-    category: string;
-    difficulty: string;
-  };
-  currentWeight: number | null;
-  expectedWeight: number | null;
-  startingWeight: number | null;
-  startDate: string | null;
-  endDate: string | null;
-  dataPoints: any[];
-  chartData: {
-    series: any[];
-    categories: string[];
-  };
-  progressPercentage: number;
-  isAhead: boolean;
-  isBehind: boolean;
-  isOnTrack: boolean;
-}
+import { useMemo } from 'react';
+import type { WeightProgression, WeightProgressions } from '@/types';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 
 interface WeightProgressionChartProps {
-  athlete: any;
-  weightProgressions: {
-    hasData: boolean;
-    progressions: WeightProgression[];
-    exercisesWithData: WeightProgression[];
-    onTrackExercises: WeightProgression[];
-    behindExercises: WeightProgression[];
-    aheadExercises: WeightProgression[];
-  };
+  weightProgressions?: WeightProgressions;
   selectedExercise: string | null;
   timeframe: string;
   onSelectExercise: (exercise: string) => void;
@@ -40,19 +19,38 @@ interface WeightProgressionChartProps {
 }
 
 export default function WeightProgressionChart({
-  athlete,
   weightProgressions,
   selectedExercise,
   timeframe,
   onSelectExercise,
   onSetTimeframe
 }: WeightProgressionChartProps) {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const [chart, setChart] = useState<any>(null);
 
   const selectedProgression = weightProgressions?.progressions?.find(
     p => p.exercise.value === selectedExercise
   );
+
+  // Transform data for Recharts
+  const chartData = useMemo(() => {
+    if (!selectedProgression?.dataPoints?.length) return [];
+
+    return selectedProgression.dataPoints.map((point) => ({
+      week: `Week ${point.week}`,
+      expected: point.expected_weight,
+      current: point.current_weight,
+    }));
+  }, [selectedProgression]);
+
+  const chartConfig = {
+    expected: {
+      label: "Expected Weight",
+      color: "hsl(220, 70%, 50%)", // Blue
+    },
+    current: {
+      label: "Current Weight",
+      color: "hsl(160, 60%, 45%)", // Green
+    },
+  } satisfies ChartConfig;
 
   const getStatusClass = (progression: WeightProgression) => {
     if (progression.isAhead) {
@@ -71,79 +69,8 @@ export default function WeightProgressionChart({
     return '→';
   };
 
-  useEffect(() => {
-    if (selectedProgression && selectedProgression.dataPoints.length > 0 && chartRef.current) {
-      // Load ApexCharts and render
-      if (window.ApexCharts) {
-        if (chart) {
-          chart.destroy();
-        }
 
-        const chartData = selectedProgression.chartData;
-        
-        const options = {
-          series: chartData.series,
-          chart: {
-            type: 'line',
-            height: 320,
-            toolbar: { show: false },
-            background: 'transparent'
-          },
-          colors: ['#3B82F6', '#10B981'],
-          stroke: {
-            curve: 'smooth',
-            width: 3
-          },
-          grid: {
-            borderColor: '#374151',
-            strokeDashArray: 4,
-          },
-          xaxis: {
-            categories: chartData.categories,
-            labels: { style: { colors: '#9CA3AF' } },
-            axisBorder: { color: '#374151' }
-          },
-          yaxis: {
-            title: {
-              text: 'Weight (kg)',
-              style: { color: '#9CA3AF' }
-            },
-            labels: { style: { colors: '#9CA3AF' } }
-          },
-          legend: {
-            position: 'top',
-            horizontalAlign: 'right',
-            labels: { colors: '#9CA3AF' }
-          },
-          tooltip: {
-            theme: 'dark',
-            y: {
-              formatter: function (val: number) {
-                return val + ' kg';
-              }
-            }
-          },
-          markers: {
-            size: 6,
-            hover: { size: 8 }
-          }
-        };
-        
-        const newChart = new window.ApexCharts(chartRef.current, options);
-        newChart.render();
-        setChart(newChart);
-      }
-    }
-
-    // Cleanup
-    return () => {
-      if (chart) {
-        chart.destroy();
-      }
-    };
-  }, [selectedProgression]);
-
-  if (!weightProgressions?.hasData) {
+  if (!weightProgressions?.progressions?.length) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="text-center py-8">
@@ -171,11 +98,11 @@ export default function WeightProgressionChart({
             Track your progress against expected weight increases
           </p>
         </div>
-        
+
         {/* Timeframe Selector */}
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600 dark:text-gray-400">Timeframe:</span>
-          <select 
+          <select
             value={timeframe}
             onChange={(e) => onSetTimeframe(e.target.value)}
             className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
@@ -194,7 +121,7 @@ export default function WeightProgressionChart({
           {weightProgressions.progressions.map((progression) => {
             const isSelected = selectedExercise === progression.exercise.value;
             const statusClass = getStatusClass(progression);
-            
+
             return (
               <button
                 key={progression.exercise.value}
@@ -203,7 +130,7 @@ export default function WeightProgressionChart({
                   isSelected ? 'ring-2 ring-blue-500' : ''
                 } ${statusClass}`}
               >
-                {progression.exercise.displayName}
+                {progression.exercise.displayName || progression.exercise.value}
                 <span className="ml-1">{getStatusIcon(progression)}</span>
               </button>
             );
@@ -215,7 +142,40 @@ export default function WeightProgressionChart({
         <>
           {/* Chart Container */}
           <div className="mb-6">
-            <div ref={chartRef} className="w-full h-80"></div>
+            <ChartContainer config={chartConfig} className="h-80 w-full">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="week"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  tickFormatter={(value) => `${value}kg`}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Line
+                  type="monotone"
+                  dataKey="expected"
+                  stroke="var(--color-expected)"
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  strokeDasharray="5 5"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="current"
+                  stroke="var(--color-current)"
+                  strokeWidth={3}
+                  dot={{ r: 5 }}
+                />
+              </LineChart>
+            </ChartContainer>
           </div>
 
           {/* Progress Summary */}
@@ -223,23 +183,23 @@ export default function WeightProgressionChart({
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
               <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Current Weight</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {selectedProgression.currentWeight 
-                  ? `${selectedProgression.currentWeight.toFixed(1)} kg` 
+                {selectedProgression.currentWeight
+                  ? `${selectedProgression.currentWeight.toFixed(1)} kg`
                   : 'N/A'
                 }
               </div>
             </div>
-            
+
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
               <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Expected Weight</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {selectedProgression.expectedWeight 
-                  ? `${selectedProgression.expectedWeight.toFixed(1)} kg` 
+                {selectedProgression.expectedWeight
+                  ? `${selectedProgression.expectedWeight.toFixed(1)} kg`
                   : 'N/A'
                 }
               </div>
             </div>
-            
+
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
               <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Progress</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">

@@ -51,41 +51,34 @@ class DashboardController extends Controller
             day: app(ComputeTrainingDay::class)->execute($athlete)
         );
 
-        // Get weight progressions
-        $weightProgressions = app(CalculateWeightProgression::class)->execute($athlete, $timeframe);
-
-        // Get 1RM data
-        $oneRepMaxes = $this->getOneRepMaxes($athlete);
-
-        // Get recovery exercises if there's a completed workout today
-        $recoveryExercises = collect();
-        if ($date->isToday()) {
-            $todaysCompletedTraining = $athlete->trainings()
-                ->whereDate('scheduled_at', $date)
-                ->whereNotNull('completed_at')
-                ->first();
-
-            if ($todaysCompletedTraining) {
-                $recoveryExercises = app(\App\Actions\SuggestRecoveryExercises::class)->execute($todaysCompletedTraining);
-            }
-        }
+        // These will be moved to deferred props
 
         return inertia('dashboard', [
+            // Critical data - loads immediately
             'athlete' => $athlete,
+            'currentPlan' => $athlete->currentPlan,
             'metrics' => $metrics,
-            'weightProgressions' => $weightProgressions,
             'plannedExercises' => $plannedExercises->map(fn($exercise) => [
                 'name' => $exercise->exercise->displayName(),
                 'sets' => $exercise->sets,
                 'reps' => $exercise->reps,
                 'weight' => $exercise->weight
             ]),
-            'oneRepMaxes' => $oneRepMaxes,
-            'recoveryExercises' => $recoveryExercises->map(fn($exercise) => [
-                'name' => $exercise->displayName()
-            ]),
             'date' => $date->toISOString(),
             'formattedDate' => $date->format('M j, Y'),
+
+            // Deferred data - loads asynchronously for better performance
+            'weightProgressions' => Inertia::defer(fn () =>
+                app(CalculateWeightProgression::class)->execute($athlete, $timeframe)
+            , 'high'),
+
+            'oneRepMaxes' => Inertia::defer(fn () =>
+                $this->getOneRepMaxes($athlete)
+            , 'high'),
+
+            'recoveryExercises' => Inertia::defer(fn () =>
+                $this->getRecoveryExercises($athlete, $date)
+            , 'low'),
         ]);
     }
 
@@ -204,5 +197,26 @@ class DashboardController extends Controller
             ->first();
 
         return $indicator ? $indicator->value : 0;
+    }
+
+    private function getRecoveryExercises($athlete, Carbon $date): Collection
+    {
+        $recoveryExercises = collect();
+
+        if ($date->isToday()) {
+            $todaysCompletedTraining = $athlete->trainings()
+                ->whereDate('scheduled_at', $date)
+                ->whereNotNull('completed_at')
+                ->first();
+
+            if ($todaysCompletedTraining) {
+                $exercises = app(\App\Actions\SuggestRecoveryExercises::class)->execute($todaysCompletedTraining);
+                $recoveryExercises = $exercises->map(fn($exercise) => [
+                    'name' => $exercise->displayName()
+                ]);
+            }
+        }
+
+        return $recoveryExercises;
     }
 }

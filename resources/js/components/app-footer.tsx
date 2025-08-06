@@ -6,9 +6,9 @@ export default function AppFooter() {
             <div className="max-w-2xl mx-auto flex flex-col sm:flex-row justify-center sm:justify-between items-center px-4 text-sm text-gray-500 dark:text-gray-400">
                 <div className="mb-2 sm:mb-0">&copy; {new Date().getFullYear()} Athletos. All rights reserved.</div>
                 <div className="space-x-4">
-                    <Link href="/terms" className="hover:underline">Terms of Service</Link>
-                    <Link href="/privacy" className="hover:underline">Privacy Policy</Link>
-                    <Link href="/about" className="hover:underline">About</Link>
+                    <Link href="/terms" prefetch className="hover:underline">Terms of Service</Link>
+                    <Link href="/privacy" prefetch className="hover:underline">Privacy Policy</Link>
+                    <Link href="/about" prefetch className="hover:underline">About</Link>
                 </div>
             </div>
         </footer>

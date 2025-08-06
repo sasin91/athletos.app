@@ -36,13 +36,13 @@ export default function Welcome() {
         <header className="absolute inset-x-0 top-0 z-50">
           <nav className="flex items-center justify-between p-6 lg:px-8" aria-label="Global">
             <div className="flex lg:flex-1">
-              <Link href="/" className="-m-1.5 p-1.5">
+              <Link href="/" prefetch className="-m-1.5 p-1.5">
                 <span className="sr-only">AthletOS</span>
                 <img className="h-8 w-auto" src="/images/logo.png" alt="AthletOS" />
               </Link>
             </div>
             <div className="hidden lg:flex lg:gap-x-12">
-              <Link href="/about" className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">About</Link>
+              <Link href="/about" prefetch className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">About</Link>
               <a href="#features" className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">Features</a>
               <a href="#training" className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">Training</a>
             </div>
@@ -62,7 +62,7 @@ export default function Welcome() {
                   </svg>
                 )}
               </button>
-              <Link href="/login" className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">
+              <Link href="/login" prefetch className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">
                 Log in <span aria-hidden="true">&rarr;</span>
               </Link>
             </div>
@@ -85,10 +85,10 @@ export default function Welcome() {
                     A lifter-first operating system that tracks your training, recovery, and wellness—automatically. Built to integrate with your routine, devices, and goals.
                   </p>
                   <div className="mt-10 flex items-center justify-center gap-x-6">
-                    <Link href="/register" className="rounded-md bg-gradient-to-r from-pink-500 to-violet-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-pink-600 hover:to-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-500">
+                    <Link href="/register" prefetch className="rounded-md bg-gradient-to-r from-pink-500 to-violet-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-pink-600 hover:to-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-500">
                       Get Early Access
                     </Link>
-                    <Link href="/about" className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">
+                    <Link href="/about" prefetch className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">
                       Learn more <span aria-hidden="true">→</span>
                     </Link>
                   </div>
@@ -240,7 +240,7 @@ export default function Welcome() {
                   </div>
                 </div>
                 <div className="mt-10">
-                  <Link href="/about" className="text-base font-medium bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent">
+                  <Link href="/about" prefetch className="text-base font-medium bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent">
                     Learn more about our training methodology &rarr;
                   </Link>
                 </div>
@@ -257,8 +257,8 @@ export default function Welcome() {
               <h2 className="text-4xl font-semibold tracking-tight text-balance text-gray-900 dark:text-gray-100 sm:text-5xl">Ready to transform your training?</h2>
               <p className="mx-auto mt-6 max-w-xl text-lg/8 text-pretty text-gray-600 dark:text-gray-400">Join our growing community of dedicated athletes using AthletOS to systematically track progress, optimize workouts, and achieve new personal records.</p>
               <div className="mt-10 flex items-center justify-center gap-x-6">
-                <Link href="/register" className="rounded-md bg-gradient-to-r from-pink-500 to-violet-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-pink-600 hover:to-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-500">Start Training</Link>
-                <Link href="/about" className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">Learn more <span aria-hidden="true">→</span></Link>
+                <Link href="/register" prefetch className="rounded-md bg-gradient-to-r from-pink-500 to-violet-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-pink-600 hover:to-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-500">Start Training</Link>
+                <Link href="/about" prefetch className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">Learn more <span aria-hidden="true">→</span></Link>
               </div>
             </div>
             <div className="absolute top-full right-0 left-1/2 -z-10 hidden -translate-y-1/2 transform-gpu overflow-hidden blur-3xl sm:block" aria-hidden="true">
@@ -278,7 +278,7 @@ export default function Welcome() {
                     <h3 className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">Training</h3>
                     <ul role="list" className="mt-6 space-y-4">
                       <li>
-                        <Link href="/about" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Methodology</Link>
+                        <Link href="/about" prefetch className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Methodology</Link>
                       </li>
                       <li>
                         <a href="#features" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Features</a>
@@ -287,7 +287,7 @@ export default function Welcome() {
                         <a href="#training" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Progress Tracking</a>
                       </li>
                       <li>
-                        <Link href="/exercises" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Exercise Library</Link>
+                        <Link href="/exercises" prefetch className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Exercise Library</Link>
                       </li>
                     </ul>
                   </div>
@@ -295,10 +295,10 @@ export default function Welcome() {
                     <h3 className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">Support</h3>
                     <ul role="list" className="mt-6 space-y-4">
                       <li>
-                        <Link href="/help" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Help Center</Link>
+                        <Link href="/help" prefetch className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Help Center</Link>
                       </li>
                       <li>
-                        <Link href="/guides" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Training Guides</Link>
+                        <Link href="/guides" prefetch className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Training Guides</Link>
                       </li>
                     </ul>
                   </div>
@@ -308,13 +308,13 @@ export default function Welcome() {
                     <h3 className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">Platform</h3>
                     <ul role="list" className="mt-6 space-y-4">
                       <li>
-                        <Link href="/about" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">About</Link>
+                        <Link href="/about" prefetch className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">About</Link>
                       </li>
                       <li>
-                        <Link href="/blog" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Blog</Link>
+                        <Link href="/blog" prefetch className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Blog</Link>
                       </li>
                       <li>
-                        <Link href="/changelog" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Changelog</Link>
+                        <Link href="/changelog" prefetch className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Changelog</Link>
                       </li>
                     </ul>
                   </div>
@@ -322,10 +322,10 @@ export default function Welcome() {
                     <h3 className="text-sm/6 font-semibold text-gray-900 dark:text-gray-100">Legal</h3>
                     <ul role="list" className="mt-6 space-y-4">
                       <li>
-                        <Link href="/privacy" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Privacy</Link>
+                        <Link href="/privacy" prefetch className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Privacy</Link>
                       </li>
                       <li>
-                        <Link href="/terms" className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Terms</Link>
+                        <Link href="/terms" prefetch className="text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Terms</Link>
                       </li>
                     </ul>
                   </div>

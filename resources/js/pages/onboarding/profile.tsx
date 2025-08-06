@@ -10,23 +10,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import OnboardingLayout from '@/components/onboarding-layout';
-
-interface ExperienceLevel {
-  value: string;
-  label: string;
-  description: string;
-}
-
-interface TrainingGoal {
-  value: string;
-  label: string;
-  description: string;
-}
-
-interface MuscleGroup {
-  value: string;
-  label: string;
-}
+import type {
+  ExperienceLevel,
+  TrainingGoal,
+  MuscleGroup,
+} from '@/types';
 
 type ProfileData = {
   experience_level: string;

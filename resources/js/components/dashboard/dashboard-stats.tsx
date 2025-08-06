@@ -1,16 +1,11 @@
 import { Card, CardContent, CardDescription } from '@/components/ui/card';
 import LoadingSkeleton from '@/components/ui/loading-skeleton';
 import { StaggeredAnimation } from '@/components/ui/page-transition';
+import type { DashboardMetrics } from '@/types';
 
 interface DashboardStatsProps {
   isNavigating: boolean;
-  metrics: {
-    totalWorkouts: number;
-    currentStreak: number;
-    completedThisWeek: number;
-    weeklyGoal: number;
-    phaseProgress: number;
-  };
+  metrics: DashboardMetrics;
 }
 
 export default function DashboardStats({ isNavigating, metrics }: DashboardStatsProps) {

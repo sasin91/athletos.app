@@ -29,14 +29,16 @@ function useInterval(callback: SavedCallback, delay: number | null) {
   }, [delay]);
 }
 
-interface Exercise {
-  value: string;
-  displayName: string;
-  category: string;
-  difficulty: string;
-}
+import type {
+    Exercise,
+    Training,
+    TrainingPlan,
+    TrainingPhase,
+    TrainingSet,
+} from '@/types';
 
-interface PlannedExercise {
+// Extended types specific to training page
+interface ExtendedPlannedExercise {
   exercise: Exercise;
   exerciseSlug: string;
   order: number;
@@ -54,31 +56,13 @@ interface PlannedExercise {
   summary?: string;
 }
 
-interface TrainingSet {
+interface ExtendedTrainingSet extends TrainingSet {
   setNumber: number;
-  reps: number | null;
-  weight: number | null;
   rpe: number | null;
   timeSpent: number;
   explosiveness: number;
   notes: string;
-  meta: PlannedExercise;
-}
-
-interface TrainingPlan {
-  name: string;
-}
-
-interface TrainingPhase {
-  name: string;
-}
-
-interface Training {
-  id: number;
-  scheduled_at: string;
-  progress: number;
-  trainingPlan?: TrainingPlan;
-  trainingPhase?: TrainingPhase;
+  meta: ExtendedPlannedExercise;
 }
 
 interface Props {
