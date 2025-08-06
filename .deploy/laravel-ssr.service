@@ -9,6 +9,7 @@ User=deploy
 Group=www-data
 WorkingDirectory=/var/www/athletos.app/current
 ExecStart=/usr/bin/php artisan inertia:start-ssr
+ExecStop=/usr/bin/php artisan inertia:stop-ssr
 Restart=always
 RestartSec=3
 StandardOutput=journal
