@@ -1,9 +1,9 @@
 import { queryParams, type QueryParams } from './../../../../../wayfinder'
 /**
 * @see \App\Http\Controllers\Auth\LoginController::create
- * @see app/Http/Controllers/Auth/LoginController.php:20
- * @route '/login'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:20
+* @route '/login'
+*/
 export const create = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -19,18 +19,18 @@ create.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\LoginController::create
- * @see app/Http/Controllers/Auth/LoginController.php:20
- * @route '/login'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:20
+* @route '/login'
+*/
 create.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return create.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\LoginController::create
- * @see app/Http/Controllers/Auth/LoginController.php:20
- * @route '/login'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:20
+* @route '/login'
+*/
 create.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -38,11 +38,12 @@ create.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: create.url(options),
     method: 'get',
 })
+
 /**
 * @see \App\Http\Controllers\Auth\LoginController::create
- * @see app/Http/Controllers/Auth/LoginController.php:20
- * @route '/login'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:20
+* @route '/login'
+*/
 create.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -53,9 +54,9 @@ create.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\Auth\LoginController::store
- * @see app/Http/Controllers/Auth/LoginController.php:28
- * @route '/login'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:28
+* @route '/login'
+*/
 export const store = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -71,18 +72,18 @@ store.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\LoginController::store
- * @see app/Http/Controllers/Auth/LoginController.php:28
- * @route '/login'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:28
+* @route '/login'
+*/
 store.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return store.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\LoginController::store
- * @see app/Http/Controllers/Auth/LoginController.php:28
- * @route '/login'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:28
+* @route '/login'
+*/
 store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -93,9 +94,9 @@ store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\Auth\LoginController::destroy
- * @see app/Http/Controllers/Auth/LoginController.php:52
- * @route '/logout'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:52
+* @route '/logout'
+*/
 export const destroy = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -111,18 +112,18 @@ destroy.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\LoginController::destroy
- * @see app/Http/Controllers/Auth/LoginController.php:52
- * @route '/logout'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:52
+* @route '/logout'
+*/
 destroy.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return destroy.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\LoginController::destroy
- * @see app/Http/Controllers/Auth/LoginController.php:52
- * @route '/logout'
- */
+* @see app/Http/Controllers/Auth/LoginController.php:52
+* @route '/logout'
+*/
 destroy.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -130,6 +131,7 @@ destroy.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: destroy.url(options),
     method: 'post',
 })
+
 const LoginController = { create, store, destroy }
 
 export default LoginController

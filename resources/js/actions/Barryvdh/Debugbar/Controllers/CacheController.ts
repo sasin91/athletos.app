@@ -1,9 +1,9 @@
 import { queryParams, type QueryParams, validateParameters } from './../../../../wayfinder'
 /**
 * @see \Barryvdh\Debugbar\Controllers\CacheController::deleteMethod
- * @see vendor/barryvdh/laravel-debugbar/src/Controllers/CacheController.php:13
- * @route '/_debugbar/cache/{key}/{tags?}'
- */
+* @see vendor/barryvdh/laravel-debugbar/src/Controllers/CacheController.php:13
+* @route '/_debugbar/cache/{key}/{tags?}'
+*/
 export const deleteMethod = (args: { key: string | number, tags?: string | number } | [key: string | number, tags: string | number ], options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'delete',
@@ -19,25 +19,25 @@ deleteMethod.definition = {
 
 /**
 * @see \Barryvdh\Debugbar\Controllers\CacheController::deleteMethod
- * @see vendor/barryvdh/laravel-debugbar/src/Controllers/CacheController.php:13
- * @route '/_debugbar/cache/{key}/{tags?}'
- */
+* @see vendor/barryvdh/laravel-debugbar/src/Controllers/CacheController.php:13
+* @route '/_debugbar/cache/{key}/{tags?}'
+*/
 deleteMethod.url = (args: { key: string | number, tags?: string | number } | [key: string | number, tags: string | number ], options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     if (Array.isArray(args)) {
         args = {
-                    key: args[0],
-                    tags: args[1],
-                }
+            key: args[0],
+            tags: args[1],
+        }
     }
 
     validateParameters(args, [
-            "tags",
-        ])
+        "tags",
+    ])
 
     const parsedArgs = {
-                        key: args.key,
-                                tags: args.tags,
-                }
+        key: args.key,
+        tags: args.tags,
+    }
 
     return deleteMethod.definition.url
             .replace('{key}', parsedArgs.key.toString())
@@ -47,9 +47,9 @@ deleteMethod.url = (args: { key: string | number, tags?: string | number } | [ke
 
 /**
 * @see \Barryvdh\Debugbar\Controllers\CacheController::deleteMethod
- * @see vendor/barryvdh/laravel-debugbar/src/Controllers/CacheController.php:13
- * @route '/_debugbar/cache/{key}/{tags?}'
- */
+* @see vendor/barryvdh/laravel-debugbar/src/Controllers/CacheController.php:13
+* @route '/_debugbar/cache/{key}/{tags?}'
+*/
 deleteMethod.delete = (args: { key: string | number, tags?: string | number } | [key: string | number, tags: string | number ], options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'delete',
@@ -57,6 +57,7 @@ deleteMethod.delete = (args: { key: string | number, tags?: string | number } | 
     url: deleteMethod.url(args, options),
     method: 'delete',
 })
+
 const CacheController = { deleteMethod, delete: deleteMethod }
 
 export default CacheController

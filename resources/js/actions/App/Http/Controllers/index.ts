@@ -8,17 +8,18 @@ import ChatMessageController from './ChatMessageController'
 import Settings from './Settings'
 import OnboardingController from './OnboardingController'
 import Auth from './Auth'
+
 const Controllers = {
     HomeController,
-DashboardController,
-TrainingController,
-TrainingPlanController,
-ExerciseController,
-ChatController,
-ChatMessageController,
-Settings,
-OnboardingController,
-Auth,
+    DashboardController,
+    TrainingController,
+    TrainingPlanController,
+    ExerciseController,
+    ChatController,
+    ChatMessageController,
+    Settings,
+    OnboardingController,
+    Auth,
 }
 
 export default Controllers

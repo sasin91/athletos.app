@@ -1,9 +1,9 @@
 import { queryParams, type QueryParams } from './../../../../wayfinder'
 /**
 * @see \App\Http\Controllers\TrainingController::index
- * @see app/Http/Controllers/TrainingController.php:24
- * @route '/trainings'
- */
+* @see app/Http/Controllers/TrainingController.php:24
+* @route '/trainings'
+*/
 export const index = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -19,18 +19,18 @@ index.definition = {
 
 /**
 * @see \App\Http\Controllers\TrainingController::index
- * @see app/Http/Controllers/TrainingController.php:24
- * @route '/trainings'
- */
+* @see app/Http/Controllers/TrainingController.php:24
+* @route '/trainings'
+*/
 index.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return index.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\TrainingController::index
- * @see app/Http/Controllers/TrainingController.php:24
- * @route '/trainings'
- */
+* @see app/Http/Controllers/TrainingController.php:24
+* @route '/trainings'
+*/
 index.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -38,11 +38,12 @@ index.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: index.url(options),
     method: 'get',
 })
+
 /**
 * @see \App\Http\Controllers\TrainingController::index
- * @see app/Http/Controllers/TrainingController.php:24
- * @route '/trainings'
- */
+* @see app/Http/Controllers/TrainingController.php:24
+* @route '/trainings'
+*/
 index.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -53,9 +54,9 @@ index.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\TrainingController::store
- * @see app/Http/Controllers/TrainingController.php:41
- * @route '/trainings'
- */
+* @see app/Http/Controllers/TrainingController.php:41
+* @route '/trainings'
+*/
 export const store = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -71,18 +72,18 @@ store.definition = {
 
 /**
 * @see \App\Http\Controllers\TrainingController::store
- * @see app/Http/Controllers/TrainingController.php:41
- * @route '/trainings'
- */
+* @see app/Http/Controllers/TrainingController.php:41
+* @route '/trainings'
+*/
 store.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return store.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\TrainingController::store
- * @see app/Http/Controllers/TrainingController.php:41
- * @route '/trainings'
- */
+* @see app/Http/Controllers/TrainingController.php:41
+* @route '/trainings'
+*/
 store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -93,9 +94,9 @@ store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\TrainingController::show
- * @see app/Http/Controllers/TrainingController.php:66
- * @route '/trainings/{training}'
- */
+* @see app/Http/Controllers/TrainingController.php:66
+* @route '/trainings/{training}'
+*/
 export const show = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -111,29 +112,29 @@ show.definition = {
 
 /**
 * @see \App\Http\Controllers\TrainingController::show
- * @see app/Http/Controllers/TrainingController.php:66
- * @route '/trainings/{training}'
- */
+* @see app/Http/Controllers/TrainingController.php:66
+* @route '/trainings/{training}'
+*/
 show.url = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     if (typeof args === 'string' || typeof args === 'number') {
         args = { training: args }
     }
 
-            if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
-            args = { training: args.id }
-        }
-    
+    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
+        args = { training: args.id }
+    }
+
     if (Array.isArray(args)) {
         args = {
-                    training: args[0],
-                }
+            training: args[0],
+        }
     }
 
     const parsedArgs = {
-                        training: typeof args.training === 'object'
-                ? args.training.id
-                : args.training,
-                }
+        training: typeof args.training === 'object'
+        ? args.training.id
+        : args.training,
+    }
 
     return show.definition.url
             .replace('{training}', parsedArgs.training.toString())
@@ -142,9 +143,9 @@ show.url = (args: { training: number | { id: number } } | [training: number | { 
 
 /**
 * @see \App\Http\Controllers\TrainingController::show
- * @see app/Http/Controllers/TrainingController.php:66
- * @route '/trainings/{training}'
- */
+* @see app/Http/Controllers/TrainingController.php:66
+* @route '/trainings/{training}'
+*/
 show.get = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -152,11 +153,12 @@ show.get = (args: { training: number | { id: number } } | [training: number | { 
     url: show.url(args, options),
     method: 'get',
 })
+
 /**
 * @see \App\Http\Controllers\TrainingController::show
- * @see app/Http/Controllers/TrainingController.php:66
- * @route '/trainings/{training}'
- */
+* @see app/Http/Controllers/TrainingController.php:66
+* @route '/trainings/{training}'
+*/
 show.head = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -167,9 +169,9 @@ show.head = (args: { training: number | { id: number } } | [training: number | {
 
 /**
 * @see \App\Http\Controllers\TrainingController::complete
- * @see app/Http/Controllers/TrainingController.php:188
- * @route '/trainings/{training}/complete'
- */
+* @see app/Http/Controllers/TrainingController.php:188
+* @route '/trainings/{training}/complete'
+*/
 export const complete = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -185,29 +187,29 @@ complete.definition = {
 
 /**
 * @see \App\Http\Controllers\TrainingController::complete
- * @see app/Http/Controllers/TrainingController.php:188
- * @route '/trainings/{training}/complete'
- */
+* @see app/Http/Controllers/TrainingController.php:188
+* @route '/trainings/{training}/complete'
+*/
 complete.url = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     if (typeof args === 'string' || typeof args === 'number') {
         args = { training: args }
     }
 
-            if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
-            args = { training: args.id }
-        }
-    
+    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
+        args = { training: args.id }
+    }
+
     if (Array.isArray(args)) {
         args = {
-                    training: args[0],
-                }
+            training: args[0],
+        }
     }
 
     const parsedArgs = {
-                        training: typeof args.training === 'object'
-                ? args.training.id
-                : args.training,
-                }
+        training: typeof args.training === 'object'
+        ? args.training.id
+        : args.training,
+    }
 
     return complete.definition.url
             .replace('{training}', parsedArgs.training.toString())
@@ -216,9 +218,9 @@ complete.url = (args: { training: number | { id: number } } | [training: number 
 
 /**
 * @see \App\Http\Controllers\TrainingController::complete
- * @see app/Http/Controllers/TrainingController.php:188
- * @route '/trainings/{training}/complete'
- */
+* @see app/Http/Controllers/TrainingController.php:188
+* @route '/trainings/{training}/complete'
+*/
 complete.get = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -226,11 +228,12 @@ complete.get = (args: { training: number | { id: number } } | [training: number 
     url: complete.url(args, options),
     method: 'get',
 })
+
 /**
 * @see \App\Http\Controllers\TrainingController::complete
- * @see app/Http/Controllers/TrainingController.php:188
- * @route '/trainings/{training}/complete'
- */
+* @see app/Http/Controllers/TrainingController.php:188
+* @route '/trainings/{training}/complete'
+*/
 complete.head = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -241,9 +244,9 @@ complete.head = (args: { training: number | { id: number } } | [training: number
 
 /**
 * @see \App\Http\Controllers\TrainingController::storeComplete
- * @see app/Http/Controllers/TrainingController.php:200
- * @route '/trainings/{training}/complete'
- */
+* @see app/Http/Controllers/TrainingController.php:200
+* @route '/trainings/{training}/complete'
+*/
 export const storeComplete = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -259,29 +262,29 @@ storeComplete.definition = {
 
 /**
 * @see \App\Http\Controllers\TrainingController::storeComplete
- * @see app/Http/Controllers/TrainingController.php:200
- * @route '/trainings/{training}/complete'
- */
+* @see app/Http/Controllers/TrainingController.php:200
+* @route '/trainings/{training}/complete'
+*/
 storeComplete.url = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     if (typeof args === 'string' || typeof args === 'number') {
         args = { training: args }
     }
 
-            if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
-            args = { training: args.id }
-        }
-    
+    if (typeof args === 'object' && !Array.isArray(args) && 'id' in args) {
+        args = { training: args.id }
+    }
+
     if (Array.isArray(args)) {
         args = {
-                    training: args[0],
-                }
+            training: args[0],
+        }
     }
 
     const parsedArgs = {
-                        training: typeof args.training === 'object'
-                ? args.training.id
-                : args.training,
-                }
+        training: typeof args.training === 'object'
+        ? args.training.id
+        : args.training,
+    }
 
     return storeComplete.definition.url
             .replace('{training}', parsedArgs.training.toString())
@@ -290,9 +293,9 @@ storeComplete.url = (args: { training: number | { id: number } } | [training: nu
 
 /**
 * @see \App\Http\Controllers\TrainingController::storeComplete
- * @see app/Http/Controllers/TrainingController.php:200
- * @route '/trainings/{training}/complete'
- */
+* @see app/Http/Controllers/TrainingController.php:200
+* @route '/trainings/{training}/complete'
+*/
 storeComplete.post = (args: { training: number | { id: number } } | [training: number | { id: number } ] | number | { id: number }, options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -300,6 +303,7 @@ storeComplete.post = (args: { training: number | { id: number } } | [training: n
     url: storeComplete.url(args, options),
     method: 'post',
 })
+
 const TrainingController = { index, store, show, complete, storeComplete }
 
 export default TrainingController

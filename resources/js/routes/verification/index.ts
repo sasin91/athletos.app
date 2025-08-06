@@ -1,9 +1,9 @@
 import { queryParams, type QueryParams } from './../../wayfinder'
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::notice
- * @see app/Http/Controllers/Auth/VerificationController.php:15
- * @route '/verify-email'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:15
+* @route '/verify-email'
+*/
 export const notice = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -19,18 +19,18 @@ notice.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::notice
- * @see app/Http/Controllers/Auth/VerificationController.php:15
- * @route '/verify-email'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:15
+* @route '/verify-email'
+*/
 notice.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return notice.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::notice
- * @see app/Http/Controllers/Auth/VerificationController.php:15
- * @route '/verify-email'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:15
+* @route '/verify-email'
+*/
 notice.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -38,11 +38,12 @@ notice.get = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: notice.url(options),
     method: 'get',
 })
+
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::notice
- * @see app/Http/Controllers/Auth/VerificationController.php:15
- * @route '/verify-email'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:15
+* @route '/verify-email'
+*/
 notice.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -53,9 +54,9 @@ notice.head = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::store
- * @see app/Http/Controllers/Auth/VerificationController.php:22
- * @route '/verify-email'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:22
+* @route '/verify-email'
+*/
 export const store = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -71,18 +72,18 @@ store.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::store
- * @see app/Http/Controllers/Auth/VerificationController.php:22
- * @route '/verify-email'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:22
+* @route '/verify-email'
+*/
 store.url = (options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     return store.definition.url + queryParams(options)
 }
 
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::store
- * @see app/Http/Controllers/Auth/VerificationController.php:22
- * @route '/verify-email'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:22
+* @route '/verify-email'
+*/
 store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'post',
@@ -93,9 +94,9 @@ store.post = (options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
 
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::verify
- * @see app/Http/Controllers/Auth/VerificationController.php:33
- * @route '/verify-email/{id}/{hash}'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:33
+* @route '/verify-email/{id}/{hash}'
+*/
 export const verify = (args: { id: string | number, hash: string | number } | [id: string | number, hash: string | number ], options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -111,21 +112,21 @@ verify.definition = {
 
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::verify
- * @see app/Http/Controllers/Auth/VerificationController.php:33
- * @route '/verify-email/{id}/{hash}'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:33
+* @route '/verify-email/{id}/{hash}'
+*/
 verify.url = (args: { id: string | number, hash: string | number } | [id: string | number, hash: string | number ], options?: { query?: QueryParams, mergeQuery?: QueryParams }) => {
     if (Array.isArray(args)) {
         args = {
-                    id: args[0],
-                    hash: args[1],
-                }
+            id: args[0],
+            hash: args[1],
+        }
     }
 
     const parsedArgs = {
-                        id: args.id,
-                                hash: args.hash,
-                }
+        id: args.id,
+        hash: args.hash,
+    }
 
     return verify.definition.url
             .replace('{id}', parsedArgs.id.toString())
@@ -135,9 +136,9 @@ verify.url = (args: { id: string | number, hash: string | number } | [id: string
 
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::verify
- * @see app/Http/Controllers/Auth/VerificationController.php:33
- * @route '/verify-email/{id}/{hash}'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:33
+* @route '/verify-email/{id}/{hash}'
+*/
 verify.get = (args: { id: string | number, hash: string | number } | [id: string | number, hash: string | number ], options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'get',
@@ -145,11 +146,12 @@ verify.get = (args: { id: string | number, hash: string | number } | [id: string
     url: verify.url(args, options),
     method: 'get',
 })
+
 /**
 * @see \App\Http\Controllers\Auth\VerificationController::verify
- * @see app/Http/Controllers/Auth/VerificationController.php:33
- * @route '/verify-email/{id}/{hash}'
- */
+* @see app/Http/Controllers/Auth/VerificationController.php:33
+* @route '/verify-email/{id}/{hash}'
+*/
 verify.head = (args: { id: string | number, hash: string | number } | [id: string | number, hash: string | number ], options?: { query?: QueryParams, mergeQuery?: QueryParams }): {
     url: string,
     method: 'head',
@@ -157,10 +159,11 @@ verify.head = (args: { id: string | number, hash: string | number } | [id: strin
     url: verify.url(args, options),
     method: 'head',
 })
+
 const verification = {
     notice,
-store,
-verify,
+    store,
+    verify,
 }
 
 export default verification
