@@ -8,7 +8,7 @@ use App\Models\Athlete;
 trait HasTrainingPhaseProgress
 {
     /**
-     * Returns the number of completed training weeks (advances only when all training days are completed).
+     * Returns the number of completed training weeks (advances only when all training days are completed or missed).
      */
     public function getCompletedTrainingWeeks(Athlete $athlete): int
     {
@@ -17,12 +17,19 @@ trait HasTrainingPhaseProgress
             return 0;
         }
 
-        $completedTrainings = $athlete->trainings()
-            ->whereNotNull('completed_at')
-            ->orderBy('completed_at')
-            ->get();
+        // Count both completed and missed trainings (missed = scheduled day has passed without completion)
+        $processedTrainings = $athlete->trainings()
+            ->where(function($query) {
+                $query->whereNotNull('completed_at')  // Completed trainings
+                      ->orWhere(function($subQuery) {
+                          // Missed trainings: scheduled day has passed without completion
+                          $subQuery->whereNull('completed_at')
+                                  ->where('scheduled_at', '<', Carbon::now()->startOfDay());
+                      });
+            })
+            ->count();
 
-        return (int) floor($completedTrainings->count() / $trainingDaysPerWeek);
+        return (int) floor($processedTrainings / $trainingDaysPerWeek);
     }
 
     /**
@@ -87,4 +94,4 @@ trait HasTrainingPhaseProgress
         $completedThisPhase = $completedTrainings->slice($phaseStartWeek * $trainingDaysPerWeek, $totalPlannedTrainings)->count();
         return ($completedThisPhase / $totalPlannedTrainings) * 100;
     }
-} 
+}
