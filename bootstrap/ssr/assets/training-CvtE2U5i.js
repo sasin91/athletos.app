@@ -3,7 +3,7 @@ import { useForm, Head, router } from "@inertiajs/react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocalStorage } from "@uidotdev/usehooks";
 import { d as dashboard } from "./index-CrXrSpq1.js";
-import { A as AppLayout } from "./app-layout-CUuxNbvK.js";
+import { A as AppLayout } from "./app-layout-J2OJ2uom.js";
 import "./index-ID1znBf5.js";
 import "class-variance-authority";
 import "./button-hAi0Fg-Q.js";

@@ -1,10 +1,11 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { CogIcon, ChevronLeftIcon, CheckIcon } from '@heroicons/react/24/outline';
-import onboarding from '@/routes/onboarding';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import OnboardingLayout from '@/components/onboarding-layout';
+import { Athlete } from '@/types';
+import { FormEvent } from 'react';
+import { store } from '@/routes/onboarding/preferences';
+import { stats } from '@/routes/onboarding';
 
 interface Difficulty {
   value: string;
@@ -13,18 +14,16 @@ interface Difficulty {
 }
 
 type PreferencesData = {
-  difficulty_preference: string;  
+  difficulty_preference: string;
   notifications: string[];
 };
 
 interface Props {
-  user: any;
-  athlete: any;
-  onboarding: any;
+  athlete: Athlete;
   difficulties: Difficulty[];
 }
 
-export default function Preferences({ user, athlete, onboarding, difficulties }: Props) {
+export default function Preferences({ athlete, difficulties }: Props) {
   const { data, setData, post, processing, errors } = useForm<PreferencesData>({
     difficulty_preference: athlete?.difficulty_preference || '',
     notifications: athlete?.notification_preferences || [],
@@ -38,9 +37,9 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
     }
   };
 
-  const submit = (e: React.FormEvent) => {
+  const submit = (e: FormEvent) => {
     e.preventDefault();
-    post(onboarding.preferences.store.url());
+    post(store.url());
   };
 
   const notificationOptions = [
@@ -53,7 +52,7 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
   return (
     <>
       <Head title="Preferences - Athletos" />
-      
+
       <OnboardingLayout title="Training Preferences">
         <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-xl rounded-lg p-8 border border-gray-200/20 dark:border-gray-700/20">
@@ -152,7 +151,7 @@ export default function Preferences({ user, athlete, onboarding, difficulties }:
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="outline" asChild>
-                  <Link href={onboarding.stats.url()} prefetch>
+                  <Link href={stats.url()} prefetch>
                     <ChevronLeftIcon className="mr-2 h-4 w-4" />
                     Back
                   </Link>

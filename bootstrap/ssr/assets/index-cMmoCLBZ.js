@@ -1,6 +1,6 @@
 import { jsxs, jsx, Fragment } from "react/jsx-runtime";
 import { Head, Link } from "@inertiajs/react";
-import { A as AppLayout } from "./app-layout-CUuxNbvK.js";
+import { A as AppLayout } from "./app-layout-J2OJ2uom.js";
 import "react";
 import "class-variance-authority";
 import "./button-hAi0Fg-Q.js";

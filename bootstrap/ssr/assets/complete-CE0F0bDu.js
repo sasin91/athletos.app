@@ -1,7 +1,7 @@
 import { jsxs, jsx } from "react/jsx-runtime";
 import { Head } from "@inertiajs/react";
-import { A as AppLayout, t as trainings } from "./app-layout-CUuxNbvK.js";
-import { C as Card, c as CardHeader, d as CardTitle, b as CardDescription, a as CardContent } from "./card-D-y9wdAs.js";
+import { A as AppLayout, t as trainings } from "./app-layout-J2OJ2uom.js";
+import { C as Card, c as CardHeader, d as CardTitle, b as CardDescription, a as CardContent } from "./card-BeSThMpO.js";
 import { B as Badge } from "./badge-qfXdiv_u.js";
 import { B as Button } from "./button-hAi0Fg-Q.js";
 import { CheckCircle, Target, Clock, Zap } from "lucide-react";

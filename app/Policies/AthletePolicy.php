@@ -5,9 +5,27 @@ namespace App\Policies;
 use App\Enums\UserRole;
 use App\Models\Athlete;
 use App\Models\User;
+use Illuminate\Auth\Access\Response;
 
 class AthletePolicy
 {
+    public function viewDashboard(User $user, Athlete $athlete): Response
+    {
+        if (! $user->isAthlete()) {
+            return Response::deny('Must be an athlete to view dashboard.');
+        }
+
+        if (! $user->is($athlete->user)) {
+            return Response::deny("Cannot view another athlete's dashboard.");
+        }
+
+        if (! $user->onboarding()->finished()) {
+            return Response::deny('Athlete onboarding not finished.');
+        }
+
+        return Response::allow();
+    }
+
     /**
      * Determine whether the user can view any athletes.
      */
@@ -63,4 +81,4 @@ class AthletePolicy
     {
         return $user->isAthlete() && $user->id === $athlete->user_id;
     }
-} 
+}

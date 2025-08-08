@@ -1,8 +1,8 @@
 import { jsxs, jsx } from "react/jsx-runtime";
 import { useForm, Head } from "@inertiajs/react";
-import { A as AppLayout } from "./app-layout-CUuxNbvK.js";
+import { A as AppLayout } from "./app-layout-J2OJ2uom.js";
 import { B as Button } from "./button-hAi0Fg-Q.js";
-import { C as Card, c as CardHeader, d as CardTitle, b as CardDescription, a as CardContent } from "./card-D-y9wdAs.js";
+import { C as Card, c as CardHeader, d as CardTitle, b as CardDescription, a as CardContent } from "./card-BeSThMpO.js";
 import { L as Label, I as Input } from "./label-qls5No9M.js";
 import { T as Textarea } from "./textarea-CMuAavpa.js";
 import { t as trainingPlans } from "./index-VEfDRYSW.js";

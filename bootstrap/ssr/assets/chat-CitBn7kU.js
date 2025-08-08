@@ -2,7 +2,7 @@ import { jsx, jsxs } from "react/jsx-runtime";
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Brain, Loader2, CheckCircle, Wrench } from "lucide-react";
-import { c as chat, A as AppLayout } from "./app-layout-CUuxNbvK.js";
+import { c as chat, A as AppLayout } from "./app-layout-J2OJ2uom.js";
 import { usePage, Head } from "@inertiajs/react";
 import { toast } from "sonner";
 import "class-variance-authority";

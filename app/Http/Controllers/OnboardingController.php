@@ -14,6 +14,7 @@ use App\Models\PerformanceIndicator;
 use App\Models\TrainingPlan;
 use App\Models\User;
 use Illuminate\Container\Attributes\CurrentUser;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
@@ -58,7 +59,7 @@ class OnboardingController extends Controller
     public function storeProfile(
         Request $request,
         #[CurrentUser] User $user
-    ): \Illuminate\Http\RedirectResponse {
+    ): RedirectResponse {
         Gate::authorize('isAthlete');
 
         $validated = $request->validate([
@@ -66,7 +67,7 @@ class OnboardingController extends Controller
             'primary_goal' => ['required', Rule::enum(TrainingGoal::class)],
             'bio' => 'nullable|string|max:1000',
             'muscle_groups' => 'nullable|array',
-            'muscle_groups.*' => ['string', Rule::enum(\App\Enums\MuscleGroup::class)],
+            'muscle_groups.*' => ['string', Rule::enum(MuscleGroup::class)],
             'top_squat' => 'nullable|integer|min:0|max:2000',
             'top_bench' => 'nullable|integer|min:0|max:2000',
             'top_deadlift' => 'nullable|integer|min:0|max:2000',
@@ -95,13 +96,9 @@ class OnboardingController extends Controller
     {
         Gate::authorize('isAthlete');
 
-        $athlete = Auth::user()->athlete;
         $trainingPlans = TrainingPlan::with('phases')->get();
 
         return inertia('onboarding/plan', [
-            'user' => Auth::user(),
-            'athlete' => $athlete,
-            'onboarding' => Auth::user()->onboarding(),
             'trainingPlans' => $trainingPlans
         ]);
     }
@@ -112,7 +109,7 @@ class OnboardingController extends Controller
     public function storePlan(
         Request $request,
         #[CurrentUser] User $user
-    ): \Illuminate\Http\RedirectResponse {
+    ): RedirectResponse {
         Gate::authorize('isAthlete');
 
         $validated = $request->validate([
@@ -133,9 +130,7 @@ class OnboardingController extends Controller
         Gate::authorize('isAthlete');
 
         return inertia('onboarding/schedule', [
-            'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding(),
             'weekdays' => collect(Weekday::cases())->map(fn($day) => [
                 'value' => $day->value,
                 'label' => $day->label('en'),
@@ -154,7 +149,7 @@ class OnboardingController extends Controller
     public function storeSchedule(
         Request $request,
         #[CurrentUser] User $user
-    ): \Illuminate\Http\RedirectResponse {
+    ): RedirectResponse {
         Gate::authorize('isAthlete');
 
         $validated = $request->validate([
@@ -174,11 +169,7 @@ class OnboardingController extends Controller
     {
         Gate::authorize('isAthlete');
 
-        return inertia('onboarding/stats', [
-            'user' => Auth::user(),
-            'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding(),
-        ]);
+        return inertia('onboarding/stats');
     }
 
     /**
@@ -187,7 +178,7 @@ class OnboardingController extends Controller
     public function storeStats(
         Request $request,
         #[CurrentUser] User $user
-    ): \Illuminate\Http\RedirectResponse {
+    ): RedirectResponse {
         Gate::authorize('isAthlete');
 
         $validated = $request->validate([
@@ -214,9 +205,7 @@ class OnboardingController extends Controller
         Gate::authorize('isAthlete');
 
         return inertia('onboarding/preferences', [
-            'user' => Auth::user(),
             'athlete' => Auth::user()->athlete,
-            'onboarding' => Auth::user()->onboarding(),
             'difficulties' => collect(Difficulty::cases())->map(fn($difficulty) => [
                 'value' => $difficulty->value,
                 'label' => $difficulty->getLabel(),
@@ -231,7 +220,7 @@ class OnboardingController extends Controller
     public function storePreferences(
         Request $request,
         #[CurrentUser] User $user
-    ): \Illuminate\Http\RedirectResponse {
+    ): RedirectResponse {
         Gate::authorize('isAthlete');
 
         $validated = $request->validate([
@@ -243,7 +232,7 @@ class OnboardingController extends Controller
             'notification_preferences' => $validated['notifications'] ?? [],
             'difficulty_preference' => $validated['difficulty_preference']
         ]);
-        
+
         // Refresh the user model to ensure onboarding status is current
         $user->refresh();
         $user->load('athlete');
@@ -260,12 +249,12 @@ class OnboardingController extends Controller
     /**
      * Update athlete data (if provided) and redirect to next onboarding step
      */
-    private function next(User $user, string $successMessage, array $attributes = []): \Illuminate\Http\RedirectResponse
+    private function next(User $user, string $successMessage, array $attributes = []): RedirectResponse
     {
         if (filled($attributes)) {
             $user->athlete()->update($attributes);
         }
-        
+
         // Refresh the user model to ensure onboarding status is current
         $user->refresh();
         $user->load('athlete');

@@ -1,9 +1,11 @@
 import { jsxs, Fragment, jsx } from "react/jsx-runtime";
-import { useForm, Head } from "@inertiajs/react";
+import { useForm, Head, Link } from "@inertiajs/react";
 import { useState } from "react";
 import { ClipboardDocumentListIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { p as profile } from "./index-B8ZVjn6p.js";
 import { B as Button } from "./button-hAi0Fg-Q.js";
 import { O as OnboardingLayout } from "./onboarding-layout-BrSXrppm.js";
+import { q as queryParams } from "./index-ID1znBf5.js";
 import "@radix-ui/react-slot";
 import "class-variance-authority";
 import "clsx";
@@ -11,7 +13,22 @@ import "tailwind-merge";
 import "./dropdown-menu-BtKPamvc.js";
 import "@radix-ui/react-dropdown-menu";
 import "lucide-react";
-function Plan({ user, athlete, onboarding: onboarding2, trainingPlans }) {
+const store = (options) => ({
+  url: store.url(options),
+  method: "post"
+});
+store.definition = {
+  methods: ["post"],
+  url: "/onboarding/plan"
+};
+store.url = (options) => {
+  return store.definition.url + queryParams(options);
+};
+store.post = (options) => ({
+  url: store.url(options),
+  method: "post"
+});
+function Plan({ trainingPlans }) {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const { data, setData, post, processing, errors } = useForm({
     selected_plan_id: ""
@@ -25,7 +42,7 @@ function Plan({ user, athlete, onboarding: onboarding2, trainingPlans }) {
     if (!data.selected_plan_id) {
       return;
     }
-    post(onboarding2.plan.store.url());
+    post(store.url());
   };
   return /* @__PURE__ */ jsxs(Fragment, { children: [
     /* @__PURE__ */ jsx(Head, { title: "Choose Training Plan - Athletos" }),
@@ -72,7 +89,7 @@ function Plan({ user, athlete, onboarding: onboarding2, trainingPlans }) {
             {
               variant: "outline",
               asChild: true,
-              children: /* @__PURE__ */ jsx("a", { href: onboarding2.profile.url(), children: "Back" })
+              children: /* @__PURE__ */ jsx(Link, { href: profile.url(), children: "Back" })
             }
           ),
           /* @__PURE__ */ jsxs(

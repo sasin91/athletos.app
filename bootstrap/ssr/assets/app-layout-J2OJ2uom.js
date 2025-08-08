@@ -524,7 +524,7 @@ function Breadcrumbs({ breadcrumbs }) {
   return /* @__PURE__ */ jsx(Fragment, { children: breadcrumbs.length > 0 && /* @__PURE__ */ jsx(Breadcrumb, { children: /* @__PURE__ */ jsx(BreadcrumbList, { children: breadcrumbs.map((item, index2) => {
     const isLast = index2 === breadcrumbs.length - 1;
     return /* @__PURE__ */ jsxs(Fragment$1, { children: [
-      /* @__PURE__ */ jsx(BreadcrumbItem, { children: isLast ? /* @__PURE__ */ jsx(BreadcrumbPage, { children: item.title }) : /* @__PURE__ */ jsx(BreadcrumbLink, { asChild: true, children: /* @__PURE__ */ jsx(Link, { href: item.href, children: item.title }) }) }),
+      /* @__PURE__ */ jsx(BreadcrumbItem, { children: isLast ? /* @__PURE__ */ jsx(BreadcrumbPage, { children: item.title }) : /* @__PURE__ */ jsx(BreadcrumbLink, { asChild: true, children: /* @__PURE__ */ jsx(Link, { href: item.href, prefetch: true, children: item.title }) }) }),
       !isLast && /* @__PURE__ */ jsx(BreadcrumbSeparator, {})
     ] }, index2);
   }) }) }) });
@@ -698,7 +698,7 @@ function UserMenuContent({ user }) {
       "Settings"
     ] }) }) }),
     /* @__PURE__ */ jsx(DropdownMenuSeparator, {}),
-    /* @__PURE__ */ jsx(DropdownMenuItem, { asChild: true, children: /* @__PURE__ */ jsxs(Link, { className: "block w-full", method: "post", href: logout.url(), as: "button", onClick: handleLogout, children: [
+    /* @__PURE__ */ jsx(DropdownMenuItem, { asChild: true, children: /* @__PURE__ */ jsxs(Link, { className: "block w-full", method: "post", href: logout.url(), prefetch: true, as: "button", onClick: handleLogout, children: [
       /* @__PURE__ */ jsx(LogOut, { className: "mr-2" }),
       "Log out"
     ] }) })
@@ -790,7 +790,7 @@ function AppHeader({ breadcrumbs = [] }) {
           /* @__PURE__ */ jsx(SheetTitle, { className: "sr-only", children: "Navigation Menu" }),
           /* @__PURE__ */ jsx(SheetHeader, { className: "flex justify-start text-left", children: /* @__PURE__ */ jsx(AppLogoIcon, { className: "h-6 w-6 fill-current text-black dark:text-white" }) }),
           /* @__PURE__ */ jsx("div", { className: "flex h-full flex-1 flex-col space-y-4 p-4", children: /* @__PURE__ */ jsxs("div", { className: "flex h-full flex-col justify-between text-sm", children: [
-            /* @__PURE__ */ jsx("div", { className: "flex flex-col space-y-4", children: mainNavItems.map((item) => /* @__PURE__ */ jsxs(Link, { href: item.href, className: "flex items-center space-x-2 font-medium", children: [
+            /* @__PURE__ */ jsx("div", { className: "flex flex-col space-y-4", children: mainNavItems.map((item) => /* @__PURE__ */ jsxs(Link, { href: item.href, prefetch: true, className: "flex items-center space-x-2 font-medium", children: [
               item.icon && /* @__PURE__ */ jsx(Icon, { iconNode: item.icon, className: "h-5 w-5" }),
               /* @__PURE__ */ jsx("span", { children: item.title })
             ] }, item.title)) }),
@@ -1139,9 +1139,9 @@ function AppFooter() {
       " Athletos. All rights reserved."
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "space-x-4", children: [
-      /* @__PURE__ */ jsx(Link, { href: "/terms", className: "hover:underline", children: "Terms of Service" }),
-      /* @__PURE__ */ jsx(Link, { href: "/privacy", className: "hover:underline", children: "Privacy Policy" }),
-      /* @__PURE__ */ jsx(Link, { href: "/about", className: "hover:underline", children: "About" })
+      /* @__PURE__ */ jsx(Link, { href: "/terms", prefetch: true, className: "hover:underline", children: "Terms of Service" }),
+      /* @__PURE__ */ jsx(Link, { href: "/privacy", prefetch: true, className: "hover:underline", children: "Privacy Policy" }),
+      /* @__PURE__ */ jsx(Link, { href: "/about", prefetch: true, className: "hover:underline", children: "About" })
     ] })
   ] }) });
 }

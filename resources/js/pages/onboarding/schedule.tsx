@@ -1,11 +1,12 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import onboarding from '@/routes/onboarding';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import OnboardingLayout from '@/components/onboarding-layout';
+import { Athlete } from '@/types';
+import { FormEvent } from 'react';
+import { store } from '@/routes/onboarding/schedule';
+import { plan } from '@/routes/onboarding';
 
 interface Weekday {
   value: string;
@@ -26,14 +27,12 @@ type ScheduleData = {
 };
 
 interface Props {
-  user: any;
-  athlete: any;
-  onboarding: any;
+  athlete: Athlete;
   weekdays: Weekday[];
   trainingTimes: TrainingTime[];
 }
 
-export default function Schedule({ user, athlete, onboarding, weekdays, trainingTimes }: Props) {
+export default function Schedule({ athlete, weekdays, trainingTimes }: Props) {
   const { data, setData, post, processing, errors } = useForm<ScheduleData>({
     training_days: athlete?.training_days || [],
     training_frequency: athlete?.training_frequency || '1w',
@@ -49,15 +48,10 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
     }
   };
 
-  const submit = (e: React.FormEvent) => {
+  const submit = (e: FormEvent) => {
     e.preventDefault();
-    
-    post(onboarding.schedule.store.url(), {
-      transform: (data) => ({
-        ...data,
-        training_frequency: data.training_frequency === '1w' ? '' : data.training_frequency,
-      }),
-    });
+
+    post(store.url());
   };
 
   const sessionDurationOptions = [
@@ -78,7 +72,7 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
   return (
     <>
       <Head title="Training Schedule - Athletos" />
-      
+
       <OnboardingLayout title="Set Your Training Schedule">
         <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-xl rounded-lg p-8 border border-gray-200/20 dark:border-gray-700/20">
@@ -203,7 +197,7 @@ export default function Schedule({ user, athlete, onboarding, weekdays, training
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="outline" asChild>
-                  <Link href={onboarding.plan.url()} prefetch>
+                  <Link href={plan.url()} prefetch>
                     <ChevronLeftIcon className="mr-2 h-4 w-4" />
                     Back
                   </Link>

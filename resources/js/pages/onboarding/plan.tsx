@@ -1,9 +1,10 @@
-import { Head, useForm } from '@inertiajs/react';
-import { useState } from 'react';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { FormEvent, useState } from 'react';
 import { ChevronRightIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline';
-import onboarding from '@/routes/onboarding';
+import onboarding, { profile } from '@/routes/onboarding';
 import { Button } from '@/components/ui/button';
 import OnboardingLayout from '@/components/onboarding-layout';
+import { store } from '@/routes/onboarding/plan';
 
 interface TrainingPlan {
   id: number;
@@ -17,15 +18,12 @@ type PlanData = {
 };
 
 interface Props {
-  user: any;
-  athlete: any;
-  onboarding: any;
   trainingPlans: TrainingPlan[];
 }
 
-export default function Plan({ user, athlete, onboarding, trainingPlans }: Props) {
+export default function Plan({ trainingPlans }: Props) {
   const [selectedPlan, setSelectedPlan] = useState<TrainingPlan | null>(null);
-  
+
   const { data, setData, post, processing, errors } = useForm<PlanData>({
     selected_plan_id: '',
   });
@@ -35,18 +33,19 @@ export default function Plan({ user, athlete, onboarding, trainingPlans }: Props
     setData('selected_plan_id', plan.id.toString());
   };
 
-  const submit = (e: React.FormEvent) => {
+  const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!data.selected_plan_id) {
       return;
     }
-    post(onboarding.plan.store.url());
+
+    post(store.url());
   };
 
   return (
     <>
       <Head title="Choose Training Plan - Athletos" />
-      
+
       <OnboardingLayout title="Choose Your Training Plan">
         <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-xl rounded-lg p-8 border border-gray-200/20 dark:border-gray-700/20">
@@ -122,9 +121,9 @@ export default function Plan({ user, athlete, onboarding, trainingPlans }: Props
                   variant="outline"
                   asChild
                 >
-                  <a href={onboarding.profile.url()}>
+                  <Link href={profile.url()}>
                     Back
-                  </a>
+                  </Link>
                 </Button>
                 <Button
                   type="submit"

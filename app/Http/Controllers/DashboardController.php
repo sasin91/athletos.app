@@ -33,9 +33,10 @@ class DashboardController extends Controller
      */
     public function index(Request $request, #[CurrentUser] User $user): Response
     {
-        Gate::authorize('isAthlete');
-
         $athlete = $user->athlete;
+
+        Gate::authorize('viewDashboard', $athlete);
+
         $date = $request->get('date') ? Carbon::parse($request->get('date')) : Carbon::today();
         $timeframe = (int) ($request->get('timeframe', 12));
 

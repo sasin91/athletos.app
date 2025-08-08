@@ -4,6 +4,8 @@ import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/reac
 import { B as Button } from "./button-hAi0Fg-Q.js";
 import { S as Select, a as SelectTrigger, b as SelectValue, c as SelectContent, d as SelectItem } from "./select-D4PbFH-j.js";
 import { O as OnboardingLayout } from "./onboarding-layout-BrSXrppm.js";
+import { q as queryParams } from "./index-ID1znBf5.js";
+import { a as plan } from "./index-B8ZVjn6p.js";
 import "@radix-ui/react-slot";
 import "class-variance-authority";
 import "clsx";
@@ -13,7 +15,22 @@ import "lucide-react";
 import "./dropdown-menu-BtKPamvc.js";
 import "@radix-ui/react-dropdown-menu";
 import "react";
-function Schedule({ user, athlete, onboarding: onboarding2, weekdays, trainingTimes }) {
+const store = (options) => ({
+  url: store.url(options),
+  method: "post"
+});
+store.definition = {
+  methods: ["post"],
+  url: "/onboarding/schedule"
+};
+store.url = (options) => {
+  return store.definition.url + queryParams(options);
+};
+store.post = (options) => ({
+  url: store.url(options),
+  method: "post"
+});
+function Schedule({ athlete, weekdays, trainingTimes }) {
   const { data, setData, post, processing, errors } = useForm({
     training_days: (athlete == null ? void 0 : athlete.training_days) || [],
     training_frequency: (athlete == null ? void 0 : athlete.training_frequency) || "1w",
@@ -29,12 +46,7 @@ function Schedule({ user, athlete, onboarding: onboarding2, weekdays, trainingTi
   };
   const submit = (e) => {
     e.preventDefault();
-    post(onboarding2.schedule.store.url(), {
-      transform: (data2) => ({
-        ...data2,
-        training_frequency: data2.training_frequency === "1w" ? "" : data2.training_frequency
-      })
-    });
+    post(store.url());
   };
   const sessionDurationOptions = [
     { value: "45", label: "45 minutes" },
@@ -123,7 +135,7 @@ function Schedule({ user, athlete, onboarding: onboarding2, weekdays, trainingTi
           ] })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700", children: [
-          /* @__PURE__ */ jsx(Button, { variant: "outline", asChild: true, children: /* @__PURE__ */ jsxs(Link, { href: onboarding2.plan.url(), children: [
+          /* @__PURE__ */ jsx(Button, { variant: "outline", asChild: true, children: /* @__PURE__ */ jsxs(Link, { href: plan.url(), prefetch: true, children: [
             /* @__PURE__ */ jsx(ChevronLeftIcon, { className: "mr-2 h-4 w-4" }),
             "Back"
           ] }) }),

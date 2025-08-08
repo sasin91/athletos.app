@@ -3,6 +3,8 @@ import { useForm, Head, Link } from "@inertiajs/react";
 import { CogIcon, ChevronLeftIcon, CheckIcon } from "@heroicons/react/24/outline";
 import { B as Button } from "./button-hAi0Fg-Q.js";
 import { O as OnboardingLayout } from "./onboarding-layout-BrSXrppm.js";
+import { q as queryParams } from "./index-ID1znBf5.js";
+import { s as stats } from "./index-B8ZVjn6p.js";
 import "@radix-ui/react-slot";
 import "class-variance-authority";
 import "clsx";
@@ -11,7 +13,22 @@ import "./dropdown-menu-BtKPamvc.js";
 import "@radix-ui/react-dropdown-menu";
 import "react";
 import "lucide-react";
-function Preferences({ user, athlete, onboarding: onboarding2, difficulties }) {
+const store = (options) => ({
+  url: store.url(options),
+  method: "post"
+});
+store.definition = {
+  methods: ["post"],
+  url: "/onboarding/preferences"
+};
+store.url = (options) => {
+  return store.definition.url + queryParams(options);
+};
+store.post = (options) => ({
+  url: store.url(options),
+  method: "post"
+});
+function Preferences({ athlete, difficulties }) {
   const { data, setData, post, processing, errors } = useForm({
     difficulty_preference: (athlete == null ? void 0 : athlete.difficulty_preference) || "",
     notifications: (athlete == null ? void 0 : athlete.notification_preferences) || []
@@ -25,7 +42,7 @@ function Preferences({ user, athlete, onboarding: onboarding2, difficulties }) {
   };
   const submit = (e) => {
     e.preventDefault();
-    post(onboarding2.preferences.store.url());
+    post(store.url());
   };
   const notificationOptions = [
     { value: "workout_reminders", label: "Workout Reminders" },
@@ -99,7 +116,7 @@ function Preferences({ user, athlete, onboarding: onboarding2, difficulties }) {
           ] })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700", children: [
-          /* @__PURE__ */ jsx(Button, { variant: "outline", asChild: true, children: /* @__PURE__ */ jsxs(Link, { href: onboarding2.stats.url(), children: [
+          /* @__PURE__ */ jsx(Button, { variant: "outline", asChild: true, children: /* @__PURE__ */ jsxs(Link, { href: stats.url(), prefetch: true, children: [
             /* @__PURE__ */ jsx(ChevronLeftIcon, { className: "mr-2 h-4 w-4" }),
             "Back"
           ] }) }),

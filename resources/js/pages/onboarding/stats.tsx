@@ -1,10 +1,12 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ChartBarIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import onboarding from '@/routes/onboarding';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import OnboardingLayout from '@/components/onboarding-layout';
+import { FormEvent } from 'react';
+import { store } from '@/routes/onboarding/stats';
+import { schedule } from '@/routes/onboarding';
 
 type StatsData = {
   current_bench: string;
@@ -12,28 +14,22 @@ type StatsData = {
   current_deadlift: string;
 };
 
-interface Props {
-  user: any;
-  athlete: any;
-  onboarding: any;
-}
-
-export default function Stats({ user, athlete, onboarding }: Props) {
+export default function Stats() {
   const { data, setData, post, processing, errors } = useForm<StatsData>({
     current_bench: '',
     current_squat: '',
     current_deadlift: '',
   });
 
-  const submit = (e: React.FormEvent) => {
+  const submit = (e: FormEvent) => {
     e.preventDefault();
-    post(onboarding.stats.store.url());
+    post(store.url());
   };
 
   return (
     <>
       <Head title="Current Stats - Athletos" />
-      
+
       <OnboardingLayout title="Current Stats">
         <div className="relative mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-xl rounded-lg p-8 border border-gray-200/20 dark:border-gray-700/20">
@@ -118,7 +114,7 @@ export default function Stats({ user, athlete, onboarding }: Props) {
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                   <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Don't know your max?</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    No problem! You can leave these empty and we'll help you find your starting weights during your first few workouts. 
+                    No problem! You can leave these empty and we'll help you find your starting weights during your first few workouts.
                     We'll track your progress from there.
                   </p>
                 </div>
@@ -126,7 +122,7 @@ export default function Stats({ user, athlete, onboarding }: Props) {
 
               <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="outline" asChild>
-                  <Link href={onboarding.schedule.url()} prefetch>
+                  <Link href={schedule.url()} prefetch>
                     <ChevronLeftIcon className="mr-2 h-4 w-4" />
                     Back
                   </Link>

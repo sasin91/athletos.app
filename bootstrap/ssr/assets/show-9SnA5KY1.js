@@ -1,7 +1,7 @@
 import { jsxs, jsx } from "react/jsx-runtime";
 import { useForm, Head, Link } from "@inertiajs/react";
 import { ChevronLeftIcon } from "@heroicons/react/24/outline";
-import { A as AppLayout } from "./app-layout-CUuxNbvK.js";
+import { A as AppLayout } from "./app-layout-J2OJ2uom.js";
 import { t as trainingPlans } from "./index-VEfDRYSW.js";
 import "react";
 import "class-variance-authority";

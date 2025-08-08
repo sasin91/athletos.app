@@ -19,7 +19,7 @@ class EnsureAthleteIsOnboarded
             return redirect()->route('login');
         }
 
-        if (! $request->user()->athlete) {
+        if (! $request->user()->athlete || ! $request->user()->onboarding()->finished()) {
             return redirect()->route('onboarding.profile');
         }
 

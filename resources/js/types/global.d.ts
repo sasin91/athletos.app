@@ -25,7 +25,11 @@ export interface Athlete {
   id: number;
   name: string;
   training_days?: string[];
-  [key: string]: unknown;
+  training_frequency?: string;
+  preferred_time?: string;
+  session_duration?: string;
+  difficulty_preference?: string;
+  notification_preferences?: string[];
 }
 
 // ============================================================================

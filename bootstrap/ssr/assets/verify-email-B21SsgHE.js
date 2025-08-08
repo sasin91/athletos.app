@@ -1,6 +1,6 @@
 import { jsxs, jsx } from "react/jsx-runtime";
 import { useForm, Head, Link } from "@inertiajs/react";
-import { A as AuthLayout } from "./auth-layout-B3uNWcJG.js";
+import { A as AuthLayout } from "./auth-layout-C2gqtMIU.js";
 import { B as Button } from "./button-hAi0Fg-Q.js";
 import { a as logout } from "./index-CrXrSpq1.js";
 import "./app-logo-icon-wMAVxvx3.js";

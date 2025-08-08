@@ -26,12 +26,12 @@ function Welcome() {
     /* @__PURE__ */ jsx(Head, { title: "AthletOS" }),
     /* @__PURE__ */ jsxs("div", { className: "bg-white dark:bg-gray-900", children: [
       /* @__PURE__ */ jsx("header", { className: "absolute inset-x-0 top-0 z-50", children: /* @__PURE__ */ jsxs("nav", { className: "flex items-center justify-between p-6 lg:px-8", "aria-label": "Global", children: [
-        /* @__PURE__ */ jsx("div", { className: "flex lg:flex-1", children: /* @__PURE__ */ jsxs(Link, { href: "/", className: "-m-1.5 p-1.5", children: [
+        /* @__PURE__ */ jsx("div", { className: "flex lg:flex-1", children: /* @__PURE__ */ jsxs(Link, { href: "/", prefetch: true, className: "-m-1.5 p-1.5", children: [
           /* @__PURE__ */ jsx("span", { className: "sr-only", children: "AthletOS" }),
           /* @__PURE__ */ jsx("img", { className: "h-8 w-auto", src: "/images/logo.png", alt: "AthletOS" })
         ] }) }),
         /* @__PURE__ */ jsxs("div", { className: "hidden lg:flex lg:gap-x-12", children: [
-          /* @__PURE__ */ jsx(Link, { href: "/about", className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: "About" }),
+          /* @__PURE__ */ jsx(Link, { href: "/about", prefetch: true, className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: "About" }),
           /* @__PURE__ */ jsx("a", { href: "#features", className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: "Features" }),
           /* @__PURE__ */ jsx("a", { href: "#training", className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: "Training" })
         ] }),
@@ -45,7 +45,7 @@ function Welcome() {
               children: darkMode ? /* @__PURE__ */ jsx("svg", { className: "h-5 w-5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", children: /* @__PURE__ */ jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" }) }) : /* @__PURE__ */ jsx("svg", { className: "h-5 w-5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", children: /* @__PURE__ */ jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" }) })
             }
           ),
-          /* @__PURE__ */ jsxs(Link, { href: "/login", className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: [
+          /* @__PURE__ */ jsxs(Link, { href: "/login", prefetch: true, className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: [
             "Log in ",
             /* @__PURE__ */ jsx("span", { "aria-hidden": "true", children: "→" })
           ] })
@@ -63,8 +63,8 @@ function Welcome() {
               ] }),
               /* @__PURE__ */ jsx("p", { className: "mt-8 text-lg font-medium text-pretty text-gray-500 dark:text-gray-400 sm:text-xl/8", children: "A lifter-first operating system that tracks your training, recovery, and wellness—automatically. Built to integrate with your routine, devices, and goals." }),
               /* @__PURE__ */ jsxs("div", { className: "mt-10 flex items-center justify-center gap-x-6", children: [
-                /* @__PURE__ */ jsx(Link, { href: "/register", className: "rounded-md bg-gradient-to-r from-pink-500 to-violet-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-pink-600 hover:to-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-500", children: "Get Early Access" }),
-                /* @__PURE__ */ jsxs(Link, { href: "/about", className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: [
+                /* @__PURE__ */ jsx(Link, { href: "/register", prefetch: true, className: "rounded-md bg-gradient-to-r from-pink-500 to-violet-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-pink-600 hover:to-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-500", children: "Get Early Access" }),
+                /* @__PURE__ */ jsxs(Link, { href: "/about", prefetch: true, className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: [
                   "Learn more ",
                   /* @__PURE__ */ jsx("span", { "aria-hidden": "true", children: "→" })
                 ] })
@@ -159,7 +159,7 @@ function Welcome() {
               /* @__PURE__ */ jsx("p", { className: "text-base/7", children: "From structured periodization to alternative exercise suggestions based on available equipment, AthletOS ensures your training stays consistent and effective whether you're at your home gym or traveling." })
             ] })
           ] }),
-          /* @__PURE__ */ jsx("div", { className: "mt-10", children: /* @__PURE__ */ jsx(Link, { href: "/about", className: "text-base font-medium bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent", children: "Learn more about our training methodology →" }) })
+          /* @__PURE__ */ jsx("div", { className: "mt-10", children: /* @__PURE__ */ jsx(Link, { href: "/about", prefetch: true, className: "text-base font-medium bg-gradient-to-r from-pink-500 to-violet-500 bg-clip-text text-transparent", children: "Learn more about our training methodology →" }) })
         ] }) }) }),
         /* @__PURE__ */ jsxs("div", { className: "relative -z-10 mt-32 px-6 lg:px-8", children: [
           /* @__PURE__ */ jsx("div", { className: "absolute inset-x-0 top-1/2 -z-10 flex -translate-y-1/2 transform-gpu justify-center overflow-hidden blur-3xl sm:top-auto sm:right-[calc(50%-6rem)] sm:bottom-0 sm:translate-y-0 sm:transform-gpu sm:justify-end", "aria-hidden": "true", children: /* @__PURE__ */ jsx("div", { className: "aspect-[1108/632] w-[69.25rem] flex-none bg-gradient-to-r from-[#ff80b5] to-[#9089fc] opacity-25", style: { clipPath: "polygon(73.6% 48.6%, 91.7% 88.5%, 100% 53.9%, 97.4% 18.1%, 92.5% 15.4%, 75.7% 36.3%, 55.3% 52.8%, 46.5% 50.9%, 45% 37.4%, 50.3% 13.1%, 21.3% 36.2%, 0.1% 0.1%, 5.4% 49.1%, 21.4% 36.4%, 58.9% 100%, 73.6% 48.6%)" } }) }),
@@ -167,8 +167,8 @@ function Welcome() {
             /* @__PURE__ */ jsx("h2", { className: "text-4xl font-semibold tracking-tight text-balance text-gray-900 dark:text-gray-100 sm:text-5xl", children: "Ready to transform your training?" }),
             /* @__PURE__ */ jsx("p", { className: "mx-auto mt-6 max-w-xl text-lg/8 text-pretty text-gray-600 dark:text-gray-400", children: "Join our growing community of dedicated athletes using AthletOS to systematically track progress, optimize workouts, and achieve new personal records." }),
             /* @__PURE__ */ jsxs("div", { className: "mt-10 flex items-center justify-center gap-x-6", children: [
-              /* @__PURE__ */ jsx(Link, { href: "/register", className: "rounded-md bg-gradient-to-r from-pink-500 to-violet-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-pink-600 hover:to-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-500", children: "Start Training" }),
-              /* @__PURE__ */ jsxs(Link, { href: "/about", className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: [
+              /* @__PURE__ */ jsx(Link, { href: "/register", prefetch: true, className: "rounded-md bg-gradient-to-r from-pink-500 to-violet-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-pink-600 hover:to-violet-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-500", children: "Start Training" }),
+              /* @__PURE__ */ jsxs(Link, { href: "/about", prefetch: true, className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: [
                 "Learn more ",
                 /* @__PURE__ */ jsx("span", { "aria-hidden": "true", children: "→" })
               ] })
@@ -185,17 +185,17 @@ function Welcome() {
               /* @__PURE__ */ jsxs("div", { children: [
                 /* @__PURE__ */ jsx("h3", { className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: "Training" }),
                 /* @__PURE__ */ jsxs("ul", { role: "list", className: "mt-6 space-y-4", children: [
-                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/about", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Methodology" }) }),
+                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/about", prefetch: true, className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Methodology" }) }),
                   /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx("a", { href: "#features", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Features" }) }),
                   /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx("a", { href: "#training", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Progress Tracking" }) }),
-                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/exercises", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Exercise Library" }) })
+                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/exercises", prefetch: true, className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Exercise Library" }) })
                 ] })
               ] }),
               /* @__PURE__ */ jsxs("div", { className: "mt-10 md:mt-0", children: [
                 /* @__PURE__ */ jsx("h3", { className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: "Support" }),
                 /* @__PURE__ */ jsxs("ul", { role: "list", className: "mt-6 space-y-4", children: [
-                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/help", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Help Center" }) }),
-                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/guides", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Training Guides" }) })
+                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/help", prefetch: true, className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Help Center" }) }),
+                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/guides", prefetch: true, className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Training Guides" }) })
                 ] })
               ] })
             ] }),
@@ -203,16 +203,16 @@ function Welcome() {
               /* @__PURE__ */ jsxs("div", { children: [
                 /* @__PURE__ */ jsx("h3", { className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: "Platform" }),
                 /* @__PURE__ */ jsxs("ul", { role: "list", className: "mt-6 space-y-4", children: [
-                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/about", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "About" }) }),
-                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/blog", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Blog" }) }),
-                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/changelog", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Changelog" }) })
+                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/about", prefetch: true, className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "About" }) }),
+                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/blog", prefetch: true, className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Blog" }) }),
+                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/changelog", prefetch: true, className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Changelog" }) })
                 ] })
               ] }),
               /* @__PURE__ */ jsxs("div", { className: "mt-10 md:mt-0", children: [
                 /* @__PURE__ */ jsx("h3", { className: "text-sm/6 font-semibold text-gray-900 dark:text-gray-100", children: "Legal" }),
                 /* @__PURE__ */ jsxs("ul", { role: "list", className: "mt-6 space-y-4", children: [
-                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/privacy", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Privacy" }) }),
-                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/terms", className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Terms" }) })
+                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/privacy", prefetch: true, className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Privacy" }) }),
+                  /* @__PURE__ */ jsx("li", { children: /* @__PURE__ */ jsx(Link, { href: "/terms", prefetch: true, className: "text-sm/6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100", children: "Terms" }) })
                 ] })
               ] })
             ] })

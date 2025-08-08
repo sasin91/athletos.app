@@ -4,6 +4,8 @@ import { ChartBarIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/reac
 import { B as Button } from "./button-hAi0Fg-Q.js";
 import { L as Label, I as Input } from "./label-qls5No9M.js";
 import { O as OnboardingLayout } from "./onboarding-layout-BrSXrppm.js";
+import { q as queryParams } from "./index-ID1znBf5.js";
+import { b as schedule } from "./index-B8ZVjn6p.js";
 import "@radix-ui/react-slot";
 import "class-variance-authority";
 import "clsx";
@@ -13,7 +15,22 @@ import "./dropdown-menu-BtKPamvc.js";
 import "@radix-ui/react-dropdown-menu";
 import "react";
 import "lucide-react";
-function Stats({ user, athlete, onboarding: onboarding2 }) {
+const store = (options) => ({
+  url: store.url(options),
+  method: "post"
+});
+store.definition = {
+  methods: ["post"],
+  url: "/onboarding/stats"
+};
+store.url = (options) => {
+  return store.definition.url + queryParams(options);
+};
+store.post = (options) => ({
+  url: store.url(options),
+  method: "post"
+});
+function Stats() {
   const { data, setData, post, processing, errors } = useForm({
     current_bench: "",
     current_squat: "",
@@ -21,7 +38,7 @@ function Stats({ user, athlete, onboarding: onboarding2 }) {
   });
   const submit = (e) => {
     e.preventDefault();
-    post(onboarding2.stats.store.url());
+    post(store.url());
   };
   return /* @__PURE__ */ jsxs(Fragment, { children: [
     /* @__PURE__ */ jsx(Head, { title: "Current Stats - Athletos" }),
@@ -99,7 +116,7 @@ function Stats({ user, athlete, onboarding: onboarding2 }) {
           ] })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700", children: [
-          /* @__PURE__ */ jsx(Button, { variant: "outline", asChild: true, children: /* @__PURE__ */ jsxs(Link, { href: onboarding2.schedule.url(), children: [
+          /* @__PURE__ */ jsx(Button, { variant: "outline", asChild: true, children: /* @__PURE__ */ jsxs(Link, { href: schedule.url(), prefetch: true, children: [
             /* @__PURE__ */ jsx(ChevronLeftIcon, { className: "mr-2 h-4 w-4" }),
             "Back"
           ] }) }),
