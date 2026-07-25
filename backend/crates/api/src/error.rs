@@ -2,8 +2,8 @@
 //! details.
 //!
 //! Internal failures are logged in full but reported to the client only as a
-//! generic message — the API serves data about vulnerable people, so error
-//! bodies must never leak schema details, ids, or driver text.
+//! generic message: error bodies must never leak schema details, ids, or
+//! driver text.
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -27,13 +27,6 @@ pub enum ApiError {
     /// less", 422 says "send something else".
     #[error("{0}")]
     PayloadTooLarge(String),
-
-    /// The SMTP relay refused or was unreachable while an invitation mail was
-    /// being sent. 502 rather than 500 because the failing dependency is
-    /// upstream of us, and the caller's next move — try again — is real advice.
-    /// The cause is logged where it happens; this message is all a client sees.
-    #[error("the invitation email could not be sent — try again")]
-    MailDelivery,
 
     /// Too many consecutive failed sign-in attempts for an address
     /// (`auth::throttle`, ADR-0017). Carries the remaining
@@ -82,7 +75,6 @@ impl ApiError {
             Self::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::MailDelivery => StatusCode::BAD_GATEWAY,
             Self::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             Self::Unauthenticated => StatusCode::UNAUTHORIZED,
             Self::Forbidden => StatusCode::FORBIDDEN,

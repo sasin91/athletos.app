@@ -1,0 +1,3 @@
+# Phase 1 creates the schema (docs/MILESTONE-1.md). `sqlx::migrate!` needs the
+# directory to exist even while it is empty, and git does not track empty
+# directories.

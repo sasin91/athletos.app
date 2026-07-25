@@ -5,8 +5,8 @@
 //! interfering. It connects using `DATABASE_URL`; start the server first with
 //! `./scripts/dev-services.ps1 up`.
 
+use athletos_api::{app, state::AppState};
 use axum_test::TestServer;
-use pixmyday_api::{app, state::AppState};
 use sqlx::PgPool;
 
 fn server(pool: PgPool) -> TestServer {
@@ -20,7 +20,7 @@ async fn health_reports_ok(pool: PgPool) {
     response.assert_status_ok();
     response.assert_json(&serde_json::json!({
         "status": "ok",
-        "service": "pixmyday-api",
+        "service": "athletos-api",
     }));
 }
 
@@ -31,12 +31,13 @@ async fn readiness_reports_ready_when_the_database_is_reachable(pool: PgPool) {
     response.assert_status_ok();
     response.assert_json(&serde_json::json!({
         "status": "ready",
-        "service": "pixmyday-api",
+        "service": "athletos-api",
     }));
 }
 
-/// The generated document is the contract the Nuxt BFF's client is built from
-/// (ADR-0014), so a handler silently missing from it is a real defect.
+/// The generated document is the contract the SvelteKit BFF's client is built
+/// from (ADR-0014, D-11), so a handler silently missing from it is a real
+/// defect.
 #[sqlx::test]
 async fn openapi_document_describes_every_route(pool: PgPool) {
     let response = server(pool).get("/api-docs/openapi.json").await;
@@ -45,18 +46,15 @@ async fn openapi_document_describes_every_route(pool: PgPool) {
     let doc: serde_json::Value = response.json();
 
     assert_eq!(doc["openapi"], "3.1.0");
-    assert_eq!(doc["info"]["title"], "PixMyDay API");
+    assert_eq!(doc["info"]["title"], "AthletOS API");
     assert!(doc["paths"]["/health"]["get"].is_object());
     assert!(doc["paths"]["/health/ready"]["get"].is_object());
-    assert!(doc["paths"]["/auth/invitations/accept"]["post"].is_object());
-    assert!(doc["paths"]["/teams/{team_id}/invitations"]["post"].is_object());
-    assert!(doc["paths"]["/auth/login"]["post"].is_object());
-    assert!(doc["paths"]["/auth/refresh"]["post"].is_object());
-    assert!(doc["paths"]["/auth/logout"]["post"].is_object());
-    assert!(doc["paths"]["/auth/me"]["get"].is_object());
+    assert!(doc["paths"]["/v1/auth/login"]["post"].is_object());
+    assert!(doc["paths"]["/v1/auth/refresh"]["post"].is_object());
+    assert!(doc["paths"]["/v1/auth/logout"]["post"].is_object());
+    assert!(doc["paths"]["/v1/auth/me"]["get"].is_object());
+    // Not under `/v1`: RFC 8615 fixes this path (D-12).
     assert!(doc["paths"]["/.well-known/jwks.json"]["get"].is_object());
-    assert!(doc["paths"]["/teams/{team_id}/pictograms"]["post"].is_object());
-    assert!(doc["paths"]["/persons/{person_id}/appearance"]["get"].is_object());
 
     // The BFF's generated client needs the bearer scheme to attach tokens.
     assert_eq!(
@@ -64,7 +62,7 @@ async fn openapi_document_describes_every_route(pool: PgPool) {
         "bearer"
     );
     assert_eq!(
-        doc["paths"]["/auth/me"]["get"]["security"][0]["bearer_token"],
+        doc["paths"]["/v1/auth/me"]["get"]["security"][0]["bearer_token"],
         serde_json::json!([])
     );
 }
@@ -89,14 +87,9 @@ async fn migrations_create_the_identity_schema(pool: PgPool) {
     for expected in [
         "access_audit_log",
         "access_token_denylist",
-        "athlete_invitations",
         "athletes",
-        "organizations",
-        "person_team_links",
-        "persons",
+        "login_throttle",
         "refresh_tokens",
-        "team_memberships",
-        "teams",
     ] {
         assert!(
             tables.iter().any(|table| table == expected),

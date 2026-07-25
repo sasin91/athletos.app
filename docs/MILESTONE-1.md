@@ -31,47 +31,41 @@ is ugly on purpose.
 
 The backend does not currently build.
 
-- [ ] `git init` — the project is not a repository yet.
-- [ ] Delete `crates/domain/` entirely, and its workspace member entry.
-- [ ] Delete `storage.rs`, `bootstrap.rs`, `src/bin/bootstrap.rs`,
+- [x] `git init` — the project is not a repository yet.
+- [x] Delete `crates/domain/` entirely, and its workspace member entry.
+- [x] Delete `storage.rs`, `bootstrap.rs`, `src/bin/bootstrap.rs`,
       `src/bin/set_password.rs`\*, and the `vocabulary` / `library-import`
       `[[bin]]` blocks (their sources are already gone).
-- [ ] Strip from `Cargo.toml`: `aws-sdk-s3`, `image`, `libwebp-sys`,
+- [x] Strip from `Cargo.toml`: `aws-sdk-s3`, `image`, `libwebp-sys`,
       `tokio-util`, `kamadak-exif`, `lettre`. Removing `libwebp-sys` removes
-      the C toolchain from the build.
-- [ ] Rename `pixmyday-api` → `athletos-api`. Drop `pixmyday-domain`.
-- [ ] `lib.rs`: remove `pub mod images/mail/points/schedule`, remove
+      the C toolchain from the build.†
+- [x] Rename `pixmyday-api` → `athletos-api`. Drop `pixmyday-domain`.
+- [x] `lib.rs`: remove `pub mod images/mail/points/schedule`, remove
       `routes::invitations` wiring; `routes/mod.rs`: remove `activities`,
       `invitations`.
-- [ ] `state.rs`: drop `objects` and `mailer` from `AppState` and their
+- [x] `state.rs`: drop `objects` and `mailer` from `AppState` and their
       builders.
-- [ ] Fix the rename artifact: `Authenticatedathlete` → `AuthenticatedAthlete`
+- [x] Fix the rename artifact: `Authenticatedathlete` → `AuthenticatedAthlete`
       (12 sites).
-- [ ] Mount everything under `/v1` (D-12).
+- [x] Mount everything under `/v1` (D-12).
 
-\* Keep `set-password` if you want any password recovery at all — it is the
-only path (D-02).
+\* `set-password` was **kept** — it is the only password recovery path there
+is (D-02). `src/bin/bootstrap.rs` and `src/bootstrap.rs` went.
 
-### Decision required: the team join
+† Not quite: `libwebp-sys` is gone, but `ring` — the rustls crypto provider
+behind both `sqlx`'s `tls-rustls` and `reqwest`'s `rustls-tls` — still builds C
+and assembly through `cc`. The build no longer needs `cmake`, and nothing
+vendors libwebp, but a C compiler is still a build requirement.
 
-`auth/extractor.rs:114` runs this on **every authenticated request**:
+### Decision taken: the team join is stripped
 
-```sql
-from athletes c
-left join ( select tm.athlete_id, tm.team_id, tm.role
-            from team_memberships tm
-            join teams t on t.id = tm.team_id and t.deleted_at is null
-          ) m on m.athlete_id = c.id
-```
+`auth/extractor.rs` used to run a `left join` over `team_memberships` and
+`teams` on **every authenticated request**. Teams are v2 (D-14), so the join is
+gone: the extractor is now athlete + denylist only, and `AuthenticatedAthlete`
+carries nothing but `athlete_id`. `TeamMembership` and `TeamRole` are deleted.
 
-Teams are v2 (D-14). Two options:
-
-- **Strip the join** (recommended). The extractor becomes athlete + denylist
-  only. Two fewer tables, one less join per request, and v2 will want a
-  coach↔athlete shape rather than generic team roles anyway. Re-adding a join
-  is trivial.
-- **Keep it with empty tables.** Costs two empty migrations; the `LEFT JOIN`
-  yields no memberships. Nothing to re-add in v2.
+Two fewer tables for phase 1 to reverse-engineer, one less join per request,
+and v2 will want a coach↔athlete shape rather than generic team roles anyway.
 
 **Done when:** `cargo check` passes and `cargo test` runs.
 
@@ -88,8 +82,10 @@ Tables the kept code requires:
 ```
 athletes                 refresh_tokens
 access_token_denylist    login_throttle
-access_audit_log         (teams, team_memberships — see phase 0 decision)
+access_audit_log
 ```
+
+No `teams` or `team_memberships` — phase 0 stripped the join.
 
 New tables:
 

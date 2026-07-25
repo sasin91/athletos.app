@@ -284,9 +284,9 @@ impl PasswordPolicy {
 
     /// The full check applied to a password the caller is *choosing*.
     ///
-    /// A password is chosen in exactly two places: accepting an invitation
-    /// (ADR-0016) and the one-shot `bootstrap`. There is no password-change or
-    /// password-reset endpoint yet, and both must call this when they land.
+    /// A password is chosen in exactly one place today: the offline
+    /// `set-password` binary. There is no registration, password-change or
+    /// password-reset endpoint yet, and each must call this when it lands.
     /// Login deliberately does not: re-checking at
     /// authentication time would lock out an account whose password only became
     /// breached after it was set, which SP 800-63B-4 does not ask for and which
@@ -316,7 +316,7 @@ impl PasswordPolicy {
                 // that cleared the length floor, the 143k-entry bundled corpus,
                 // the pattern rules and the context rules, so the marginal
                 // security loss is small and bounded. Fail-closed would hand
-                // api.pwnedpasswords.com the ability to stop PixMyDay taking
+                // api.pwnedpasswords.com the ability to stop AthletOS taking
                 // on new athletes, which is exactly the dependency ADR-0011 keeps
                 // the default deployment free of. Logged at warn so an operator
                 // who turned this on can see it is not working.
@@ -473,7 +473,7 @@ fn matches_context(password: &str, context: PasswordContext<'_>) -> bool {
 }
 
 fn context_tokens(context: PasswordContext<'_>) -> Vec<String> {
-    let mut tokens = vec!["pixmyday".to_owned()];
+    let mut tokens = vec!["athletos".to_owned()];
 
     let email = fold(context.email);
     // The local part only. The domain is usually a mail provider rather than
@@ -553,7 +553,7 @@ impl HibpRangeApi {
             // and the fail-open branch above is a perfectly good outcome. Waiting
             // 30 seconds to reach the same conclusion is not.
             .timeout(timeout)
-            .user_agent("pixmyday-api")
+            .user_agent("athletos-api")
             .build()
             .expect("a default reqwest client is always constructible");
 
@@ -737,7 +737,7 @@ mod tests {
             "berg is my name ok",
             "AlexBerg forever and ever",
             "my athlete alex account",
-            "pixmyday is a lovely app",
+            "athletos is a lovely app",
         ] {
             assert!(
                 rejected_as_guessable(contextual),

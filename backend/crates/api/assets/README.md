@@ -6,7 +6,7 @@ The corpus `auth::password` compares every new password against, so that NIST SP
 800-63B-4 §3.1.1.2 ("verifiers SHALL compare the prospective secrets against a
 list that contains commonly-used, expected, or compromised passwords") is
 satisfied without the deployment talking to anyone. Shipping it rather than
-querying a service is what keeps the default PixMyDay deployment self-contained
+querying a service is what keeps the default AthletOS deployment self-contained
 and its sub-processor list unchanged (ADR-0011).
 
 **Contents.** 143,742 unique entries, lowercased, one per line, gzipped —

@@ -1,11 +1,11 @@
 [package]
-name = "pixmyday-api"
+name = "athletos-api"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 
 [lib]
-name = "pixmyday_api"
+name = "athletos_api"
 path = "src/lib.rs"
 
 [[bin]]
@@ -18,36 +18,14 @@ path = "src/main.rs"
 name = "openapi"
 path = "src/bin/openapi.rs"
 
-# Creates the first athlete of a deployment, once (ADR-0016). Deliberately a
-# binary rather than an endpoint, so a production router contains no
-# unauthenticated account-creating path at all.
-[[bin]]
-name = "bootstrap"
-path = "src/bin/bootstrap.rs"
-
-# Dumps the pictogram vocabulary and appearance enums as JSON for the offline
-# batch-generation tool (ADR-0023). No server, no DB — a checkout alone
-# suffices, same reasoning as `openapi` above.
-[[bin]]
-name = "vocabulary"
-path = "src/bin/vocabulary.rs"
-
-# Imports the human-approved output of scripts/pictogram-batch/ into the
-# curated pictogram library (ADR-0023): writes S3 objects and upserts
-# `pictogram_library` rows. The only writer of that table — the running
-# server only ever selects from it.
-[[bin]]
-name = "library-import"
-path = "src/bin/library_import.rs"
-
 # offline password reset for an existing athlete — there is no reset
-# endpoint, and `bootstrap` refuses once any athlete exists.
+# endpoint, and this is the only recovery path there is (D-02).
 [[bin]]
 name = "set-password"
 path = "src/bin/set_password.rs"
 
 [dependencies]
-axum = { version = "0.8", features = ["multipart"] }
+axum = "0.8"
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -85,45 +63,6 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 # so there is no JSON feature to enable.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 ed25519-dalek = { version = "3", features = ["pkcs8", "rand_core", "pem"] }
-pixmyday-domain = { version = "0.1.0", path = "../domain" }
-# Object storage (ADR-0010). The official SDK rather than a thin S3 wrapper
-# because SigV4, retries, and checksum handling are exactly the things a
-# hand-rolled client gets subtly wrong. `aws-config` is deliberately NOT pulled
-# in: credentials and endpoint come from our own `Config::from_env`, so the SDK
-# never reaches for an instance-metadata service or `~/.aws/credentials` and
-# cannot silently talk to a bucket nobody configured.
-aws-sdk-s3 = { version = "1.122.0", default-features = false, features = ["rt-tokio", "default-https-client"] }
-# Decode, resize, and the lossless master encode. Only the three input formats
-# we accept are compiled in, so an unexpected format cannot even be decoded by
-# accident.
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
-# Lossy WebP for the two served derivatives (ADR-0010 amendment). `image` has no
-# lossy WebP encoder — only lossless — and ADR-0010 proxies every byte through
-# Axum with no CDN, so derivative size is paid again on every view. That is worth
-# a C toolchain in the build, which the rest of the tree still avoids.
-#
-# libwebp-sys rather than the `webp` crate: `webp` 0.3.1 pins libwebp-sys 0.9,
-# which vendors libwebp 1.3.1 — the release immediately before the 1.3.2 that
-# fixed CVE-2023-4863. We only encode, so that particular decoder bug is not
-# reachable from here, but shipping a known-vulnerable libwebp into the container
-# image is not a thing to do on purpose. 0.14.4 vendors libwebp 1.6.0 and is the
-# maintained line. It builds the C sources with `cc` and links them statically,
-# so there is no system libwebp to install on a dev box or in a builder stage.
-#
-# It is a raw FFI crate; the entire unsafe surface is `pipeline::encode_lossy`.
-libwebp-sys = { version = "0.14.4", default-features = false, features = ["std", "parallel"] }
-# `ReaderStream`, to hand an S3 body to axum without buffering it (ADR-0010
-# proxies bytes; buffering a 20 MB master per concurrent request would not do).
-tokio-util = { version = "0.7.18", default-features = false, features = ["io"] }
-# Outbound SMTP — the invitation mail (spec: .scratch/invitation-mail). rustls
-# rather than native-tls for the same no-C-toolchain reasoning as `reqwest` and
-# `jsonwebtoken` above; the provider is any EU SMTP relay, Mailpit in dev.
-lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "hostname", "tokio1", "tokio1-rustls-tls"] }
 
 [dev-dependencies]
 axum-test = "21"
-# Tests only: proves the EXIF fixture really carries GPS before upload, and that
-# the stored derivatives carry no Exif container at all afterwards. The
-# implementation never parses Exif with it — stripping is a property of
-# re-encoding from raw pixels, not of a metadata filter.
-kamadak-exif = "0.6.1"

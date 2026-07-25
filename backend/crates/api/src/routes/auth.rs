@@ -1,7 +1,7 @@
 //! Authentication endpoints (ADR-0003).
 //!
-//! The Nuxt BFF keeps the refresh token in an httpOnly cookie and attaches the
-//! access token when it calls this API (ADR-0002); a mobile app does the same
+//! The SvelteKit BFF keeps the refresh token in an httpOnly cookie and attaches
+//! the access token when it calls this API (D-11); a mobile app does the same
 //! directly. Neither cookie handling nor CSRF lives here — this API speaks
 //! bearer tokens only, which is what keeps the two clients symmetric.
 
@@ -20,15 +20,15 @@ use crate::auth::keys::Jwks;
 use crate::auth::password::{hash_password, verify_password};
 use crate::auth::refresh::{self, DeviceContext};
 use crate::auth::token::{issue_access_token, verify_access_token};
-use crate::auth::{denylist, throttle, Authenticatedathlete};
+use crate::auth::{denylist, throttle, AuthenticatedAthlete};
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
 /// The longest address this API accepts anywhere, from the RFC 5321 §4.5.3.1.3
 /// forward-path limit of 256 octets minus the enclosing angle brackets.
-pub(crate) const MAX_EMAIL_LENGTH: usize = 254;
+pub const MAX_EMAIL_LENGTH: usize = 254;
 
-pub(crate) const MAX_DISPLAY_NAME_LENGTH: usize = 128;
+pub const MAX_DISPLAY_NAME_LENGTH: usize = 128;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
@@ -51,7 +51,7 @@ pub struct LogoutRequest {
 }
 
 /// A new pair of credentials. The refresh token is single-use: the next call to
-/// `/auth/refresh` invalidates it and returns its successor.
+/// `/v1/auth/refresh` invalidates it and returns its successor.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TokenPair {
     /// Ed25519-signed JWT. Verifiable against `/.well-known/jwks.json`.
@@ -67,20 +67,10 @@ pub struct TokenPair {
     pub refresh_token_expires_at: chrono::DateTime<chrono::Utc>,
 }
 
-// There is deliberately no `POST /auth/register` (ADR-0016). Registration is
-// invitation-only: an account comes from `POST /auth/invitations/accept`
-// (`routes::invitations`) or from the one-shot `bootstrap` binary, and nothing
-// else. The endpoint that used to live here answered 409 for an address that
-// already had an account, which made it a free account-enumeration oracle over
-// a population defined by supporting an autistic person — see
-// `docs/dpia-inputs.md`. The accept endpoint that replaced it takes no email
-// address at all: the address comes from the invitation row, so there is
-// nothing for a caller to probe with.
-
-/// Exchanges a athlete's email and password for a token pair.
+/// Exchanges an athlete's email and password for a token pair.
 #[utoipa::path(
     post,
-    path = "/auth/login",
+    path = "/v1/auth/login",
     tag = "auth",
     request_body = LoginRequest,
     responses(
@@ -159,7 +149,7 @@ pub async fn login(
 /// family — see `auth::refresh` for why.
 #[utoipa::path(
     post,
-    path = "/auth/refresh",
+    path = "/v1/auth/refresh",
     tag = "auth",
     request_body = RefreshRequest,
     responses(
@@ -210,7 +200,7 @@ pub async fn refresh(
 /// success, and is the one case that is refused.
 #[utoipa::path(
     post,
-    path = "/auth/logout",
+    path = "/v1/auth/logout",
     tag = "auth",
     security(("bearer_token" = [])),
     request_body = LogoutRequest,
@@ -259,31 +249,25 @@ pub async fn logout(
     }
 
     if let Some(athlete_id) = revoked_family_for.or(access_claims.map(|claims| claims.sub)) {
-        audit::record(
-            &state.db,
-            AuthAction::LoggedOut,
-            Some(athlete_id),
-            &device,
-        )
-        .await;
+        audit::record(&state.db, AuthAction::LoggedOut, Some(athlete_id), &device).await;
     }
 
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// The athlete the presented access token identifies, with their Team
-/// memberships. Also the smallest possible proof that the extractor works.
+/// The athlete the presented access token identifies. Also the smallest
+/// possible proof that the extractor works.
 #[utoipa::path(
     get,
-    path = "/auth/me",
+    path = "/v1/auth/me",
     tag = "auth",
     security(("bearer_token" = [])),
     responses(
-        (status = 200, description = "The authenticated athlete", body = Authenticatedathlete),
+        (status = 200, description = "The authenticated athlete", body = AuthenticatedAthlete),
         (status = 401, description = "Missing or invalid access token", body = crate::error::ProblemDetails),
     )
 )]
-pub async fn me(athlete: Authenticatedathlete) -> Json<Authenticatedathlete> {
+pub async fn me(athlete: AuthenticatedAthlete) -> Json<AuthenticatedAthlete> {
     Json(athlete)
 }
 
@@ -310,7 +294,7 @@ pub async fn jwks(State(state): State<AppState>) -> Json<Jwks> {
 /// the shape the rest of the system relies on — a non-empty local part, a
 /// dotted domain, no whitespace, within the RFC 5321 length limit — and leaves
 /// the rest to the (not yet built) verification mail.
-pub(crate) fn validate_email(raw: &str) -> ApiResult<String> {
+pub fn validate_email(raw: &str) -> ApiResult<String> {
     let email = raw.trim();
 
     let invalid = || ApiError::Validation("email is not a valid address".to_owned());
@@ -345,10 +329,10 @@ pub(crate) fn validate_email(raw: &str) -> ApiResult<String> {
     Ok(email.to_owned())
 }
 
-/// Shared by the athlete's own name and their Team's, because both land in
-/// `text not null check (length(trim(...)) > 0)` columns and both are rendered
-/// to other people.
-pub(crate) fn validate_display_name(raw: &str) -> ApiResult<String> {
+/// The athlete's own name: it lands in a
+/// `text not null check (length(trim(...)) > 0)` column, so an all-whitespace
+/// name has to be refused here rather than by the database.
+pub fn validate_display_name(raw: &str) -> ApiResult<String> {
     let name = raw.trim();
 
     if name.is_empty() {
@@ -370,9 +354,9 @@ pub(crate) fn token_pair(
     issued: refresh::IssuedRefreshToken,
 ) -> ApiResult<TokenPair> {
     let (access_token, expires_in) =
-        issue_access_token(&state.auth.keys, &state.auth.config, athlete_id).map_err(
-            |error| ApiError::Internal(format!("could not issue an access token: {error}")),
-        )?;
+        issue_access_token(&state.auth.keys, &state.auth.config, athlete_id).map_err(|error| {
+            ApiError::Internal(format!("could not issue an access token: {error}"))
+        })?;
 
     Ok(TokenPair {
         access_token,

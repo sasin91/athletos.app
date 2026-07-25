@@ -7,15 +7,15 @@
 
 use std::sync::Arc;
 
+use athletos_api::app;
+use athletos_api::auth::keys::KeyRing;
+use athletos_api::auth::password::hash_password;
+use athletos_api::auth::token::AccessClaims;
+use athletos_api::config::AuthConfig;
+use athletos_api::state::{AppState, AuthContext};
 use axum_test::TestServer;
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, Header};
-use pixmyday_api::app;
-use pixmyday_api::auth::keys::KeyRing;
-use pixmyday_api::auth::password::hash_password;
-use pixmyday_api::auth::token::AccessClaims;
-use pixmyday_api::config::AuthConfig;
-use pixmyday_api::state::{AppState, AuthContext};
 use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -34,10 +34,9 @@ fn server_with(pool: PgPool, auth: Arc<AuthContext>) -> TestServer {
     TestServer::new(app(AppState::new(pool, auth)))
 }
 
-/// Inserts a athlete who owns one Team, and returns their id and the Team's.
-async fn seed_athlete(pool: &PgPool) -> (Uuid, Uuid) {
+/// Inserts an athlete and returns their id.
+async fn seed_athlete(pool: &PgPool) -> Uuid {
     let athlete_id = Uuid::now_v7();
-    let team_id = Uuid::now_v7();
 
     let password_hash = hash_password(PASSWORD.to_owned())
         .await
@@ -54,27 +53,12 @@ async fn seed_athlete(pool: &PgPool) -> (Uuid, Uuid) {
     .await
     .expect("failed to insert the seed athlete");
 
-    sqlx::query("insert into teams (id, name) values ($1, 'Seed Household')")
-        .bind(team_id)
-        .execute(pool)
-        .await
-        .expect("failed to insert the seed team");
-
-    sqlx::query(
-        "insert into team_memberships (team_id, athlete_id, role) values ($1, $2, 'owner')",
-    )
-    .bind(team_id)
-    .bind(athlete_id)
-    .execute(pool)
-    .await
-    .expect("failed to insert the seed membership");
-
-    (athlete_id, team_id)
+    athlete_id
 }
 
 async fn log_in(server: &TestServer) -> serde_json::Value {
     let response = server
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .json(&json!({ "email": EMAIL, "password": PASSWORD }))
         .await;
 
@@ -94,13 +78,13 @@ async fn logout_rejects_the_access_token_it_was_presented_with(pool: PgPool) {
     let access_token = tokens["access_token"].as_str().unwrap();
 
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(access_token)
         .await
         .assert_status_ok();
 
     server
-        .post("/auth/logout")
+        .post("/v1/auth/logout")
         .authorization_bearer(access_token)
         .json(&json!({ "refresh_token": tokens["refresh_token"] }))
         .await
@@ -110,7 +94,7 @@ async fn logout_rejects_the_access_token_it_was_presented_with(pool: PgPool) {
     // 401, because we no longer accept the credential; not 403, which would
     // mean we accepted it and denied the action.
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(access_token)
         .await
         .assert_status_unauthorized();
@@ -139,99 +123,53 @@ async fn denylisting_one_token_leaves_another_token_for_the_same_athlete_alive(p
     assert_ne!(phone_access, tablet_access);
 
     server
-        .post("/auth/logout")
+        .post("/v1/auth/logout")
         .authorization_bearer(tablet_access)
         .json(&json!({ "refresh_token": tablet["refresh_token"] }))
         .await
         .assert_status(axum::http::StatusCode::NO_CONTENT);
 
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(tablet_access)
         .await
         .assert_status_unauthorized();
 
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(phone_access)
         .await
         .assert_status_ok();
 }
 
-/// The denylist check rides along in the memberships query, so the memberships
-/// it returns are the thing most at risk of quietly breaking.
+/// A soft-deleted athlete is refused even while their access token is still
+/// inside its lifetime — the other half of what the extractor's one query buys.
 #[sqlx::test]
-async fn the_extractor_still_reports_every_membership_with_the_denylist_join(pool: PgPool) {
-    let (athlete_id, owned_team) = seed_athlete(&pool).await;
+async fn a_soft_deleted_athlete_is_no_longer_authenticated(pool: PgPool) {
+    let athlete_id = seed_athlete(&pool).await;
+    let server = server_with(pool.clone(), auth_context());
 
-    let joined_team = Uuid::now_v7();
-    let deleted_team = Uuid::now_v7();
-
-    sqlx::query("insert into teams (id, name) values ($1, 'School Class')")
-        .bind(joined_team)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("insert into teams (id, name, deleted_at) values ($1, 'Old Unit', now())")
-        .bind(deleted_team)
-        .execute(&pool)
-        .await
-        .unwrap();
-
-    for (team_id, role) in [(joined_team, "member"), (deleted_team, "owner")] {
-        sqlx::query("insert into team_memberships (team_id, athlete_id, role) values ($1, $2, $3::team_role)")
-            .bind(team_id)
-            .bind(athlete_id)
-            .bind(role)
-            .execute(&pool)
-            .await
-            .unwrap();
-    }
-
-    let server = server_with(pool, auth_context());
     let tokens = log_in(&server).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
 
-    let response = server
-        .get("/auth/me")
-        .authorization_bearer(tokens["access_token"].as_str().unwrap())
-        .await;
-    response.assert_status_ok();
-    let body: serde_json::Value = response.json();
+    server
+        .get("/v1/auth/me")
+        .authorization_bearer(access_token)
+        .await
+        .assert_status_ok();
 
-    let mut expected = vec![
-        json!({ "team_id": owned_team, "role": "owner" }),
-        json!({ "team_id": joined_team, "role": "member" }),
-    ];
-    expected.sort_by_key(|m| m["team_id"].as_str().unwrap().to_owned());
-
-    assert_eq!(
-        body["memberships"].as_array().unwrap(),
-        &expected,
-        "the soft-deleted Team must be excluded and the rest kept"
-    );
-}
-
-/// A athlete between Teams is authenticated, just unable to reach anything —
-/// the outer join must not turn that into a 401.
-#[sqlx::test]
-async fn a_athlete_with_no_teams_is_still_authenticated(pool: PgPool) {
-    let (athlete_id, _) = seed_athlete(&pool).await;
-    sqlx::query("delete from team_memberships where athlete_id = $1")
+    sqlx::query("update athletes set deleted_at = now() where id = $1")
         .bind(athlete_id)
         .execute(&pool)
         .await
         .unwrap();
 
-    let server = server_with(pool, auth_context());
-    let tokens = log_in(&server).await;
-
-    let response = server
-        .get("/auth/me")
-        .authorization_bearer(tokens["access_token"].as_str().unwrap())
-        .await;
-
-    response.assert_status_ok();
-    response.assert_json(&json!({ "athlete_id": athlete_id, "memberships": [] }));
+    // 401, not 403: the credential is no longer one we accept.
+    server
+        .get("/v1/auth/me")
+        .authorization_bearer(access_token)
+        .await
+        .assert_status_unauthorized();
 }
 
 /// Logout without a bearer token still ends the session. The access token
@@ -245,13 +183,13 @@ async fn logout_with_only_a_refresh_token_ends_the_session(pool: PgPool) {
     let tokens = log_in(&server).await;
 
     server
-        .post("/auth/logout")
+        .post("/v1/auth/logout")
         .json(&json!({ "refresh_token": tokens["refresh_token"] }))
         .await
         .assert_status(axum::http::StatusCode::NO_CONTENT);
 
     server
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .json(&json!({ "refresh_token": tokens["refresh_token"] }))
         .await
         .assert_status_unauthorized();
@@ -273,14 +211,14 @@ async fn logout_with_only_an_access_token_revokes_it(pool: PgPool) {
     let access_token = tokens["access_token"].as_str().unwrap();
 
     server
-        .post("/auth/logout")
+        .post("/v1/auth/logout")
         .authorization_bearer(access_token)
         .json(&json!({}))
         .await
         .assert_status(axum::http::StatusCode::NO_CONTENT);
 
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(access_token)
         .await
         .assert_status_unauthorized();
@@ -292,7 +230,7 @@ async fn logout_with_neither_credential_is_refused(pool: PgPool) {
     let server = server_with(pool, auth_context());
 
     server
-        .post("/auth/logout")
+        .post("/v1/auth/logout")
         .json(&json!({}))
         .await
         .assert_status(axum::http::StatusCode::UNPROCESSABLE_ENTITY);
@@ -308,7 +246,7 @@ async fn logout_ignores_an_unverifiable_access_token(pool: PgPool) {
     let tokens = log_in(&server).await;
 
     server
-        .post("/auth/logout")
+        .post("/v1/auth/logout")
         .authorization_bearer("not-a-token")
         .json(&json!({ "refresh_token": tokens["refresh_token"] }))
         .await
@@ -344,7 +282,7 @@ async fn login_with_the_wrong_password_is_unauthorized(pool: PgPool) {
     let server = server_with(pool.clone(), auth_context());
 
     let response = server
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .json(&json!({ "email": EMAIL, "password": "not the password" }))
         .await;
 
@@ -363,7 +301,7 @@ async fn login_with_an_unknown_address_is_unauthorized(pool: PgPool) {
     let server = server_with(pool, auth_context());
 
     server
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .json(&json!({ "email": "nobody@example.com", "password": PASSWORD }))
         .await
         .assert_status_unauthorized();
@@ -372,11 +310,11 @@ async fn login_with_an_unknown_address_is_unauthorized(pool: PgPool) {
 /// ADR-0011 requires an access-audit log from v1.
 #[sqlx::test]
 async fn login_and_logout_are_written_to_the_access_audit_log(pool: PgPool) {
-    let (athlete_id, _) = seed_athlete(&pool).await;
+    let athlete_id = seed_athlete(&pool).await;
     let server = server_with(pool.clone(), auth_context());
 
     server
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .json(&json!({ "email": EMAIL, "password": "wrong" }))
         .await
         .assert_status_unauthorized();
@@ -384,18 +322,17 @@ async fn login_and_logout_are_written_to_the_access_audit_log(pool: PgPool) {
     let tokens = log_in(&server).await;
 
     server
-        .post("/auth/logout")
+        .post("/v1/auth/logout")
         .json(&json!({ "refresh_token": tokens["refresh_token"] }))
         .await
         .assert_status(axum::http::StatusCode::NO_CONTENT);
 
-    let actions: Vec<String> = sqlx::query_scalar(
-        "select action from access_audit_log where athlete_id = $1 order by id",
-    )
-    .bind(athlete_id)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let actions: Vec<String> =
+        sqlx::query_scalar("select action from access_audit_log where athlete_id = $1 order by id")
+            .bind(athlete_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
 
     assert_eq!(
         actions,
@@ -432,22 +369,19 @@ async fn the_refresh_token_is_stored_only_as_a_hash(pool: PgPool) {
 // --- access tokens and the extractor ------------------------------------
 
 #[sqlx::test]
-async fn a_valid_access_token_identifies_the_athlete_and_their_teams(pool: PgPool) {
-    let (athlete_id, team_id) = seed_athlete(&pool).await;
+async fn a_valid_access_token_identifies_the_athlete(pool: PgPool) {
+    let athlete_id = seed_athlete(&pool).await;
     let server = server_with(pool, auth_context());
 
     let tokens = log_in(&server).await;
 
     let response = server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(tokens["access_token"].as_str().unwrap())
         .await;
 
     response.assert_status_ok();
-    response.assert_json(&json!({
-        "athlete_id": athlete_id,
-        "memberships": [{ "team_id": team_id, "role": "owner" }],
-    }));
+    response.assert_json(&json!({ "athlete_id": athlete_id }));
 }
 
 #[sqlx::test]
@@ -455,11 +389,11 @@ async fn a_protected_route_without_a_token_is_unauthorized(pool: PgPool) {
     seed_athlete(&pool).await;
     let server = server_with(pool, auth_context());
 
-    server.get("/auth/me").await.assert_status_unauthorized();
+    server.get("/v1/auth/me").await.assert_status_unauthorized();
 
     // A present-but-nonsense header is the same answer: 401, never 403.
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer("not-a-token")
         .await
         .assert_status_unauthorized();
@@ -478,7 +412,7 @@ async fn an_expired_access_token_is_rejected(pool: PgPool) {
     let server = server_with(pool, auth);
 
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(&expired)
         .await
         .assert_status_unauthorized();
@@ -500,7 +434,7 @@ async fn a_tampered_access_token_is_rejected(pool: PgPool) {
     let tampered: String = tampered.into_iter().collect();
 
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(&tampered)
         .await
         .assert_status_unauthorized();
@@ -523,7 +457,7 @@ async fn an_access_token_signed_with_another_key_is_rejected(pool: PgPool) {
     let server = server_with(pool, auth);
 
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(&forged)
         .await
         .assert_status_unauthorized();
@@ -539,7 +473,7 @@ async fn refresh_rotates_the_token_and_retires_the_old_one(pool: PgPool) {
     let first = log_in(&server).await;
 
     let response = server
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .json(&json!({ "refresh_token": first["refresh_token"] }))
         .await;
     response.assert_status_ok();
@@ -549,14 +483,14 @@ async fn refresh_rotates_the_token_and_retires_the_old_one(pool: PgPool) {
 
     // The successor works...
     server
-        .get("/auth/me")
+        .get("/v1/auth/me")
         .authorization_bearer(second["access_token"].as_str().unwrap())
         .await
         .assert_status_ok();
 
     // ...and the token it replaced does not.
     server
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .json(&json!({ "refresh_token": first["refresh_token"] }))
         .await
         .assert_status_unauthorized();
@@ -572,21 +506,21 @@ async fn reusing_a_consumed_refresh_token_revokes_the_whole_family(pool: PgPool)
     let first = log_in(&server).await;
 
     let second: serde_json::Value = server
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .json(&json!({ "refresh_token": first["refresh_token"] }))
         .await
         .json();
 
     // The thief replays the spent token.
     server
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .json(&json!({ "refresh_token": first["refresh_token"] }))
         .await
         .assert_status_unauthorized();
 
     // The legitimate holder's live token is collateral damage, by design.
     server
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .json(&json!({ "refresh_token": second["refresh_token"] }))
         .await
         .assert_status_unauthorized();
@@ -613,20 +547,20 @@ async fn logout_revokes_the_refresh_token(pool: PgPool) {
     let tokens = log_in(&server).await;
 
     server
-        .post("/auth/logout")
+        .post("/v1/auth/logout")
         .json(&json!({ "refresh_token": tokens["refresh_token"] }))
         .await
         .assert_status(axum::http::StatusCode::NO_CONTENT);
 
     server
-        .post("/auth/refresh")
+        .post("/v1/auth/refresh")
         .json(&json!({ "refresh_token": tokens["refresh_token"] }))
         .await
         .assert_status_unauthorized();
 
     // Idempotent, and it reveals nothing about whether the token was real.
     server
-        .post("/auth/logout")
+        .post("/v1/auth/logout")
         .json(&json!({ "refresh_token": tokens["refresh_token"] }))
         .await
         .assert_status(axum::http::StatusCode::NO_CONTENT);
@@ -723,7 +657,7 @@ async fn five_failures_throttle_the_address_even_with_the_right_password(pool: P
 
     for _ in 0..5 {
         server
-            .post("/auth/login")
+            .post("/v1/auth/login")
             .json(&json!({ "email": EMAIL, "password": "wrong password entirely" }))
             .await
             .assert_status_unauthorized();
@@ -732,7 +666,7 @@ async fn five_failures_throttle_the_address_even_with_the_right_password(pool: P
     // The sixth attempt is refused before it is evaluated - even the RIGHT
     // password waits, which is what makes the guess budget real.
     let throttled = server
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .json(&json!({ "email": EMAIL, "password": PASSWORD }))
         .await;
     throttled.assert_status(axum::http::StatusCode::TOO_MANY_REQUESTS);
@@ -783,13 +717,13 @@ async fn throttle_response(
 ) -> (axum::http::StatusCode, serde_json::Value) {
     for _ in 0..5 {
         server
-            .post("/auth/login")
+            .post("/v1/auth/login")
             .json(&json!({ "email": email, "password": "wrong password entirely" }))
             .await
             .assert_status_unauthorized();
     }
     let response = server
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .json(&json!({ "email": email, "password": "wrong password entirely" }))
         .await;
     (response.status_code(), response.json())
@@ -805,13 +739,13 @@ async fn a_successful_login_resets_the_run_of_failures(pool: PgPool) {
     for round in 0..2 {
         for _ in 0..4 {
             server
-                .post("/auth/login")
+                .post("/v1/auth/login")
                 .json(&json!({ "email": EMAIL, "password": "wrong password entirely" }))
                 .await
                 .assert_status_unauthorized();
         }
         server
-            .post("/auth/login")
+            .post("/v1/auth/login")
             .json(&json!({ "email": EMAIL, "password": PASSWORD }))
             .await
             .assert_status_ok();
@@ -835,21 +769,21 @@ async fn address_case_variants_share_one_throttle(pool: PgPool) {
 
     for email in [EMAIL, "athlete@example.com", " athlete@EXAMPLE.com "] {
         server
-            .post("/auth/login")
+            .post("/v1/auth/login")
             .json(&json!({ "email": email, "password": "wrong password entirely" }))
             .await
             .assert_status_unauthorized();
     }
     for _ in 0..2 {
         server
-            .post("/auth/login")
+            .post("/v1/auth/login")
             .json(&json!({ "email": EMAIL, "password": "wrong password entirely" }))
             .await
             .assert_status_unauthorized();
     }
 
     server
-        .post("/auth/login")
+        .post("/v1/auth/login")
         .json(&json!({ "email": "athlete@Example.Com", "password": PASSWORD }))
         .await
         .assert_status(axum::http::StatusCode::TOO_MANY_REQUESTS);

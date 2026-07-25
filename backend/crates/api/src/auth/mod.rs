@@ -8,7 +8,6 @@
 
 pub mod audit;
 pub mod denylist;
-pub mod display;
 pub mod extractor;
 pub mod keys;
 pub mod password;
@@ -17,5 +16,4 @@ pub mod secret;
 pub mod throttle;
 pub mod token;
 
-pub use display::{AuthenticatedDisplay, AuthenticatedPersonDisplay};
-pub use extractor::{Authenticatedathlete, TeamMembership, TeamRole};
+pub use extractor::AuthenticatedAthlete;
