@@ -615,6 +615,180 @@ this one but a philosophy.
 
 ---
 
+## D-16 · One box, and why not high availability
+
+A single Hetzner server in `hel1` runs everything: Caddy, the API, the
+SvelteKit BFF, and Postgres. No load balancer, no second node, no failover.
+
+High availability was the opening requirement, and it was the wrong target.
+The failure being defended against was a CI pipeline that rsynced over a
+running application — and that is an **atomicity** failure, not an availability
+one. It would have hurt exactly as much across three nodes. The effort belongs
+in making releases immutable and rollback instant (D-17), not in redundancy.
+
+Two things make skipping HA unusually cheap here:
+
+- **The app is offline-first (D-09).** The session is cached before training
+  starts and the submit is queued. A dead box during a workout costs the
+  athlete nothing at all — the one moment the product is actually in use is
+  the one moment it does not need the server.
+- **The expensive half of HA is Postgres, not the app tier.** Two app nodes
+  behind a load balancer is an afternoon. Automatic database failover is
+  Patroni or repmgr, and a failover path is itself a thing that breaks. That
+  is a standing operational commitment to protect one athlete's training log.
+
+### Both services on the same box
+
+The BFF calls the API over loopback, about 1 ms. Hosting the frontend on
+Cloudflare would add ~50–80 ms per page load from an edge in Copenhagen;
+Netlify's free tier pins functions to `us-east-1`, which would cross the
+Atlantic twice to reach a database in Helsinki.
+
+Latency was not the deciding argument, though. **Co-location means one
+release.** The generated TypeScript client and the API that serves it ship as
+a single unit and cannot drift apart. Split across two providers, there is
+always a window where the frontend calls a shape that no longer exists.
+
+It costs almost nothing at the point of use: `/session`, the screen actually
+open in the gym, is `ssr = false, prerender = true` and served by the service
+worker. It never touches the server whatever happens.
+
+### Caddy at the edge
+
+Automatic certificates. No certbot, no renewal timer, no reload hook, and no
+expired certificate on a Sunday. `${APP_DOMAIN}` routes to the Node process
+and `api.${APP_DOMAIN}` to the Rust one — the API is publicly routed on its
+own name because D-11 has a native client talking to it directly.
+
+nginx would work and is better documented; it also makes certificate expiry a
+failure mode that exists. haproxy — proven in previous projects — earns its
+keep when there is something to balance and drain between. Here each upstream
+is one process on the same machine.
+
+---
+
+## D-17 · Releases are immutable; rollback is a symlink
+
+```
+/srv/athletos/releases/<sha>/{api, web/}
+/srv/athletos/current -> releases/<sha>
+```
+
+Nothing is ever written into a path that is being served from. That single
+property is the fix for the failure that motivated this whole design.
+
+### The binary is static
+
+Built `x86_64-unknown-linux-musl` with `musl-tools`, fully static, no libc
+dependency of any kind.
+
+This is not a preference. Building on GitHub's glibc 2.39 and running on
+Debian 12's 2.36 fails at the loader with an error that explains nothing, and
+it is the classic first Rust deployment. Nothing here needs glibc — TLS is
+rustls throughout and there is no OpenSSL — so the static target is free.
+
+`ring` compiles C, so the musl link is the riskiest unproven step in the
+design and is tested first rather than last. The documented fallback is
+`cargo-zigbuild` against the same target.
+
+**Nix was considered and declined.** It would solve glibc drift, but so does
+one cargo flag. NixOS's real attraction is different and genuine — whole-system
+generations with atomic rollback of the OS, not just the app — but `npm` under
+Nix is the roughest corner of that ecosystem, and it is exactly the half of
+this stack with the least existing experience behind it. Three unfamiliar
+things at once is how a canary fails to ship. Worth revisiting once deploying
+this stack is boring; migrating later is a packaging exercise, not an
+architectural one, because the app is already a static binary beside a
+static-ish node tree. Note also that Railway, the reference point for
+Nix-based builds, [moved off it in 2026](https://blog.railway.com/p/introducing-railpack)
+after 14 million builds.
+
+**mimalloc was considered and shelved, with a trigger.** musl's allocator is
+slower than glibc's under concurrency. But mimalloc is a C library, and adding
+it would double the C surface of the musl cross-compile that is already the
+riskiest step, to fix a cost this workload cannot measure — a request here is
+dominated by one database round trip, not by allocation. If a profile ever
+shows otherwise, the cheaper first move is switching the target to
+`cargo zigbuild --target x86_64-unknown-linux-gnu.2.36`, which drops the musl
+allocator and adds no dependency. mimalloc only after that.
+
+### The frontend is an artifact, not a checkout
+
+CI runs `npm ci --omit=dev` and ships `build/` plus `node_modules/` as one
+tarball. Both production dependencies are pure JavaScript, so there is nothing
+to compile on the target. **The box has a Node runtime and no npm.** Running a
+package install on a production host at deploy time is the same class of thing
+as rsyncing over a live directory: a step that can half-succeed.
+
+### The deploy is health-gated
+
+A symlink swap prevents overwriting a good release. It does not prevent
+pointing at a bad one. So the sequence is: download into `releases/<sha>/`,
+start the new binary on a spare port, poll `/health/ready`, and only then flip
+and restart. Any failure removes the new directory and exits non-zero with
+`current` never having moved.
+
+Artifacts come from a GitHub Release rather than being copied straight from
+CI, so any previous version can be redeployed without rebuilding it.
+
+### Rollback does not roll back the schema
+
+`migrate()` runs at API startup. The moment a new binary boots, the schema has
+moved — and flipping the symlink back leaves old code against a new database.
+
+There is no tooling fix for this, only a rule:
+
+> **A migration must be backward-compatible with the release before it.**
+> Add columns; do not drop them in the same deploy that stops using them. Drop
+> them one release later, once the previous version is no longer a rollback
+> target.
+
+It costs a two-step dance a few times a year and it is what makes "just roll
+back" true rather than merely comforting.
+
+### Provisioning
+
+Terraform for the server, firewall and SSH key, with **HCP's free remote
+backend** — versioned, locked, and not a file on a laptop. State loss is the
+scar that shaped this choice; for five resources the recovery cost is a
+handful of `terraform import` lines, but the same fix applies to larger
+estates and is worth establishing once.
+
+Terraform is deliberately thin here. It declares that a server exists. The
+part that actually needs to be reproducible — packages, service user,
+directory layout, units, Caddy config, backup timers — lives in an idempotent
+`bootstrap.sh`, because that is where the rebuild value is.
+
+---
+
+## D-18 · Backups, and the two ways they lie
+
+The training history is the only thing here that cannot be regenerated.
+Binaries, configuration and the box itself can be rebuilt within the hour.
+
+**Hourly** `pg_dump`, compressed and encrypted, pushed to a Hetzner Storage
+Box over SSH. Retention 24 hourly, 30 daily, 12 monthly.
+
+Hourly rather than nightly because the economics invert at this size: a year
+of one athlete's training is a few megabytes, so frequency is nearly free, and
+it moves the worst case from "lose a session" to "lose nothing". A daily
+schedule would be optimising for a storage cost that does not exist.
+
+Two failure modes are worth naming, because both look like working backups:
+
+- **A dump on the same box is not a backup.** It shares a failure domain with
+  the thing it protects. This is why the destination is offsite and why the
+  local copy is a staging area rather than the artifact.
+- **An untested backup is not a backup.** A `pg_dump` writing a zero-byte file
+  for eight months is indistinguishable from a healthy one until the day it
+  matters. The restore procedure is therefore a script, not a paragraph, and
+  it is run once before it is needed.
+
+Postgres listens on a **unix socket only** — no TCP port, so the database is
+not reachable from the network regardless of firewall state.
+
+---
+
 ## Open
 
 - ~~**No Postgres on the dev machine.**~~ **Closed.** Postgres 17.10 runs as a
