@@ -367,6 +367,11 @@ install -d -m 0755 "${BASE_JAIL}/usr/local/etc/athletos"
 # --------------------------------------------------------------------------
 #
 # A thin jail here means: the immutable half of the userland is a read-only
+# The gid Postgres runs as on the host. Needed inside each jail so the service
+# user can open the 0770 socket that is mounted in; see the groupadd below.
+PG_GID=$(pw groupshow postgres 2>/dev/null | cut -d: -f3)
+[ -n "${PG_GID}" ] || die "postgres group not found on the host — is postgresql installed?"
+
 # nullfs mount of the base, and the writable half — /etc, /var, /tmp, /root and
 # the release symlink — is the jail's own dataset. The writable layer is a few
 # megabytes, so the two jails cost almost nothing beyond one base.
@@ -407,6 +412,25 @@ for jail in ${JAILS}; do
         install -d -m 0755 "${root}/var/run/postgresql"
     fi
     install -d -o "${APP_USER}" -g "${APP_USER}" -m 0750 "${root}/var/log/athletos"
+
+    # Postgres runs on the host and its socket is nullfs-mounted in at
+    # unix_socket_permissions = 0770, owned postgres:postgres. The kernel checks
+    # the *numeric* gid of the connecting process, and the jail has no idea what
+    # "postgres" is — it was installed on the host, and each jail carries its own
+    # /etc/group copied out of the base.
+    #
+    # So the group is recreated inside the jail with the host's gid and the
+    # service user put in it. Without this the API starts, fails to open the
+    # socket, and reports a bare `PermissionDenied` with no hint of what it
+    # could not open.
+    #
+    # Done per jail rather than in the base because /etc is copied out of the
+    # base exactly once (above), so a base-only change would never reach a jail
+    # that already exists.
+    if ! pw -R "${root}" groupshow postgres >/dev/null 2>&1; then
+        pw -R "${root}" groupadd -n postgres -g "${PG_GID}"
+    fi
+    pw -R "${root}" groupmod postgres -m "${APP_USER}" 2>/dev/null || true
 
     # The jail's own configuration. Everything here is per-jail and non-secret;
     # secrets come from the env file. The API base URL is the jail's own address
