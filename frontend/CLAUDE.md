@@ -1,7 +1,7 @@
 # Frontend
 
 SvelteKit 2.63 · **Svelte 5 (runes)** · Tailwind 4 · DaisyUI 5 · TypeScript 6 ·
-Vitest · Playwright · `adapter-auto`.
+Vitest · Playwright · `adapter-node`.
 
 ## Svelte documentation
 
@@ -22,7 +22,11 @@ When it is not, fetch the docs directly. These are complete and need no server:
 
 **Runes, always.** `$state`, `$derived`, `$props`, `$effect`. Never `export let`,
 and never a legacy store where a rune fits. Runes mode is forced in
-`vite.config.ts` for everything outside `node_modules`.
+`svelte.config.js` for everything outside `node_modules`.
+
+**Kit options live in `svelte.config.js`, never in `vite.config.ts`.** Passing
+any option to the `sveltekit()` Vite plugin makes kit ignore `svelte.config.js`
+entirely — adapter included — and say so only in a console warning.
 
 **The browser never holds a token (D-11).** Two httpOnly cookies, read and
 written server-side in `hooks.server.ts`. Every call to the Rust API goes
