@@ -62,6 +62,12 @@ solo-athlete product.
 offline `set-password` binary. Acceptable while the user base is the author;
 not acceptable the day a second person signs up.
 
+**Known v1 gap: registration discloses whether an address is registered.** It
+answers 409 on a taken address. The usual fix — accept the request and send
+mail that differs — needs the outbound mail v1 deleted, so the disclosure is
+deliberate rather than overlooked, and is asserted in a test so it stays that
+way. It closes when mail arrives with teams (D-14).
+
 ---
 
 ## D-03 · Program engine: two authoring traits, one consuming trait
@@ -349,6 +355,30 @@ Retrofitting it means changing every write endpoint across two clients.
 
 > The reference stores the in-progress workout in the *server-side session*
 > (`session()->put('pending_workout', ...)`). No signal, no workout.
+
+### Idempotency versus a finished block
+
+Found while building this; neither D-08 nor D-09 anticipated it.
+
+The retry of the submit that **finished a fixed block** arrives when the
+enrolment is already `finished`. Two rules that both sound obvious now
+contradict each other:
+
+- *Refuse writes to a closed enrolment.* Then the retry fails, and the client
+  believes a session it completed was lost.
+- *A retry always succeeds.* Then a closed enrolment accepts writes.
+
+**Ordering resolves it: attempt the insert first, check status second.** The
+`on conflict (id) do nothing returning id` tells you whether this call created
+the row. If it did not, the work already landed and the correct answer is
+success with the already-advanced progress — regardless of enrolment status. A
+status check placed *before* the insert cannot distinguish the two cases.
+
+The write is one transaction: `select ... for update` on the enrolment (the
+lock matters because `advance()` is a read-modify-write of `state`, so two
+different workouts arriving together would otherwise lose one advance), then
+the conditional insert, then sets + `advance()` + state write only in the
+branch that actually inserted.
 
 ---
 
