@@ -2,12 +2,19 @@ name: Deploy
 
 # Ship a published release to the box.
 #
-# HONEST STATUS: this has never run. There is no server yet, so nothing here has
-# been executed against a real host — it is written to be correct rather than
-# claimed to be working, and the first run will be the first test of it. What it
-# does is deliberately small, which is the best defence available in that
-# situation: it opens an SSH connection and runs one command that already exists
-# on the box and has its own health gate and its own rollback.
+# Invoked by release.yml once the FreeBSD build has published its artifacts, and
+# available on its own for redeploying any past tag by hand.
+#
+# It is NOT triggered by `release: published`, and that is not an oversight.
+# release.yml creates the release with GITHUB_TOKEN, and GitHub deliberately
+# suppresses workflow events raised by that token so a workflow cannot trigger
+# itself in a loop. Two releases were published before anyone noticed that the
+# deploy hanging off that event had therefore never once fired. `workflow_call`
+# has no such problem and needs no personal access token.
+#
+# What it does is deliberately small: it opens an SSH connection and runs one
+# command that already exists on the box and has its own health gate and its own
+# rollback.
 #
 # All the interesting behaviour lives in /usr/local/sbin/athletos-deploy, on the
 # box, in a script that is in this repository under deploy/deploy.sh. A CI job
@@ -15,8 +22,12 @@ name: Deploy
 # where it cannot be read, tested or run by hand at three in the morning.
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag to deploy'
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
@@ -41,7 +52,7 @@ jobs:
     steps:
       - name: Deploy
         env:
-          TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+          TAG: ${{ github.event.inputs.tag || inputs.tag }}
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}

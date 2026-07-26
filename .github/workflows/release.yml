@@ -162,3 +162,20 @@ jobs:
             dist/athletos-api-freebsd-amd64 \
             dist/athletos-web.tar.gz \
             dist/SHA256SUMS
+
+  # Roll it out.
+  #
+  # A separate job that calls deploy.yml, rather than deploy.yml listening for
+  # `release: published`. That event never fires for us: the release above is
+  # created with GITHUB_TOKEN, and GitHub suppresses workflow triggers raised by
+  # that token so a workflow cannot set itself off in a loop. The deploy that
+  # hung off that event sat there through two releases doing nothing.
+  #
+  # `workflow_call` is a direct invocation, so there is no event to be
+  # suppressed and no personal access token to store and rotate.
+  deploy:
+    needs: freebsd
+    uses: ./.github/workflows/deploy.yml
+    with:
+      tag: ${{ github.event.inputs.tag || github.ref_name }}
+    secrets: inherit
