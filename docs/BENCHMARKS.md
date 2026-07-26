@@ -79,6 +79,30 @@ Measured from a laptop in Denmark to `hel1`, over the public internet:
 | `https://api.athletos.app/health` | 0.233 s |
 | TLS | Let's Encrypt, obtained automatically, no certbot |
 
+## Boot environments
+
+| | |
+|---|---|
+| `bectl create` | **0.036 s** |
+| Space used by the new BE | **8 K** |
+
+It is a ZFS clone, not a copy, so an OS-level rollback point costs
+essentially nothing. There is no reason not to take one before every upgrade.
+
+## Restore drill
+
+Run for real against the live database, restoring into a scratch copy and
+comparing row counts table by table:
+
+| | |
+|---|---|
+| `pg_dump -Fc` | 512 B in **0.11 s** |
+| `pg_restore` into an empty database | **0.11 s** |
+| `athletes` / `enrollments` / `workouts` / `workout_sets` / `athlete_maxes` | all matched |
+
+D-18 says an untested backup is not a backup. This is the test, and it passes.
+The offsite half is still not configured — see `Open` in `DESIGN.md`.
+
 ## Build and release
 
 | | |
@@ -105,6 +129,5 @@ cost lands where nobody is waiting on it.
 
 ## Still to measure
 
-- Request latency through Caddy to a jail, and the loopback hop the BFF makes.
-- `bectl` boot-environment rollback.
-- Restore drill: `pg_dump` size and restore duration.
+- Nothing outstanding. Request latency, memory, deploy time, jail cycle time,
+  boot environments and the restore drill are all measured above.
