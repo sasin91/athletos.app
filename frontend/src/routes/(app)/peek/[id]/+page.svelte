@@ -97,7 +97,15 @@
 		</button>
 	{/if}
 
-	{#each session.blocks as block (block.exercise)}
+	<!--
+		Keyed by position, not by `block.exercise`. A session may prescribe the
+		same exercise in more than one block — 5/3/1 BBB gives the main lift its
+		ramp and then five sets of ten of the same movement — so the exercise key
+		is not unique and Svelte throws `each_key_duplicate` at runtime. Blocks
+		carry no id of their own, and their order is the order they are performed
+		in, so the index is the only honest key here.
+	-->
+	{#each session.blocks as block, blockIndex (blockIndex)}
 		<section class="card mb-3 border">
 			<div class="card-body">
 				<h2 class="card-title">{block.label}</h2>
