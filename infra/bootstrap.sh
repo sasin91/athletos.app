@@ -570,7 +570,27 @@ fi
 
 sysrc caddy_enable="YES" >/dev/null
 sysrc caddy_config="/usr/local/etc/caddy/Caddyfile" >/dev/null
-sysrc caddy_env="APP_DOMAIN=${APP_DOMAIN} ACME_EMAIL=${ACME_EMAIL}" >/dev/null
+
+# caddy_env is deliberately NOT written into rc.conf with the values read
+# above. Doing that copies APP_DOMAIN and ACME_EMAIL out of the env file at
+# bootstrap time, and the copy then goes stale the moment anyone edits the env
+# file — silently, with the symptom being Caddy requesting a certificate for
+# whatever the domain used to be.
+#
+# rc.conf.d/<service> is sourced as shell by rc.subr, so it can read the one
+# source of truth at service start instead of duplicating it.
+mkdir -p /usr/local/etc/rc.conf.d
+cat >/usr/local/etc/rc.conf.d/caddy <<EOF
+# Written by infra/bootstrap.sh. Reads ${CONF_DIR}/env at service start so the
+# env file stays the only place APP_DOMAIN and ACME_EMAIL are defined.
+if [ -r "${CONF_DIR}/env" ]; then
+    . "${CONF_DIR}/env"
+    caddy_env="APP_DOMAIN=\${APP_DOMAIN} ACME_EMAIL=\${ACME_EMAIL}"
+fi
+EOF
+
+# Remove any copy an earlier run of this script left behind, or it wins.
+sysrc -x caddy_env >/dev/null 2>&1 || true
 
 # --------------------------------------------------------------------------
 # Deploy scripts
