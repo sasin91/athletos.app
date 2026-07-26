@@ -89,7 +89,7 @@
           "athlete"
         ],
         "summary": "Everything the athlete has entered.",
-        "operationId": "show",
+        "operationId": "show_maxes",
         "responses": {
           "200": {
             "description": "The athlete's maxes, possibly none",
@@ -124,7 +124,7 @@
         ],
         "summary": "Replaces the athlete's maxes with exactly what is sent.",
         "description": "A `PUT` of the whole document, not a patch: what the client holds is one\nform, and a partial upsert would leave \"clear the max I entered by mistake\"\nwith no representation at all. A key absent from the body is therefore a key\ndeleted, and the whole thing is one transaction so a half-applied form is not\na state the athlete can end up in.\n\nRemoving a max cannot break a program already running. A prescriptive block\nsnapshots the maxes it was started from (D-03) and an adaptive one keeps its\ntraining max in `State`, so neither reads this table again after enrolment —\nwhich is also why editing a number here does not retroactively rewrite\nsessions the athlete has already been shown (D-07).",
-        "operationId": "replace",
+        "operationId": "replace_maxes",
         "requestBody": {
           "content": {
             "application/json": {
@@ -402,7 +402,7 @@
         ],
         "summary": "Every program this athlete has run, current one first.",
         "description": "This is how a client that has been reloaded finds its way back: the enrolment\nid it needs for `next-session` and for `POST /v1/workouts` is not something it\ncan derive, and a BFF cookie holding it would be a second source of truth for\na fact the database already knows.\n\nBoth a `status` filter and an active-first ordering, which is not\nbelt-and-braces. The filter is what a client asking \"what am I running\"\nshould send. The ordering is what keeps the *unfiltered* call — \"programs\nI've run\", the D-13 reading — from making the client sort to find the live\none. A default order that answers the common question is worth more than one\nthat is merely chronological, and it costs a boolean in the `order by`.",
-        "operationId": "list",
+        "operationId": "list_enrollments",
         "parameters": [
           {
             "name": "status",
@@ -459,7 +459,7 @@
         ],
         "summary": "Starts a program for the authenticated athlete.",
         "description": "The engine validates: `start()` derives the whole block (or, for an adaptive\nprogram, every training max) purely so that a missing max fails here, at\nenrolment, rather than as a zero-kilo prescription on day one of week one.\nThat refusal reaches the caller as a 422 naming the exercise key — see the\n`ProgramError` conversion in `crate::error`.\n\nNothing stops an athlete holding several enrolments at once, including in the\nsame program. The schema's active-enrolment index is deliberately not unique:\nrunning a squat block and a bench block side by side is a product question\nnobody has answered yet, and a constraint would answer it by accident.",
-        "operationId": "create",
+        "operationId": "create_enrollment",
         "requestBody": {
           "content": {
             "application/json": {
@@ -594,7 +594,7 @@
           "programs"
         ],
         "summary": "Every program an athlete can enrol in.",
-        "operationId": "list",
+        "operationId": "list_programs",
         "responses": {
           "200": {
             "description": "The catalogue",
@@ -631,7 +631,7 @@
         ],
         "summary": "One program's catalogue entry.",
         "description": "Deliberately the same shape the list returns rather than a richer one. A\ndetail view that showed the actual prescribed sessions would have to derive\nthem from the athlete's maxes, which is what enrolling is for — and showing a\npreview built from maxes the athlete has not entered would mean inventing\nnumbers.",
-        "operationId": "detail",
+        "operationId": "show_program",
         "parameters": [
           {
             "name": "key",
@@ -690,7 +690,7 @@
         ],
         "summary": "Everything the athlete has logged, newest first.",
         "description": "# Pagination, and the index that does not exist\n\nOffset and limit, not a keyset cursor. Keyset is the stabler construction and\nit is not the one that fits here: the sort key would have to be\n`(started_at, id)` to break ties, and the only index over `workouts` is\n`(enrollment_id, started_at desc)`, which carries neither `athlete_id` nor\n`id`. So keyset would buy no index advantage and would trade one form of\ndrift for an opaque cursor. The drift offset does have is real and small: a\nworkout submitted while the athlete is paging shifts rows by one, which in a\n\"load more\" list read by one person is a repeated or skipped row, not a wrong\nanswer.\n\nThe honest cost of the unfiltered call is that Postgres materialises and\nsorts one athlete's *entire* workout history per page. `workouts` has no\n`athlete_id`, so the scope comes through a join and no index over `workouts`\ncan answer the ordering — this is a sort, and it is bounded by how many\nsessions one person has logged. At the hundreds this is designed for that\ncosts nothing worth measuring. If it ever does, the fix is to denormalise\n`athlete_id` onto `workouts` with an index on `(athlete_id, started_at\ndesc)`; that is an additive migration, and adding the column now — untested,\nunmeasured, and duplicating a fact `enrollments` already owns — is exactly\nthe speculative move the schema's own comments argue against.\n\nSupplying `enrollment_id` sidesteps all of it: that query is one walk of the\nexisting index, in order, and stops at the limit.",
-        "operationId": "history",
+        "operationId": "list_workouts",
         "parameters": [
           {
             "name": "enrollment_id",
@@ -760,7 +760,7 @@
           "workouts"
         ],
         "summary": "Records a finished session and advances the program exactly once.",
-        "operationId": "submit",
+        "operationId": "submit_workout",
         "requestBody": {
           "content": {
             "application/json": {
@@ -857,7 +857,7 @@
         ],
         "summary": "One workout and every set of it.",
         "description": "A separate endpoint rather than an `?include=sets` flag on the list, for the\ninteraction it serves: expand-on-tap opens one row at a time, and an include\nflag would fetch the sets for a whole page whether or not anything was\nexpanded — around a thousand rows to render twenty-five dates, on a phone.\nA submitted workout is also immutable, so this response can be cached hard by\nthe client where a list response cannot. And the choice is not final in the\ndirection that matters: an `include` flag can be added later if the extra\nround trip ever hurts, whereas a field cannot be taken back out of the list\n(D-12).",
-        "operationId": "show",
+        "operationId": "show_workout",
         "parameters": [
           {
             "name": "id",
@@ -1344,9 +1344,11 @@
         "required": [
           "position",
           "exercise",
+          "label",
           "prescribed_weight",
           "prescribed_reps",
-          "amrap"
+          "amrap",
+          "plates_per_side"
         ],
         "properties": {
           "amrap": {
@@ -1354,6 +1356,25 @@
           },
           "exercise": {
             "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "description": "The exercise's display name, resolved from the compiled registry.",
+            "example": "Squat"
+          },
+          "plates_per_side": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "The same breakdown [`LiftView::plates_per_side`] carries, repeated here.\n\nAdded in phase 4. The logger walks `prescribed_sets`, not `blocks`, and\nthe athlete needs the plates on the screen they are actually looking at.\nWithout this the client has to join the two lists — by position, which\nmeans reimplementing this module's expansion order, or by\n`(exercise, weight)`, which is a lookup the server can simply answer. A\nfew duplicated floats are cheaper than either (D-11).",
+            "example": [
+              25.0,
+              10.0,
+              2.5,
+              1.25
+            ]
           },
           "position": {
             "type": "integer",
@@ -1497,7 +1518,8 @@
           "experience_floor",
           "length",
           "recovery_demand",
-          "estimated_session_minutes"
+          "estimated_session_minutes",
+          "required_maxes"
         ],
         "properties": {
           "days_per_week": {
@@ -1535,6 +1557,13 @@
           },
           "recovery_demand": {
             "$ref": "#/components/schemas/ProgramRecoveryDemand"
+          },
+          "required_maxes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequiredMax"
+            },
+            "description": "The one-rep maxes this program refuses to start without (D-04).\n\nHere so that a client can render the maxes form *before* enrolling,\nwithout holding its own copy of which lifts which program wants. The\nalternative was the 422 from `POST /v1/enrollments`, which names one\nmissing key at a time and only after the athlete has pressed the button.\n\nLabels are resolved from the compiled exercise registry for the same\nreason `BlockView` resolves them: a browser cannot look a key up in a\nRust `static`, and a `/v1/exercises` endpoint to cache would be a round\ntrip before the first form renders."
           }
         }
       },
@@ -1602,6 +1631,24 @@
           "password": {
             "type": "string",
             "description": "Checked against the guessability policy of NIST SP 800-63B-4 §3.1.1.2\nbefore the account exists — see `auth::password`."
+          }
+        }
+      },
+      "RequiredMax": {
+        "type": "object",
+        "description": "One lift a program needs a max for, ready to be a labelled form field.",
+        "required": [
+          "exercise",
+          "label"
+        ],
+        "properties": {
+          "exercise": {
+            "type": "string",
+            "example": "military-press"
+          },
+          "label": {
+            "type": "string",
+            "example": "Military Press"
           }
         }
       },

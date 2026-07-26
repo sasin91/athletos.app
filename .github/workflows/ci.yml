@@ -138,5 +138,23 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # The offline queue, the UUIDv7 minting, the pace projection and the
+      # commit-to-submission transformation are plain TypeScript precisely so
+      # that they can be checked without a browser or an API. These are the
+      # parts most likely to be wrong and the only frontend tests that verify
+      # behaviour rather than types.
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Build
         run: npm run build
+
+      # Two end-to-end tests, and deliberately only two: with no API to talk
+      # to, the most that can be proven is that the built app boots, survives a
+      # request carrying no cookies, and renders its first screen. Anything
+      # further would be testing mocks against each other.
+      - name: Install a browser
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npx playwright test

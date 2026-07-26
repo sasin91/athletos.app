@@ -93,4 +93,53 @@ mod tests {
             }
         }
     }
+
+    /// `required_maxes` is a hand-written declaration and the client's maxes
+    /// form is built from it, so it has to be exactly what `start()` asks for —
+    /// not a superset that makes the athlete enter a number nothing reads, and
+    /// not a subset that lets them press enrol and be refused.
+    ///
+    /// Both directions are checked. Removing any declared key must fail
+    /// *naming that key*, and the declared keys on their own must be enough.
+    #[test]
+    fn required_maxes_is_exactly_what_starting_needs() {
+        for program in REGISTRY {
+            let key = program.meta().key;
+            let required = program.meta().required_maxes;
+
+            assert!(!required.is_empty(), "{key} requires no maxes at all");
+
+            for exercise in required {
+                assert!(
+                    exercise::find(exercise).is_some(),
+                    "{key} requires unknown exercise {exercise}"
+                );
+            }
+
+            let complete: crate::Maxes = required
+                .iter()
+                .map(|exercise| ((*exercise).to_owned(), 100.0))
+                .collect();
+
+            program
+                .start(&complete)
+                .unwrap_or_else(|_| panic!("{key} needs a max it does not declare"));
+
+            for missing in required {
+                let partial: crate::Maxes = required
+                    .iter()
+                    .filter(|exercise| *exercise != missing)
+                    .map(|exercise| ((*exercise).to_owned(), 100.0))
+                    .collect();
+
+                match program.start(&partial) {
+                    Err(crate::ProgramError::MissingMax { exercise }) => {
+                        assert_eq!(&exercise, missing, "{key} blamed the wrong lift")
+                    }
+                    Err(other) => panic!("{key} without {missing}: {other}"),
+                    Ok(_) => panic!("{key} declares {missing} but starts without it"),
+                }
+            }
+        }
+    }
 }

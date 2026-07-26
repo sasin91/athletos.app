@@ -180,6 +180,9 @@ const META: ProgramMeta = ProgramMeta {
     // Day 4 is ten sets of squats before the bench work even starts. Flagged
     // here, before enrolment, rather than discovered in week three (D-05).
     estimated_session_minutes: 75,
+    // The three the reference's `ExtractsPowerliftingMaxes` pulls. Every
+    // accessory percentage is taken from one of these, so there is no fourth.
+    required_maxes: &[SQUAT.key, BENCH.key, DEADLIFT.key],
 };
 
 #[derive(Debug, Clone, Copy, Default)]

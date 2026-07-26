@@ -51,6 +51,27 @@ pub struct ProgramSummary {
     /// Wall-clock minutes for a typical session, including rest.
     #[schema(example = 55)]
     pub estimated_session_minutes: u16,
+    /// The one-rep maxes this program refuses to start without (D-04).
+    ///
+    /// Here so that a client can render the maxes form *before* enrolling,
+    /// without holding its own copy of which lifts which program wants. The
+    /// alternative was the 422 from `POST /v1/enrollments`, which names one
+    /// missing key at a time and only after the athlete has pressed the button.
+    ///
+    /// Labels are resolved from the compiled exercise registry for the same
+    /// reason `BlockView` resolves them: a browser cannot look a key up in a
+    /// Rust `static`, and a `/v1/exercises` endpoint to cache would be a round
+    /// trip before the first form renders.
+    pub required_maxes: Vec<RequiredMax>,
+}
+
+/// One lift a program needs a max for, ready to be a labelled form field.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RequiredMax {
+    #[schema(example = "military-press")]
+    pub exercise: String,
+    #[schema(example = "Military Press")]
+    pub label: String,
 }
 
 /// The catalogue, in registry order.
@@ -115,6 +136,19 @@ impl From<&ProgramMeta> for ProgramSummary {
             length: meta.length.into(),
             recovery_demand: meta.recovery_demand.into(),
             estimated_session_minutes: meta.estimated_session_minutes,
+            required_maxes: meta
+                .required_maxes
+                .iter()
+                .map(|key| RequiredMax {
+                    exercise: (*key).to_owned(),
+                    // A program naming an exercise the registry does not hold
+                    // is caught by the training crate's own test; falling back
+                    // to the key keeps the form renderable either way.
+                    label: athletos_training::exercise::find(key)
+                        .map(|exercise| exercise.label.to_owned())
+                        .unwrap_or_else(|| (*key).to_owned()),
+                })
+                .collect(),
         }
     }
 }
@@ -164,6 +198,7 @@ impl From<Length> for ProgramLength {
 #[utoipa::path(
     get,
     path = "/v1/programs",
+    operation_id = "list_programs",
     tag = "programs",
     security(("bearer_token" = [])),
     responses(
@@ -190,6 +225,7 @@ pub async fn list(_athlete: AuthenticatedAthlete) -> Json<ProgramCatalogue> {
 #[utoipa::path(
     get,
     path = "/v1/programs/{key}",
+    operation_id = "show_program",
     tag = "programs",
     security(("bearer_token" = [])),
     params(("key" = String, Path, description = "The program's registry key", example = "smolov-jr")),

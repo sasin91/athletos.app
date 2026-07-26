@@ -70,8 +70,24 @@ cargo run   --bin set-password             # the only password recovery (D-02)
 cd frontend
 npm install
 npm run dev
-npm run check
+npm run check                # svelte-check
+npm run lint                 # prettier --check && eslint
+npm run generate:api         # ../backend/openapi.json -> src/lib/api/schema.d.ts
+npm run test:unit            # vitest — pure logic, no browser, no API
+npm run test:e2e             # playwright — builds, previews, downloads a browser
+npm run test                 # both
 ```
+
+The frontend reads one variable:
+
+| Variable | Required | Default |
+|---|---|---|
+| `API_BASE_URL` | no | `http://127.0.0.1:8080` |
+
+Read at request time rather than build time, so one built image can be pointed
+at a different API. `secure` on the session cookies follows SvelteKit's `dev`
+flag, so a production build must be served over https or the cookies will not be
+stored.
 
 ## CI
 
@@ -100,7 +116,14 @@ Expect failures on that first run. They are the point of it.
   is how the frontend's TypeScript client is generated, and it is the one piece
   of backend tooling that is not blocked on the database. The generated document
   is committed at **`backend/openapi.json`** and is what phase 4 consumes;
-  regenerate and commit it in the same change as any handler or DTO edit.
+  regenerate and commit it in the same change as any handler or DTO edit, then
+  run `npm run generate:api` in `frontend/` and commit that too.
+- **Every `#[utoipa::path]` must carry an explicit `operation_id`.** Left off,
+  utoipa derives one from the handler's function name, and two modules both
+  having a `list` or a `show` produces duplicate `operationId`s — invalid
+  OpenAPI, and code generators silently collapse the operations rather than
+  failing. Phase 4 found `GET /v1/programs` typed as the enrolment list this
+  way.
 - Every weight column is `numeric(6,2)` and sqlx will not decode one into an
   `f64` without `bigdecimal` or `rust_decimal`. The casts are written into the
   SQL instead — `weight::float8` on the way out, `$n::numeric` on the way in.

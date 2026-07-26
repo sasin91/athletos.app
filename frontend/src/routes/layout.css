@@ -1,3 +1,17 @@
 @import 'tailwindcss';
-@plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+@plugin 'daisyui';
+
+/*
+ * Styling is out of scope for milestone 1 — the UI is ugly on purpose. The only
+ * rules here are the ones that make the logger usable in a gym: inputs that do
+ * not zoom the viewport on iOS when focused, which happens below 16px.
+ *
+ * `@tailwindcss/forms` was dropped when DaisyUI arrived: both restyle every
+ * form control, and two opinions about an `<input>` is one too many.
+ */
+input,
+select,
+textarea {
+	font-size: max(1rem, 16px);
+}

@@ -28,6 +28,21 @@ pub struct ProgramMeta {
     /// The athlete has an hour (D-01, D-10). A number above 60 here is the
     /// single most useful thing on the card.
     pub estimated_session_minutes: u16,
+    /// The exercise keys `start()` will refuse to run without (D-04).
+    ///
+    /// Added in phase 4. A client has to render a maxes form *before* it can
+    /// enrol, and the only signal the API had for which lifts to ask about was
+    /// the 422 that `start()` raises — one key at a time, after the athlete has
+    /// already pressed enrol. The alternative was a list of lifts hardcoded in
+    /// the PWA, which is program knowledge living in a client, and a second
+    /// client would have to hold the same list (D-11). So the program says it.
+    ///
+    /// Declared rather than derived because a program is free to consult a max
+    /// anywhere in `start()`, and there is no way to ask a Rust function what it
+    /// will ask for. A test keeps the declaration honest: drop any one of these
+    /// and `start()` must fail naming that key, and the ones declared must be
+    /// enough on their own.
+    pub required_maxes: &'static [&'static str],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

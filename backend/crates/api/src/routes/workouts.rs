@@ -305,6 +305,7 @@ pub struct HistoryFilter {
 #[utoipa::path(
     post,
     path = "/v1/workouts",
+    operation_id = "submit_workout",
     tag = "workouts",
     security(("bearer_token" = [])),
     request_body = WorkoutSubmission,
@@ -555,6 +556,7 @@ type StoredSet = (i16, String, f64, i16, Option<f64>, Option<i16>, String);
 #[utoipa::path(
     get,
     path = "/v1/workouts",
+    operation_id = "list_workouts",
     tag = "workouts",
     security(("bearer_token" = [])),
     params(HistoryFilter),
@@ -632,6 +634,7 @@ pub async fn history(
 #[utoipa::path(
     get,
     path = "/v1/workouts/{id}",
+    operation_id = "show_workout",
     tag = "workouts",
     security(("bearer_token" = [])),
     params(("id" = Uuid, Path, description = "The workout's id — the one the client minted")),

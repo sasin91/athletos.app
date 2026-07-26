@@ -76,6 +76,7 @@ impl Modify for BearerToken {
         crate::routes::programs::ProgramExperience,
         crate::routes::programs::ProgramLength,
         crate::routes::programs::ProgramRecoveryDemand,
+        crate::routes::programs::RequiredMax,
         crate::routes::maxes::MaxesDocument,
         crate::routes::enrollments::EnrollmentRequest,
         crate::routes::enrollments::Enrollment,

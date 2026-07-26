@@ -58,6 +58,7 @@ pub struct MaxesDocument {
 #[utoipa::path(
     get,
     path = "/v1/athlete/maxes",
+    operation_id = "show_maxes",
     tag = "athlete",
     security(("bearer_token" = [])),
     responses(
@@ -94,6 +95,7 @@ pub async fn show(
 #[utoipa::path(
     put,
     path = "/v1/athlete/maxes",
+    operation_id = "replace_maxes",
     tag = "athlete",
     security(("bearer_token" = [])),
     request_body = MaxesDocument,

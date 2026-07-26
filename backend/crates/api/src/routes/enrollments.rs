@@ -221,9 +221,22 @@ pub struct PrescribedSet {
     /// Order within the session, from zero. Persisted, and unique per workout.
     pub position: u16,
     pub exercise: String,
+    /// The exercise's display name, resolved from the compiled registry.
+    #[schema(example = "Squat")]
+    pub label: String,
     pub prescribed_weight: f64,
     pub prescribed_reps: u32,
     pub amrap: bool,
+    /// The same breakdown [`LiftView::plates_per_side`] carries, repeated here.
+    ///
+    /// Added in phase 4. The logger walks `prescribed_sets`, not `blocks`, and
+    /// the athlete needs the plates on the screen they are actually looking at.
+    /// Without this the client has to join the two lists — by position, which
+    /// means reimplementing this module's expansion order, or by
+    /// `(exercise, weight)`, which is a lookup the server can simply answer. A
+    /// few duplicated floats are cheaper than either (D-11).
+    #[schema(example = json!([25.0, 10.0, 2.5, 1.25]))]
+    pub plates_per_side: Vec<f64>,
 }
 
 /// Starts a program for the authenticated athlete.
@@ -241,6 +254,7 @@ pub struct PrescribedSet {
 #[utoipa::path(
     post,
     path = "/v1/enrollments",
+    operation_id = "create_enrollment",
     tag = "enrollments",
     security(("bearer_token" = [])),
     request_body = EnrollmentRequest,
@@ -306,6 +320,7 @@ pub async fn create(
 #[utoipa::path(
     get,
     path = "/v1/enrollments",
+    operation_id = "list_enrollments",
     tag = "enrollments",
     security(("bearer_token" = [])),
     params(EnrollmentFilter),
@@ -373,6 +388,7 @@ pub async fn list(
 #[utoipa::path(
     get,
     path = "/v1/enrollments/{id}/next-session",
+    operation_id = "next_session",
     tag = "enrollments",
     security(("bearer_token" = [])),
     params(("id" = Uuid, Path, description = "The enrolment's id")),
@@ -491,14 +507,20 @@ fn prescribed_sets_of(session: &Session) -> Vec<PrescribedSet> {
     let mut position = 0u16;
 
     for block in &session.blocks {
+        let label = exercise::find(&block.exercise)
+            .map(|found| found.label.to_owned())
+            .unwrap_or_else(|| block.exercise.clone());
+
         for lift in &block.lifts {
             for _ in 0..lift.sets {
                 sets.push(PrescribedSet {
                     position,
                     exercise: block.exercise.clone(),
+                    label: label.clone(),
                     prescribed_weight: lift.load.weight,
                     prescribed_reps: lift.reps,
                     amrap: lift.amrap,
+                    plates_per_side: lift.load.plates_per_side.clone(),
                 });
                 position = position.saturating_add(1);
             }

@@ -97,6 +97,9 @@ const META: ProgramMeta = ProgramMeta {
     // The main work is easy. Five sets of ten immediately after it is not.
     recovery_demand: RecoveryDemand::High,
     estimated_session_minutes: 55,
+    // Four, in Wendler's day order — which is the fourth lift Smolov Jr does
+    // not need, and the reason this is a list rather than three named fields.
+    required_maxes: &[MILITARY_PRESS.key, DEADLIFT.key, BENCH.key, SQUAT.key],
 };
 
 /// This program's private memory (D-03).

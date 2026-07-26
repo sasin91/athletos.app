@@ -177,6 +177,16 @@ For adaptive programs the training max lives in `State` and moves only through
 A systematic bias toward the lighter loadable weight is the cheapest governor
 in the system (D-01) and costs one function.
 
+> **Amended in phase 4.** "Maxes are not a fixed three lifts" needed somewhere
+> for a client to *find out* which lifts a program wants, and there was nowhere:
+> a new athlete's maxes are `{}`, the catalogue said nothing, and the only
+> signal was the 422 `start()` raises — one lift at a time, after enrolment is
+> attempted. `ProgramMeta` now carries `required_maxes`, mirrored onto
+> `ProgramSummary` with labels resolved from the exercise registry. Declared
+> rather than derived, because nothing can ask a Rust function what it will ask
+> for; a test asserts the declaration is exactly what `start()` needs, in both
+> directions.
+
 Rounding is **per-exercise**, driven by a loading model:
 
 | Loading    | Rule                                             |
@@ -412,6 +422,33 @@ checkout alone.
 
 CORS stays off — SvelteKit calls server-to-server, native clients are not
 browsers.
+
+> **Amended after building it. "Token in a cookie" is two cookies.**
+>
+> The refresh token is single-use and rotating, and presenting a spent one
+> revokes its whole family — right for a native client holding exactly one
+> token, and wrong for a BFF, which serves several overlapping requests per
+> navigation. Exchanging the cookie on every request logs the athlete out the
+> moment a load and a form action run together.
+>
+> So the access token is cached in a second httpOnly cookie for its own
+> lifetime, and a refresh happens roughly once every fifteen minutes instead of
+> once per request. The browser's JavaScript still holds nothing: `httpOnly` is
+> what that sentence always meant. The residual race — two requests arriving
+> with no cached access token — is closed by collapsing concurrent exchanges of
+> the same refresh token into one, which is a per-process map and therefore
+> exact for one instance and best-effort behind a load balancer. Good enough for
+> a product whose unit is one athlete; the real fix is a shared lock or a
+> non-rotating refresh token, and it is a deployment decision.
+>
+> Two smaller things the build settled. **The API being unreachable is not the
+> session being over**: only a 401 from `/v1/auth/refresh` clears the cookies,
+> or a deploy logs everybody out and throws away refresh tokens that still work.
+> And **the offline logger is a prerendered page with `ssr = false`** — it reads
+> the committed session out of IndexedDB, which the server has never heard of,
+> and prerendering is what puts it in the service worker's cache list. That
+> forbids a server load on the root layout, so the authenticated routes live in
+> a route group that owns the gate.
 
 ### The API is the product
 
