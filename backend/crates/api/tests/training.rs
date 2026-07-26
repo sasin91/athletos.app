@@ -147,6 +147,22 @@ fn heaviest_main_lift(session: &serde_json::Value) -> f64 {
         .fold(f64::MIN, f64::max)
 }
 
+/// Logs the enrolment's current session exactly as prescribed, returning the
+/// workout's client-minted id.
+async fn log_a_session(server: &TestServer, token: &str, enrollment: Uuid) -> Uuid {
+    let session = next_session(server, token, enrollment).await;
+    let id = Uuid::now_v7();
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(token)
+        .json(&logged_as_prescribed(id, enrollment, &session))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    id
+}
+
 async fn workout_count(pool: &PgPool) -> i64 {
     sqlx::query_scalar("select count(*) from workouts")
         .fetch_one(pool)
@@ -903,4 +919,448 @@ async fn finishing_a_fixed_block_closes_the_enrolment_and_still_accepts_the_retr
         .assert_status(StatusCode::CONFLICT);
 
     assert_eq!(workout_count(&pool).await, 12);
+}
+
+// --- listing enrolments ---------------------------------------------------
+
+/// The reason this endpoint exists: a client that has been reloaded has no way
+/// to derive the enrolment id it needs for everything else.
+#[sqlx::test]
+async fn listing_enrollments_puts_the_live_one_first_and_filters_by_status(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let finished = enrol(&server, &token, "smolov-jr").await;
+    let live = enrol(&server, &token, "wendler-531-bbb").await;
+
+    // Closed directly rather than by driving twelve sessions — this test is
+    // about the listing, and the closing path has its own test.
+    sqlx::query("update enrollments set status = 'finished', ended_at = now() where id = $1")
+        .bind(finished)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let response = server
+        .get("/v1/enrollments")
+        .authorization_bearer(&token)
+        .await;
+    response.assert_status_ok();
+
+    let body: serde_json::Value = response.json();
+    let all = body["enrollments"].as_array().unwrap();
+    assert_eq!(all.len(), 2);
+
+    // Active first, so the unfiltered call still answers "what am I running"
+    // without the client sorting.
+    assert_eq!(all[0]["id"].as_str().unwrap(), live.to_string());
+    assert_eq!(all[0]["status"], "active");
+    assert_eq!(all[0]["program_name"], "5/3/1 Boring But Big");
+    assert!(all[0]["ended_at"].is_null());
+    assert!(all[0]["progress"]["total"].is_null(), "open-ended");
+
+    assert_eq!(all[1]["status"], "finished");
+    assert!(!all[1]["ended_at"].is_null());
+    assert_eq!(all[1]["progress"]["total"], 12);
+
+    let active: serde_json::Value = server
+        .get("/v1/enrollments?status=active")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert_eq!(active["enrollments"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        active["enrollments"][0]["id"].as_str().unwrap(),
+        live.to_string()
+    );
+
+    let abandoned: serde_json::Value = server
+        .get("/v1/enrollments?status=abandoned")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert!(abandoned["enrollments"].as_array().unwrap().is_empty());
+
+    // A typo must not read as "none of them".
+    server
+        .get("/v1/enrollments?status=activ")
+        .authorization_bearer(&token)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test]
+async fn another_athletes_enrollments_are_not_listed(pool: PgPool) {
+    let server = server(pool);
+
+    let mine = register(&server, EMAIL).await;
+    set_maxes(&server, &mine, full_maxes()).await;
+    enrol(&server, &mine, "wendler-531-bbb").await;
+
+    let theirs = register(&server, "rival@example.com").await;
+
+    let body: serde_json::Value = server
+        .get("/v1/enrollments")
+        .authorization_bearer(&theirs)
+        .await
+        .json();
+    assert!(body["enrollments"].as_array().unwrap().is_empty());
+}
+
+// --- the history list (D-13) ----------------------------------------------
+
+/// The history row carries what the history row shows, and the duration is
+/// subtracted here rather than by two clients in two languages (D-11).
+#[sqlx::test]
+async fn the_history_row_carries_the_duration_and_the_outcome(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let workout = log_a_session(&server, &token, enrollment).await;
+
+    let response = server
+        .get("/v1/workouts")
+        .authorization_bearer(&token)
+        .await;
+    response.assert_status_ok();
+
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["limit"], 25, "the default page size");
+    assert_eq!(body["offset"], 0);
+
+    let row = &body["workouts"][0];
+    assert_eq!(row["id"].as_str().unwrap(), workout.to_string());
+    assert_eq!(
+        row["enrollment_id"].as_str().unwrap(),
+        enrollment.to_string()
+    );
+    assert_eq!(row["program_key"], "wendler-531-bbb");
+    assert_eq!(row["program_name"], "5/3/1 Boring But Big");
+    assert_eq!(row["week"], 1);
+    assert_eq!(row["day"], 1);
+    assert_eq!(row["outcome"], "completed");
+    assert!(row["cut_reason"].is_null());
+    // 09:00 to 10:00, and the client is not asked to work that out.
+    assert_eq!(row["duration_seconds"], 3600);
+
+    // A history row is a row, not the session: notes and sets live on the
+    // detail endpoint that the row expands into.
+    assert!(row.get("sets").is_none());
+}
+
+#[sqlx::test]
+async fn the_history_list_paginates_and_reports_the_total(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    for _ in 0..3 {
+        log_a_session(&server, &token, enrollment).await;
+    }
+
+    let first: serde_json::Value = server
+        .get("/v1/workouts?limit=2")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert_eq!(first["total"], 3);
+    assert_eq!(first["limit"], 2);
+    assert_eq!(first["workouts"].as_array().unwrap().len(), 2);
+
+    let second: serde_json::Value = server
+        .get("/v1/workouts?limit=2&offset=2")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert_eq!(second["total"], 3);
+    assert_eq!(second["offset"], 2);
+    assert_eq!(second["workouts"].as_array().unwrap().len(), 1);
+
+    // The pages do not overlap.
+    let page_one: Vec<&str> = first["workouts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["id"].as_str().unwrap())
+        .collect();
+    let leftover = second["workouts"][0]["id"].as_str().unwrap();
+    assert!(!page_one.contains(&leftover));
+
+    // All three sessions were submitted with the same `started_at`, so the id
+    // tiebreak is what makes the order total — and all three are present
+    // exactly once across the two pages.
+    let mut days: Vec<i64> = first["workouts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(second["workouts"].as_array().unwrap())
+        .map(|row| row["day"].as_i64().unwrap())
+        .collect();
+    days.sort_unstable();
+    assert_eq!(days, vec![1, 2, 3]);
+
+    // Asking for more than the ceiling gets the ceiling, and is told so.
+    let clamped: serde_json::Value = server
+        .get("/v1/workouts?limit=5000")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert_eq!(clamped["limit"], 100);
+
+    // Scoped to one enrolment, which is the query the existing index serves
+    // without a sort.
+    let scoped: serde_json::Value = server
+        .get(&format!("/v1/workouts?enrollment_id={enrollment}"))
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert_eq!(scoped["total"], 3);
+}
+
+/// An athlete's history is theirs alone.
+#[sqlx::test]
+async fn the_history_shows_only_the_athletes_own_workouts(pool: PgPool) {
+    let server = server(pool.clone());
+
+    let mine = register(&server, EMAIL).await;
+    set_maxes(&server, &mine, full_maxes()).await;
+    let my_enrollment = enrol(&server, &mine, "wendler-531-bbb").await;
+    let my_workout = log_a_session(&server, &mine, my_enrollment).await;
+
+    let theirs = register(&server, "rival@example.com").await;
+    set_maxes(&server, &theirs, full_maxes()).await;
+    let their_enrollment = enrol(&server, &theirs, "smolov-jr").await;
+    let their_workout = log_a_session(&server, &theirs, their_enrollment).await;
+
+    assert_eq!(workout_count(&pool).await, 2, "both were recorded");
+
+    let mine_listed: serde_json::Value = server
+        .get("/v1/workouts")
+        .authorization_bearer(&mine)
+        .await
+        .json();
+    assert_eq!(mine_listed["total"], 1);
+    assert_eq!(
+        mine_listed["workouts"][0]["id"].as_str().unwrap(),
+        my_workout.to_string()
+    );
+
+    let theirs_listed: serde_json::Value = server
+        .get("/v1/workouts")
+        .authorization_bearer(&theirs)
+        .await
+        .json();
+    assert_eq!(theirs_listed["total"], 1);
+    assert_eq!(
+        theirs_listed["workouts"][0]["id"].as_str().unwrap(),
+        their_workout.to_string()
+    );
+
+    // Naming somebody else's enrolment does not widen the scope — it narrows to
+    // nothing, because the ownership predicate is on `enrollments`.
+    let borrowed: serde_json::Value = server
+        .get(&format!("/v1/workouts?enrollment_id={their_enrollment}"))
+        .authorization_bearer(&mine)
+        .await
+        .json();
+    assert_eq!(borrowed["total"], 0);
+    assert!(borrowed["workouts"].as_array().unwrap().is_empty());
+}
+
+// --- one workout, expanded -------------------------------------------------
+
+#[sqlx::test]
+async fn the_workout_detail_carries_every_set_as_logged(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+    let prescribed = session["prescribed_sets"].as_array().unwrap().len();
+
+    let workout = Uuid::now_v7();
+    let mut body = logged_as_prescribed(workout, enrollment, &session);
+    body["notes"] = json!("felt heavy");
+    // One set edited upward: drift is the thing this screen exists to show.
+    body["sets"][0]["actual_weight"] = json!(200.0);
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let response = server
+        .get(&format!("/v1/workouts/{workout}"))
+        .authorization_bearer(&token)
+        .await;
+    response.assert_status_ok();
+
+    let detail: serde_json::Value = response.json();
+    assert_eq!(
+        detail["workout"]["id"].as_str().unwrap(),
+        workout.to_string()
+    );
+    assert_eq!(detail["workout"]["duration_seconds"], 3600);
+    assert_eq!(detail["notes"], "felt heavy");
+
+    let sets = detail["sets"].as_array().unwrap();
+    assert_eq!(sets.len(), prescribed);
+
+    // In position order, and the key is resolved to something readable.
+    let positions: Vec<i64> = sets
+        .iter()
+        .map(|set| set["position"].as_i64().unwrap())
+        .collect();
+    let mut sorted = positions.clone();
+    sorted.sort_unstable();
+    assert_eq!(positions, sorted);
+
+    assert_eq!(sets[0]["exercise"], "military-press");
+    assert_eq!(sets[0]["label"], "Military Press");
+    assert_eq!(sets[0]["status"], "done");
+
+    // Both numbers, which is what makes drift first-class data (D-07).
+    assert_eq!(sets[0]["actual_weight"], 200.0);
+    assert_ne!(sets[0]["prescribed_weight"], sets[0]["actual_weight"]);
+}
+
+/// `pending` and `skipped` are stored and read back, not silently dropped —
+/// "work not done" is the second axis of drift (D-08).
+#[sqlx::test]
+async fn the_detail_shows_the_sets_that_were_never_done(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let workout = Uuid::now_v7();
+    let sets: Vec<serde_json::Value> = session["prescribed_sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(index, set)| {
+            let status = match index {
+                0 => "done",
+                1 => "skipped",
+                _ => "pending",
+            };
+
+            let mut logged = json!({
+                "position": set["position"],
+                "exercise": set["exercise"],
+                "prescribed_weight": set["prescribed_weight"],
+                "prescribed_reps": set["prescribed_reps"],
+                "status": status,
+            });
+
+            if index == 0 {
+                logged["actual_weight"] = set["prescribed_weight"].clone();
+                logged["actual_reps"] = set["prescribed_reps"].clone();
+            }
+
+            logged
+        })
+        .collect();
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&json!({
+            "id": workout,
+            "enrollment_id": enrollment,
+            "started_at": "2026-07-26T09:00:00Z",
+            "ended_at": "2026-07-26T09:12:00Z",
+            "outcome": "cut_short",
+            "cut_reason": "pain",
+            "sets": sets,
+        }))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let detail: serde_json::Value = server
+        .get(&format!("/v1/workouts/{workout}"))
+        .authorization_bearer(&token)
+        .await
+        .json();
+
+    assert_eq!(detail["workout"]["outcome"], "cut_short");
+    assert_eq!(detail["workout"]["cut_reason"], "pain");
+    assert_eq!(detail["workout"]["duration_seconds"], 720);
+
+    let statuses: Vec<&str> = detail["sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|set| set["status"].as_str().unwrap())
+        .collect();
+    assert_eq!(statuses[0], "done");
+    assert_eq!(statuses[1], "skipped");
+    assert!(statuses[2..].iter().all(|status| *status == "pending"));
+
+    // A set never performed carries no actual numbers, and that is the record.
+    assert!(detail["sets"][2]["actual_weight"].is_null());
+    assert!(detail["sets"][2]["actual_reps"].is_null());
+}
+
+#[sqlx::test]
+async fn another_athletes_workout_detail_is_not_found(pool: PgPool) {
+    let server = server(pool);
+
+    let mine = register(&server, EMAIL).await;
+    set_maxes(&server, &mine, full_maxes()).await;
+    let enrollment = enrol(&server, &mine, "wendler-531-bbb").await;
+    let workout = log_a_session(&server, &mine, enrollment).await;
+
+    let theirs = register(&server, "rival@example.com").await;
+
+    // 404, not 403 — the id is client-minted, so confirming one exists confirms
+    // that somebody logged a session.
+    server
+        .get(&format!("/v1/workouts/{workout}"))
+        .authorization_bearer(&theirs)
+        .await
+        .assert_status_not_found();
+
+    // An id that never existed answers identically.
+    server
+        .get(&format!("/v1/workouts/{}", Uuid::now_v7()))
+        .authorization_bearer(&theirs)
+        .await
+        .assert_status_not_found();
+
+    // And the owner can still read it.
+    server
+        .get(&format!("/v1/workouts/{workout}"))
+        .authorization_bearer(&mine)
+        .await
+        .assert_status_ok();
+}
+
+#[sqlx::test]
+async fn the_history_endpoints_require_a_token(pool: PgPool) {
+    let server = server(pool);
+
+    server
+        .get("/v1/enrollments")
+        .await
+        .assert_status_unauthorized();
+    server
+        .get("/v1/workouts")
+        .await
+        .assert_status_unauthorized();
+    server
+        .get(&format!("/v1/workouts/{}", Uuid::now_v7()))
+        .await
+        .assert_status_unauthorized();
 }

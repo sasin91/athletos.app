@@ -396,6 +396,63 @@
       }
     },
     "/v1/enrollments": {
+      "get": {
+        "tags": [
+          "enrollments"
+        ],
+        "summary": "Every program this athlete has run, current one first.",
+        "description": "This is how a client that has been reloaded finds its way back: the enrolment\nid it needs for `next-session` and for `POST /v1/workouts` is not something it\ncan derive, and a BFF cookie holding it would be a second source of truth for\na fact the database already knows.\n\nBoth a `status` filter and an active-first ordering, which is not\nbelt-and-braces. The filter is what a client asking \"what am I running\"\nshould send. The ordering is what keeps the *unfiltered* call — \"programs\nI've run\", the D-13 reading — from making the client sort to find the live\none. A default order that answers the common question is worth more than one\nthat is merely chronological, and it costs a boolean in the `order by`.",
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "One of `active`, `finished` or `abandoned`. Omitted returns all of them.\n\nA `String` parsed by hand rather than the `EnrollmentStatus` enum\ndeserialized straight from the query string. Two reasons: the refusal can\nthen name the legal values, where a deserializer rejection is a bare 400\nwith none of the RFC 9457 shape the rest of this API answers in; and a\nquery parameter typed as a closed vocabulary is a parameter that cannot\ngrow, which is the one thing `/v1` may never do (D-12).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "active"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The athlete's enrolments, active first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`status` is not one of the three",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      },
       "post": {
         "tags": [
           "enrollments"
@@ -627,6 +684,77 @@
       }
     },
     "/v1/workouts": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "Everything the athlete has logged, newest first.",
+        "description": "# Pagination, and the index that does not exist\n\nOffset and limit, not a keyset cursor. Keyset is the stabler construction and\nit is not the one that fits here: the sort key would have to be\n`(started_at, id)` to break ties, and the only index over `workouts` is\n`(enrollment_id, started_at desc)`, which carries neither `athlete_id` nor\n`id`. So keyset would buy no index advantage and would trade one form of\ndrift for an opaque cursor. The drift offset does have is real and small: a\nworkout submitted while the athlete is paging shifts rows by one, which in a\n\"load more\" list read by one person is a repeated or skipped row, not a wrong\nanswer.\n\nThe honest cost of the unfiltered call is that Postgres materialises and\nsorts one athlete's *entire* workout history per page. `workouts` has no\n`athlete_id`, so the scope comes through a join and no index over `workouts`\ncan answer the ordering — this is a sort, and it is bounded by how many\nsessions one person has logged. At the hundreds this is designed for that\ncosts nothing worth measuring. If it ever does, the fix is to denormalise\n`athlete_id` onto `workouts` with an index on `(athlete_id, started_at\ndesc)`; that is an additive migration, and adding the column now — untested,\nunmeasured, and duplicating a fact `enrollments` already owns — is exactly\nthe speculative move the schema's own comments argue against.\n\nSupplying `enrollment_id` sidesteps all of it: that query is one walk of the\nexisting index, in order, and stops at the limit.",
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "query",
+            "description": "Only this enrolment's workouts — \"how did that block go\".\n\nWorth having beyond convenience: with it supplied the query is one walk\nof `workouts_enrollment_id_idx (enrollment_id, started_at desc)` and\nneeds no sort at all, which the athlete-wide query cannot manage.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Rows per page. Defaults to 25, clamped to 100.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "example": 25
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip. Defaults to 0.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "example": 0
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of history, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      },
       "post": {
         "tags": [
           "workouts"
@@ -721,6 +849,65 @@
           }
         ]
       }
+    },
+    "/v1/workouts/{id}": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "One workout and every set of it.",
+        "description": "A separate endpoint rather than an `?include=sets` flag on the list, for the\ninteraction it serves: expand-on-tap opens one row at a time, and an include\nflag would fetch the sets for a whole page whether or not anything was\nexpanded — around a thousand rows to render twenty-five dates, on a phone.\nA submitted workout is also immutable, so this response can be cached hard by\nthe client where a list response cannot. And the choice is not final in the\ndirection that matters: an `include` flag can be added later if the extra\nround trip ever hurts, whereas a field cannot be taken back out of the list\n(D-12).",
+        "operationId": "show",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The workout's id — the one the client minted",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The workout, with every set as logged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such workout belongs to this athlete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -798,6 +985,14 @@
           "progress"
         ],
         "properties": {
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the block ended, and `null` for exactly as long as `status` is\n`active` — the schema will not have it any other way."
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -819,6 +1014,21 @@
           },
           "status": {
             "$ref": "#/components/schemas/EnrollmentStatus"
+          }
+        }
+      },
+      "EnrollmentList": {
+        "type": "object",
+        "description": "Every enrolment the athlete has ever held.\n\nAn object rather than a bare array, so a cursor or a count can be added\nwithout changing the type of the response (D-12).\n\nDeliberately unpaginated, unlike the workout history. An enrolment is created\nby a deliberate human act — you press a button to start a program — so the\nlist is bounded by how many programs someone chooses to run, which is a\nnumber in the tens over a lifetime. Workouts grow with every session and are\npaginated for that reason.",
+        "required": [
+          "enrollments"
+        ],
+        "properties": {
+          "enrollments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Enrollment"
+            }
           }
         }
       },
@@ -961,6 +1171,61 @@
             "format": "double",
             "description": "Kilograms, already rounded **down** to something that can actually be\nloaded (D-04).",
             "example": 97.5
+          }
+        }
+      },
+      "LoggedSetView": {
+        "type": "object",
+        "description": "One set as it was recorded.",
+        "required": [
+          "position",
+          "exercise",
+          "label",
+          "prescribed_weight",
+          "prescribed_reps",
+          "status"
+        ],
+        "properties": {
+          "actual_reps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "actual_weight": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "exercise": {
+            "type": "string",
+            "example": "squat"
+          },
+          "label": {
+            "type": "string",
+            "description": "Resolved from the compiled registry, for the same reason the session\npayload carries it: a browser cannot look a key up in a Rust `static`.\nCues are not repeated here — a history row is read, not performed.",
+            "example": "Squat"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "prescribed_reps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "prescribed_weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SetStatus"
           }
         }
       },
@@ -1296,6 +1561,15 @@
           }
         }
       },
+      "RecordedOutcome": {
+        "type": "string",
+        "description": "How a session that is already recorded turned out.\n\nA second enum rather than a `Serialize` on [`WorkoutOutcome`], because the\ntwo vocabularies are genuinely different sizes: a client may only ever\n*claim* `completed` or `cut_short`, but it must be able to *read* the\n`auto_closed` the stale-session sweep writes (D-08). Collapsing them into one\ntype would mean either letting a client claim `auto_closed` or hiding it from\nthe history, and both are worse than two enums that happen to overlap.",
+        "enum": [
+          "completed",
+          "cut_short",
+          "auto_closed"
+        ]
+      },
       "RefreshRequest": {
         "type": "object",
         "required": [
@@ -1425,6 +1699,66 @@
           }
         }
       },
+      "WorkoutDetail": {
+        "type": "object",
+        "description": "One workout, expanded.\n\nThe summary is nested rather than flattened so that the two responses cannot\ndrift: a field added to the history row is a field this endpoint gains for\nfree, and there is exactly one place that builds it.",
+        "required": [
+          "workout",
+          "sets"
+        ],
+        "properties": {
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoggedSetView"
+            },
+            "description": "Every set as it was logged, in position order — including the ones never\ndone. Both the prescribed and the actual numbers, because drift is the\nthing this screen exists to show (D-07, D-13)."
+          },
+          "workout": {
+            "$ref": "#/components/schemas/WorkoutSummary"
+          }
+        }
+      },
+      "WorkoutHistory": {
+        "type": "object",
+        "description": "A page of history, newest first.",
+        "required": [
+          "workouts",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The limit actually applied, which is not always the one asked for.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every workout matching the filter, not just this page — what a \"load\nmore\" control needs in order to know when to stop."
+          },
+          "workouts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkoutSummary"
+            }
+          }
+        }
+      },
       "WorkoutOutcome": {
         "type": "string",
         "description": "How the session ended, as the athlete may report it.\n\nDeliberately missing the schema's third value, `auto_closed`. That one\nbelongs to the sweep that closes a session left open past three hours (D-08),\nand a client must not be able to claim it.",
@@ -1531,6 +1865,87 @@
             "type": "string",
             "format": "date-time",
             "description": "Wall clock from the phone, stamped when the athlete committed to the\nsession — never when they merely looked at it (D-08)."
+          }
+        }
+      },
+      "WorkoutSummary": {
+        "type": "object",
+        "description": "One row of the history list.\n\nExactly what a history row shows and nothing else: when, which program,\nwhere in it, how long it took, and how it ended. `notes` and the set list are\non the detail endpoint, because they are what the row expands *into*.",
+        "required": [
+          "id",
+          "enrollment_id",
+          "program_key",
+          "program_name",
+          "week",
+          "day",
+          "started_at"
+        ],
+        "properties": {
+          "cut_reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CutReason"
+              }
+            ]
+          },
+          "day": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "duration_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Wall clock, in seconds — the only measure of \"the hour\" there is (D-10).\n\nSubtracted here rather than left to the client. Two clients doing date\narithmetic on two timestamps is two implementations of one rule, and the\nsecond one is written in a different language (D-11). `null` while a\nsession is still open, which today means never: `POST /v1/workouts`\nrequires both ends.",
+            "example": 3600
+          },
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "enrollment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "outcome": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecordedOutcome"
+              }
+            ]
+          },
+          "program_key": {
+            "type": "string",
+            "example": "wendler-531-bbb"
+          },
+          "program_name": {
+            "type": "string",
+            "example": "5/3/1 Boring But Big"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "week": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       }

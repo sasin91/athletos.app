@@ -207,13 +207,21 @@ GET    /v1/programs                   list + meta
 GET    /v1/programs/{key}
 
 GET    /v1/athlete/maxes
-PUT    /v1/athlete/maxes
+PUT    /v1/athlete/maxes              full replace, map of exercise -> kg
 
 POST   /v1/enrollments                { program_key }
+GET    /v1/enrollments                ?status=  · active first
 GET    /v1/enrollments/{id}/next-session      READ-ONLY. no timer. (D-08)
 
 POST   /v1/workouts                   idempotent, client UUIDv7 (D-09)
+GET    /v1/workouts                   history · ?enrollment_id= &limit= &offset=
+GET    /v1/workouts/{id}              one workout, every set as logged
 ```
+
+The last three were not in the original sketch and both reads are there for
+phase 4: without `GET /v1/enrollments` a reloaded client cannot recover the
+enrolment id it needs for everything else, and without `GET /v1/workouts`
+nothing feeds the history screen.
 
 - [x] `POST /v1/workouts` → `ON CONFLICT (id) DO NOTHING`, and `advance()` runs
       **only** when the insert actually inserted.
@@ -258,10 +266,36 @@ renders. So labels and cues are resolved server-side and travel inside the
 session payload. Nothing is stored that way — the objection the engine records is
 to *persisting* a copy of the registry, and that still holds.
 
-**There is no `GET /v1/enrollments`.** Phase 4 has no way to find the athlete's
-active enrolment after a reload except by remembering the id the `POST`
-returned. Additive, so it can be added without breaking anything (D-12), but it
-is a hole phase 4 will walk into on its first page refresh.
+**The history list cannot be served by an index, and that is fine.**
+`workouts` has no `athlete_id` — the scope comes through `enrollments` — so
+`order by started_at desc` over one athlete's whole history is a sort, and no
+index over `workouts` can remove it. Every *other* read added here is index-
+perfect: `enrollments_athlete_id_idx` and the partial `enrollments_active_idx`
+serve the enrolment list, `workouts_enrollment_id_idx (enrollment_id,
+started_at desc)` serves the history scoped to one enrolment without a sort at
+all, and `unique (workout_id, position)` serves the set list. So **no migration
+was added.** The sort is bounded by how many sessions one person has logged; at
+the hundreds this is designed for it costs nothing worth measuring, and when it
+does, the fix is `workouts.athlete_id` plus an index on `(athlete_id,
+started_at desc)` — an additive migration. Denormalising that column now, with
+no database to measure against, is the speculative move the schema's own
+comments argue against.
+
+**Pagination is offset, not keyset.** Keyset is the stabler construction and it
+does not fit: the sort key would have to be `(started_at, id)` to break ties,
+and the only index over `workouts` carries neither, so keyset would buy no
+index advantage and would trade one form of drift for an opaque cursor. The
+drift offset has is real and small — a workout submitted mid-paging shifts rows
+by one, which in a "load more" list read by one person is a repeated row, not a
+wrong answer.
+
+**Sets are a detail endpoint, not an `?include=` flag.** Expand-on-tap opens one
+row at a time; an include flag would fetch a whole page's sets whether or not
+anything was expanded, which for twenty-five Smolov Jr sessions is around a
+thousand rows to render a list of dates. A submitted workout is also immutable,
+so the detail response caches hard where a list response cannot. The choice is
+reversible in the direction that matters: an `include` flag can be added later,
+a field cannot be taken back out of the list (D-12).
 
 ---
 

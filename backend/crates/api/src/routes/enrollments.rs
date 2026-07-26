@@ -1,25 +1,35 @@
 //! Enrolling in a program, and looking at what is next (D-06, D-08).
 //!
-//! The two handlers here are the halves of D-08's central distinction. Enrolling
-//! writes; *peeking* does not. `GET /v1/enrollments/{id}/next-session` runs no
-//! `insert`, no `update`, and stamps no clock — it is the "what am I doing
-//! today" click, and the reference conflates it with starting the session, so
-//! that `started_at` there records when the athlete first got curious and the
+//! `create` and `next_session` are the halves of D-08's central distinction.
+//! Enrolling writes; *peeking* does not. `GET /v1/enrollments/{id}/next-session`
+//! runs no `insert`, no `update`, and stamps no clock — it is the "what am I
+//! doing today" click, and the reference conflates it with starting the session,
+//! so that `started_at` there records when the athlete first got curious and the
 //! author has learned to back out of the screen to avoid inflating it. That is a
 //! bug, and the workaround should not have to exist.
 //!
-//! Everything either handler returns is computed in Rust (D-11): the weights are
+//! Everything these handlers return is computed in Rust (D-11): the weights are
 //! already rounded down to something loadable, the plate breakdown is already
 //! worked out, and the prescription is already expanded into numbered sets. A
 //! client that had to do any of that would be a client the next one has to
 //! reimplement in another language.
+//!
+//! ## An unknown `program_key` is fatal here, and not everywhere
+//!
+//! Every handler in this module has to *run* the program — to prescribe a
+//! session, or to count progress — so a stored key with no compiled program
+//! leaves nothing to return, and it is answered as an internal error because it
+//! means a program was deleted out from under live enrolments. The history
+//! endpoints in `routes::workouts` only need the program's *name*, and there the
+//! same situation falls back to the key: a deploy mistake should not make the
+//! athlete's past disappear.
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use athletos_training::{exercise, programs, Progress, Session, State as ProgramState};
@@ -46,7 +56,25 @@ pub struct Enrollment {
     pub program_name: String,
     pub status: EnrollmentStatus,
     pub started_at: DateTime<Utc>,
+    /// When the block ended, and `null` for exactly as long as `status` is
+    /// `active` — the schema will not have it any other way.
+    pub ended_at: Option<DateTime<Utc>>,
     pub progress: ProgressView,
+}
+
+/// Every enrolment the athlete has ever held.
+///
+/// An object rather than a bare array, so a cursor or a count can be added
+/// without changing the type of the response (D-12).
+///
+/// Deliberately unpaginated, unlike the workout history. An enrolment is created
+/// by a deliberate human act — you press a button to start a program — so the
+/// list is bounded by how many programs someone chooses to run, which is a
+/// number in the tens over a lifetime. Workouts grow with every session and are
+/// paginated for that reason.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EnrollmentList {
+    pub enrollments: Vec<Enrollment>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -56,6 +84,51 @@ pub enum EnrollmentStatus {
     Finished,
     Abandoned,
 }
+
+impl EnrollmentStatus {
+    /// Reads the vocabulary back out of the `text` column.
+    ///
+    /// A `check` constraint restricts the column to these three, so an unknown
+    /// value means the constraint and this enum have drifted apart — our
+    /// problem, and not something to explain to a client.
+    fn parse(stored: &str) -> ApiResult<Self> {
+        match stored {
+            "active" => Ok(Self::Active),
+            "finished" => Ok(Self::Finished),
+            "abandoned" => Ok(Self::Abandoned),
+            other => Err(ApiError::Internal(format!(
+                "an enrolment has status {other}, which is not a status"
+            ))),
+        }
+    }
+}
+
+/// Which enrolments to return.
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct EnrollmentFilter {
+    /// One of `active`, `finished` or `abandoned`. Omitted returns all of them.
+    ///
+    /// A `String` parsed by hand rather than the `EnrollmentStatus` enum
+    /// deserialized straight from the query string. Two reasons: the refusal can
+    /// then name the legal values, where a deserializer rejection is a bare 400
+    /// with none of the RFC 9457 shape the rest of this API answers in; and a
+    /// query parameter typed as a closed vocabulary is a parameter that cannot
+    /// grow, which is the one thing `/v1` may never do (D-12).
+    #[param(example = "active")]
+    pub status: Option<String>,
+}
+
+/// An enrolment as the `enrollments` table holds it, before the program is
+/// resolved and its progress counted.
+type StoredEnrollment = (
+    Uuid,
+    String,
+    serde_json::Value,
+    String,
+    DateTime<Utc>,
+    Option<DateTime<Utc>>,
+);
 
 /// Sessions completed, and the denominator if there is an honest one.
 #[derive(Debug, Serialize, ToSchema)]
@@ -211,9 +284,83 @@ pub async fn create(
             program_name: program.meta().name.to_owned(),
             status: EnrollmentStatus::Active,
             started_at,
+            ended_at: None,
             progress: progress.into(),
         }),
     ))
+}
+
+/// Every program this athlete has run, current one first.
+///
+/// This is how a client that has been reloaded finds its way back: the enrolment
+/// id it needs for `next-session` and for `POST /v1/workouts` is not something it
+/// can derive, and a BFF cookie holding it would be a second source of truth for
+/// a fact the database already knows.
+///
+/// Both a `status` filter and an active-first ordering, which is not
+/// belt-and-braces. The filter is what a client asking "what am I running"
+/// should send. The ordering is what keeps the *unfiltered* call — "programs
+/// I've run", the D-13 reading — from making the client sort to find the live
+/// one. A default order that answers the common question is worth more than one
+/// that is merely chronological, and it costs a boolean in the `order by`.
+#[utoipa::path(
+    get,
+    path = "/v1/enrollments",
+    tag = "enrollments",
+    security(("bearer_token" = [])),
+    params(EnrollmentFilter),
+    responses(
+        (status = 200, description = "The athlete's enrolments, active first", body = EnrollmentList),
+        (status = 401, description = "Missing or invalid access token", body = crate::error::ProblemDetails),
+        (status = 422, description = "`status` is not one of the three", body = crate::error::ProblemDetails),
+    )
+)]
+pub async fn list(
+    State(state): State<AppState>,
+    athlete: AuthenticatedAthlete,
+    Query(filter): Query<EnrollmentFilter>,
+) -> ApiResult<Json<EnrollmentList>> {
+    // Parsed here purely to refuse an unknown value up front. Left unparsed it
+    // would simply match nothing, and "no enrolments" is the wrong answer to
+    // "?status=activ".
+    if let Some(status) = &filter.status {
+        EnrollmentStatus::parse(status)?;
+    }
+
+    // `enrollments_athlete_id_idx (athlete_id, started_at desc)` serves the
+    // scan; when `status = 'active'` is supplied the partial
+    // `enrollments_active_idx` serves it more tightly still. The leading
+    // boolean in the `order by` costs a re-sort of a handful of rows, which is
+    // the whole reason this list is allowed to be unpaginated.
+    let rows: Vec<StoredEnrollment> = sqlx::query_as(
+        "select id, program_key, state, status, started_at, ended_at
+         from enrollments
+         where athlete_id = $1 and ($2::text is null or status = $2)
+         order by (status = 'active') desc, started_at desc",
+    )
+    .bind(athlete.athlete_id)
+    .bind(filter.status.as_deref())
+    .fetch_all(&state.db)
+    .await?;
+
+    let mut enrollments = Vec::with_capacity(rows.len());
+
+    for (id, program_key, stored_state, status, started_at, ended_at) in rows {
+        let program = unknown_program(&program_key)?;
+        let progress = program.progress(&ProgramState::from_json(stored_state))?;
+
+        enrollments.push(Enrollment {
+            id,
+            program_name: program.meta().name.to_owned(),
+            program_key,
+            status: EnrollmentStatus::parse(&status)?,
+            started_at,
+            ended_at,
+            progress: progress.into(),
+        });
+    }
+
+    Ok(Json(EnrollmentList { enrollments }))
 }
 
 /// What the athlete is doing next. **Read-only** (D-08).

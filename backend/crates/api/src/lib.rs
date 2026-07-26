@@ -48,15 +48,23 @@ pub fn app(state: AppState) -> Router {
             "/v1/athlete/maxes",
             get(routes::maxes::show).put(routes::maxes::replace),
         )
-        .route("/v1/enrollments", post(routes::enrollments::create))
+        .route(
+            "/v1/enrollments",
+            post(routes::enrollments::create).get(routes::enrollments::list),
+        )
         // Read-only, and it must stay that way: peeking at the session is not
         // committing to it, and only committing starts the clock (D-08).
         .route(
             "/v1/enrollments/{id}/next-session",
             get(routes::enrollments::next_session),
         )
-        // Idempotent on a client-minted id (D-09).
-        .route("/v1/workouts", post(routes::workouts::submit))
+        // Idempotent on a client-minted id (D-09); the history the same rows
+        // read back (D-13).
+        .route(
+            "/v1/workouts",
+            post(routes::workouts::submit).get(routes::workouts::history),
+        )
+        .route("/v1/workouts/{id}", get(routes::workouts::show))
         // Served at the RFC 8615 well-known location so any future verifier can
         // discover it without configuration. Deliberately *not* under `/v1`:
         // the path is fixed by the RFC, not by us.
