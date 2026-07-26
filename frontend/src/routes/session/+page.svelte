@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import Plates from '$lib/Plates.svelte';
 	import { formatClock, formatElapsed } from '$lib/time';
 	import { projectedFinish } from '$lib/pace';
 	import {
@@ -158,19 +159,42 @@
 						class:border-4={set.position === current}
 					>
 						<div class="card-body gap-2 p-3">
-							<div class="flex items-baseline justify-between">
-								<span class="font-medium">{set.label}</span>
-								<span class="text-sm opacity-70">
-									prescribed {set.prescribedWeight} kg × {set.prescribedReps}{set.amrap ? '+' : ''}
-								</span>
-							</div>
+							{#if set.position === current}
+								<!--
+									The set being performed right now, sized to be read at arm's
+									length while holding a bar. Everything else on this screen is
+									deliberately quieter than this block.
+								-->
+								<p class="eyebrow">{set.label}</p>
 
-							{#if set.platesPerSide.length > 0}
-								<p class="text-sm">bar + {set.platesPerSide.join(', ')} per side</p>
-							{/if}
+								<div class="flex items-baseline gap-2">
+									<span class="weight-hero">{set.prescribedWeight}</span>
+									<span class="weight-unit">kg</span>
+									<span class="ml-auto text-lg tabular opacity-70">
+										{set.prescribedReps}{set.amrap ? '+' : ''} reps
+									</span>
+								</div>
 
-							{#if set.position === current && cues.length > 0}
-								<p class="text-xs opacity-70">{cues.join(' · ')}</p>
+								<div class="mt-1 mb-1">
+									<Plates plates={set.platesPerSide} />
+								</div>
+
+								{#if cues.length > 0}
+									<p class="text-sm opacity-60">{cues.join(' · ')}</p>
+								{/if}
+							{:else}
+								<div class="flex items-baseline justify-between">
+									<span class="font-medium">{set.label}</span>
+									<span class="text-sm tabular opacity-70">
+										{set.prescribedWeight} kg × {set.prescribedReps}{set.amrap ? '+' : ''}
+									</span>
+								</div>
+
+								{#if set.platesPerSide.length > 0}
+									<p class="text-sm opacity-60">
+										bar + {set.platesPerSide.join(', ')} per side
+									</p>
+								{/if}
 							{/if}
 
 							<div class="flex items-center gap-2">
@@ -216,7 +240,10 @@
 							<div class="flex gap-2">
 								{#if set.status === 'pending'}
 									<button
-										class="btn grow btn-lg btn-primary"
+										class="btn grow"
+										class:action-primary={set.position === current}
+										class:btn-primary={set.position === current}
+										class:btn-outline={set.position !== current}
 										type="button"
 										onclick={() => apply((s) => logSet(s, set.position))}
 									>

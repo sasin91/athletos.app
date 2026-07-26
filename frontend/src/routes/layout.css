@@ -1,17 +1,187 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Barlow:wght@400;500;600&display=swap');
+
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 @plugin 'daisyui';
 
 /*
- * Styling is out of scope for milestone 1 — the UI is ugly on purpose. The only
- * rules here are the ones that make the logger usable in a gym: inputs that do
- * not zoom the viewport on iOS when focused, which happens below 16px.
+ * AthletOS is read standing at a rack, one-handed, between sets, in gym
+ * lighting, by someone tired. Every decision below follows from that rather
+ * than from what a dashboard usually looks like.
  *
- * `@tailwindcss/forms` was dropped when DaisyUI arrived: both restyle every
- * form control, and two opinions about an `<input>` is one too many.
+ * The palette is taken from the room: matte rubber flooring, chalk, and the
+ * IWF calibrated plate colours — 25 red, 20 blue, 15 yellow, 10 green, 5 white,
+ * 2.5 red, 1.25 chrome. Those are the only saturated colours in the product,
+ * which is why the plate stack reads instantly and nothing else competes with
+ * it.
+ *
+ * DaisyUI's vocabulary is extended, not replaced: `btn` and `card` are
+ * DaisyUI's, themed below. Custom utilities exist only where DaisyUI has no
+ * equivalent.
+ */
+
+@plugin 'daisyui/theme' {
+	name: 'athletos';
+	default: true;
+	prefersdark: true;
+	color-scheme: dark;
+
+	/* Rubber flooring, not blue-black. Matte, faintly warm, absorbs light. */
+	--color-base-100: #121211;
+	--color-base-200: #1b1a18;
+	--color-base-300: #2c2a27;
+	--color-base-content: #e9e9e6;
+
+	/* Chalk. The only brand colour, and deliberately almost no colour at all —
+	   saturation is reserved for the plates. */
+	--color-primary: #e9e9e6;
+	--color-primary-content: #121211;
+
+	--color-secondary: #2c2a27;
+	--color-secondary-content: #e9e9e6;
+	--color-accent: #9aa5ab;
+	--color-accent-content: #121211;
+	--color-neutral: #1b1a18;
+	--color-neutral-content: #e9e9e6;
+
+	/* Drift (D-07). Over is rust, not alarm red: going heavier is a choice, not
+	   an error, and the interface does not scold. Short is cool steel. */
+	--color-info: #5b8db8;
+	--color-info-content: #121211;
+	--color-success: #6f8f5f;
+	--color-success-content: #121211;
+	--color-warning: #e2703a;
+	--color-warning-content: #121211;
+	--color-error: #c25b4a;
+	--color-error-content: #121211;
+
+	/* Generous, because everything here is touched with a thumb. */
+	--radius-selector: 1rem;
+	--radius-field: 0.75rem;
+	--radius-box: 1rem;
+
+	--size-selector: 0.28125rem;
+	--size-field: 0.28125rem;
+	--border: 1px;
+	--depth: 0;
+	--noise: 0;
+}
+
+@theme {
+	--font-sans: 'Barlow', ui-sans-serif, system-ui, sans-serif;
+	--font-display: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+
+	/* Three steps, no more. On a near-black surface elevation reads as a
+	   lighter edge rather than a cast shadow, so these stay subtle. */
+	--shadow-lift-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+	--shadow-lift: 0 2px 6px 0 rgb(0 0 0 / 0.45);
+	--shadow-lift-lg: 0 8px 24px 0 rgb(0 0 0 / 0.5);
+
+	/* IWF calibrated plate colours. Not decoration — this is what the athlete
+	   is about to pick up, in the colour they will see on the rack. */
+	--color-plate-25: #c62828;
+	--color-plate-20: #1565c0;
+	--color-plate-15: #f2a413;
+	--color-plate-10: #2e7d32;
+	--color-plate-5: #e8eaed;
+	--color-plate-2-5: #c62828;
+	--color-plate-1-25: #9aa5ab;
+	--color-bar: #7c8388;
+}
+
+/*
+ * iOS zooms the viewport when a focused input is under 16px. In a gym that is a
+ * screen that jumps while you are holding a bar.
  */
 input,
 select,
 textarea {
 	font-size: max(1rem, 16px);
+}
+
+body {
+	font-family: var(--font-sans);
+}
+
+/* ------------------------------------------------------------------ *
+ * The weight
+ * ------------------------------------------------------------------ */
+
+/*
+ * The single most important thing on any screen, and sized to be read at arm's
+ * length. Tabular figures so the number does not shuffle sideways between sets,
+ * and tight tracking so three digits and a decimal still fit a phone.
+ */
+@utility weight-hero {
+	font-family: var(--font-display);
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+	font-size: clamp(4.5rem, 22vw, 7rem);
+	line-height: 0.85;
+	letter-spacing: -0.04em;
+	color: var(--color-base-content);
+}
+
+@utility weight-unit {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 1.125rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: color-mix(in oklab, var(--color-base-content) 45%, transparent);
+}
+
+/* Numbers that sit in rows and have to line up. */
+@utility tabular {
+	font-variant-numeric: tabular-nums;
+}
+
+@utility eyebrow {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 0.6875rem;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: color-mix(in oklab, var(--color-base-content) 45%, transparent);
+}
+
+/* ------------------------------------------------------------------ *
+ * Drift (D-07)
+ * ------------------------------------------------------------------ */
+
+/*
+ * Deviation from what was asked, never a score. A set done as prescribed gets
+ * no treatment at all — silence is the right feedback for doing the thing.
+ */
+@utility drift-none {
+	color: color-mix(in oklab, var(--color-base-content) 45%, transparent);
+}
+
+@utility drift-over {
+	color: var(--color-warning);
+}
+
+@utility drift-under {
+	color: var(--color-info);
+}
+
+/* ------------------------------------------------------------------ *
+ * Thumb targets
+ * ------------------------------------------------------------------ */
+
+/*
+ * The primary action sits at the bottom because that is where a thumb is, and
+ * it is deliberately enormous: it is pressed with chalk on, at the end of a
+ * set, without looking properly.
+ */
+@utility action-primary {
+	min-height: 4rem;
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 1.125rem;
+	letter-spacing: 0.02em;
+}
+
+@utility safe-bottom {
+	padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
