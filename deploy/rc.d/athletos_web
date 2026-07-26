@@ -38,7 +38,7 @@
 
 name="athletos_web"
 rcvar="athletos_web_enable"
-desc="AthletOS web (SvelteKit)"
+desc="AthletOS web"
 
 load_rc_config $name
 
@@ -52,10 +52,19 @@ load_rc_config $name
 : "${athletos_web_log:=/var/log/athletos/web.log}"
 : "${athletos_web_node:=/usr/local/bin/node}"
 
-pidfile="/var/run/${name}.pid"
+athletos_web_rundir="/var/run/athletos"
 
+# daemon(8) does `-u` before it writes `-P`, so the pidfile has to land
+# somewhere the unprivileged user can write. /var/run is root-owned 0755, which
+# is why the first real start died with "ppidfile: Permission denied".
+pidfile="${athletos_web_rundir}/${name}.pid"
+
+# `-t ${name}`, not ${desc}: rc.subr word-splits command_args, so the title
+# cannot contain spaces — and a desc with parentheses in it ("AthletOS web
+# (SvelteKit)") reached /bin/sh unquoted and died with a syntax error the
+# first time this ran.
 command="/usr/sbin/daemon"
-command_args="-r -R 5 -P ${pidfile} -t ${desc} -u ${athletos_web_user} \
+command_args="-r -R 5 -P ${pidfile} -t ${name} -u ${athletos_web_user} \
     -o ${athletos_web_log} -- ${athletos_web_node} ${athletos_web_root}/web/build/index.js"
 
 start_precmd="athletos_web_prestart"
@@ -70,6 +79,7 @@ athletos_web_prestart()
 	fi
 
 	install -d -o "${athletos_web_user}" -m 0750 "$(dirname "${athletos_web_log}")"
+	install -d -o "${athletos_web_user}" -m 0755 "${athletos_web_rundir}"
 
 	if [ ! -r "${athletos_web_env_file}" ]; then
 		err 1 "${athletos_web_env_file} is missing or unreadable"

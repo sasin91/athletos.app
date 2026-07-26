@@ -43,15 +43,24 @@ load_rc_config $name
 : "${athletos_api_key_file:=/usr/local/etc/athletos/signing-key.pem}"
 : "${athletos_api_log:=/var/log/athletos/api.log}"
 
-pidfile="/var/run/${name}.pid"
+athletos_api_rundir="/var/run/athletos"
+
+# daemon(8) does `-u` before it writes `-P`, so the pidfile has to land
+# somewhere the unprivileged user can write. /var/run is root-owned 0755, which
+# is why the first real start died with "ppidfile: Permission denied".
+pidfile="${athletos_api_rundir}/${name}.pid"
 
 # daemon(8) supervises: -r restarts the child if it dies, -R spaces the
 # restarts out so a binary that exits immediately does not spin. Caddy's active
 # health checks notice the gap and route around this jail while it flaps; a
 # release that never comes up is caught by deploy.sh's health gate and rolled
 # back rather than left restarting forever.
+# `-t ${name}`, not ${desc}: rc.subr word-splits command_args, so the title
+# cannot contain spaces — and a desc with parentheses in it ("AthletOS web
+# (SvelteKit)") reached /bin/sh unquoted and died with a syntax error the
+# first time this ran.
 command="/usr/sbin/daemon"
-command_args="-r -R 5 -P ${pidfile} -t ${desc} -u ${athletos_api_user} \
+command_args="-r -R 5 -P ${pidfile} -t ${name} -u ${athletos_api_user} \
     -o ${athletos_api_log} -- ${athletos_api_root}/api"
 
 start_precmd="athletos_api_prestart"
@@ -63,6 +72,7 @@ athletos_api_prestart()
 	fi
 
 	install -d -o "${athletos_api_user}" -m 0750 "$(dirname "${athletos_api_log}")"
+	install -d -o "${athletos_api_user}" -m 0755 "${athletos_api_rundir}"
 
 	if [ ! -r "${athletos_api_env_file}" ]; then
 		err 1 "${athletos_api_env_file} is missing or unreadable"
