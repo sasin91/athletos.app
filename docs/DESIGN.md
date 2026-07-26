@@ -550,18 +550,24 @@ this one but a philosophy.
 
 ## Open
 
-- **No Postgres on the dev machine.** No `psql`, no Docker. Migrations and
-  handlers can be written and compiled — `sqlx::query(..)` is runtime-checked
-  and `sqlx::migrate!` only reads the directory — but nothing that touches a
-  database has been executed. The two acceptance tests that matter most
-  (double-POST idempotency, offline round-trip) are blocked on this.
+- ~~**No Postgres on the dev machine.**~~ **Closed.** Postgres 17.10 runs as a
+  container under WSLC (see `DEVELOPMENT.md`). The whole suite — 111 tests —
+  now runs locally and passes, including both acceptance tests: posting the
+  same workout twice advances the program exactly once, and the training max
+  moves once per cycle even when every submit is retried.
 
-  > Phase 3 amendment: the double-POST test is now **written** — it drives a
-  > full 5/3/1 cycle submitting every session twice and asserts the training max
-  > moved by exactly one increment — along with the rest of the training feature
-  > suite. It compiles. It has never run. Nothing about the API's SQL is
-  > verified, only that it type-checks and that the driver will accept the
-  > binds.
+  Worth recording what the first real run cost, because the estimate was
+  pessimistic: **one bug in 111 tests.** `?status=activ` answered 500 instead
+  of 422, because a single parser served both "read this vocabulary out of the
+  `text` column" — where an unknown value means our check constraint and our
+  enum have drifted, and 500 is honest — and "read it off the query string",
+  where an unknown value is the client's typo. Split in two. Everything else,
+  including every reconstructed auth table, every check constraint, the
+  `unnest` bulk insert, the `::float8` casts and the quoted `"position"`
+  column, passed first time.
+
+  The **offline round-trip** is still unverified: it needs a browser, a phone
+  in airplane mode, and a human. No database fixes that.
 - **Deployment.** Untouched. Two services (Axum + Node) plus Postgres.
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.

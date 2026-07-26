@@ -1,33 +1,37 @@
 # Development setup
 
-## The blocker
+## Database
 
-This machine has **no Postgres and no Docker**. Everything that touches a
-database is written and compiles, but has never been executed — including the
-two acceptance tests that matter most (D-09 double-POST idempotency, and the
-offline round-trip). Fixing this is the first task of the next session.
-
-Three ways out, cheapest first:
-
-**Postgres.app-style native install.** `winget install PostgreSQL.PostgreSQL.17`
-gives you a service on 5432 and `psql` on PATH. Simplest, no daemon to babysit,
-and the only one that needs no further decisions.
-
-**Docker Desktop.** Heavier, but gets you a throwaway database per test run,
-which is what `#[sqlx::test]` wants:
+Postgres runs as a container under **WSLC** — the container runtime that ships
+with WSL, with a Docker-compatible CLI at `C:\Program Files\WSL\wslc.exe`. Not
+Docker Desktop, and not plain WSL.
 
 ```
-docker run -d --name athletos-pg -p 5432:5432 \
+wslc run -d --name athletos-pg -p 5432:5432 \
   -e POSTGRES_PASSWORD=athletos -e POSTGRES_DB=athletos postgres:17
+
+wslc list                 # running?
+wslc logs athletos-pg
+wslc start athletos-pg    # after a reboot
 ```
 
-**Laravel Herd.** Already installed and running `HerdHelper`, but ships no
-Postgres — Herd Pro's database services would need enabling. Mentioned only
-because it's the DB you already run for `sasin91.xyz`; it is a MySQL-shaped
-answer to a Postgres-shaped question.
+Then:
 
-Whichever you pick, `#[sqlx::test]` creates and drops a database per test, so
-the role needs `CREATEDB`.
+```
+DATABASE_URL=postgres://postgres:athletos@127.0.0.1:5432/athletos
+```
+
+`#[sqlx::test]` creates and drops a database per test case, so the role needs
+`CREATEDB`. The default `postgres` superuser has it.
+
+> This section used to say "no Postgres, no Docker" and everything touching a
+> database was written blind — reasoned, compiled, never executed. The first
+> run against a real 17.10 turned up exactly one bug in 111 tests: a
+> `?status=activ` query answering 500 instead of 422, because one parser was
+> serving both "read the vocabulary out of the column" (an unknown value there
+> is our bug) and "read it off the wire" (an unknown value there is the
+> client's). Everything else, including both acceptance tests, passed
+> first time.
 
 ## Environment
 
