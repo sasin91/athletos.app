@@ -11,7 +11,28 @@
 //! number — 5/3/1 works from 90% of it — so the conservatism lives in the
 //! program rather than in a settings form the athlete has to be trusted to fill
 //! in pessimistically. An adaptive program's *training* max is not here at all:
-//! it lives in `enrollments.state` and moves only through `advance()`.
+//! it lives in `enrollments.state`, moves only through `advance()`, and is read
+//! back through `readout` on `GET /v1/enrollments`.
+//!
+//! ## A set, not a form
+//!
+//! This document is whatever the athlete says it is. Any key in the exercise
+//! registry may be added, any key may be removed, and no program has a vote —
+//! `GET /v1/exercises` is what a client offers as the "add a lift" picker, and
+//! `required_maxes` on a program summary is a hint about enrolment rather than a
+//! definition of the set.
+//!
+//! That is a deliberate reversal. The client used to build its form from the
+//! union of every program's `required_maxes`, which meant an athlete could hold
+//! a number only for a lift some compiled program happened to want, and adding a
+//! program silently changed the shape of somebody's records. The set of lifts a
+//! person tracks is theirs; a program can refuse to start without one (it does),
+//! but it has no business deciding what else may be in there.
+//!
+//! `PUT` of the whole document was already the right primitive for that and
+//! needed nothing added: replace-the-lot expresses adding, editing and removing
+//! in one operation, and there is no partial state for a half-applied form to
+//! leave behind.
 //!
 //! ## `numeric` and `f64`
 //!

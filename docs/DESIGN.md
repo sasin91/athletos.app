@@ -137,11 +137,39 @@ only thing that reads or writes it.
 > the athlete was already shown, since drift is measured against the
 > `prescribed_weight` that was actually displayed (D-07).
 >
-> Still open: there is no way to *show* an athlete their training max. It lives
-> only inside `State`, and D-04 rightly forbids editing it — but D-13 wants "is
-> this working?", and a 5/3/1 lifter watching the TM climb is a legitimate
-> read. The clean fix is a `readout(&self, state) -> Vec<(String, f64)>` on
-> `Program`: still object-safe, still branch-free. Not built.
+> ~~Still open: there is no way to *show* an athlete their training max.~~
+> **Closed.** `readout()` is on `Program`, object-safe and branch-free as
+> predicted, and it returns a named struct rather than the `(String, f64)` the
+> sketch above proposed. The tuple was one field short: a consumer holding
+> `("squat", 126.0)` next to an entered max of 140 can display both numbers and
+> cannot explain either, which is the confusion the method exists to end. So a
+> `Readout` carries the exercise key, the **weight**, and a **label naming what
+> kind of number it is** — and the label is program knowledge with nowhere else
+> to live, because only the program knows whether it took 90%, took the number
+> straight, or has been moving it every cycle since.
+>
+> What each kind returns:
+>
+> - **`Wendler531Bbb`** — its four training maxes out of `State`, in Wendler's
+>   day order, labelled *Training max*. These move, and watching them move is
+>   the point.
+> - **The blanket impl** — the maxes snapshotted into `State` at enrolment,
+>   labelled *Entered 1RM*. Smolov Jr takes the entered number straight, so
+>   those *are* what it prescribes from. Inventing a training max for a program
+>   that does not have one would be the same lie as an invented progress
+>   denominator. They do not move, and they are still worth showing: a max
+>   edited mid-block deliberately does not rewrite a block in progress (D-07),
+>   so this is the only place the athlete can see what their current sessions
+>   were actually built from.
+>
+> The method was overdue in a way the test suite had already recorded. The
+> engine's own assertion that the training max moves once per cycle could only
+> be written by indexing into raw `State` JSON, under a comment explaining that
+> a white-box assertion was the only way to reach a number the design gave no
+> accessor for. The comment was right about the constraint and wrong about the
+> conclusion: a test that has to take a program's private memory apart to check
+> the product's central rule is a report that the consuming trait is missing a
+> method. It now reads that number the way the athlete's screen does.
 
 ### Programs and exercises are code
 
@@ -169,6 +197,45 @@ settings form.
 
 For adaptive programs the training max lives in `State` and moves only through
 `advance()`. There is no "edit my training max" field.
+
+### The maxes are the athlete's; the training max is the program's
+
+Two sets of numbers, and the asymmetry between them is the whole decision.
+
+**The entered maxes are a set the athlete owns.** Any lift in the exercise
+registry may be added, any may be removed, values may be edited at any time.
+`PUT /v1/athlete/maxes` replaces the whole document, which already expresses all
+three operations; what was missing was `GET /v1/exercises`, so that a client
+could offer the lifts to choose from. Until it existed the maxes form was built
+from the union of the programs' `required_maxes`, and an athlete could hold a
+number only for a lift some compiled program happened to want — a program-shaped
+answer to an athlete-shaped question, and the same mistake a
+`{ squat, bench, deadlift }` struct would have been. A program may refuse to
+*start* without a max, and does; it has no vote on what else is in there.
+
+**Each active program's derived numbers are visible and read-only**, through
+`readout()` (D-03), served as `readout` on `GET /v1/enrollments`.
+
+The asymmetry is not squeamishness about writes. A training max is the
+program's governor over an athlete whose failure mode is over-reaching (D-01),
+and an athlete who can nudge it upward after a session that felt easy has
+removed the only restraint the program has — that is the "no edit my training
+max field" rule above, and it stands.
+
+But *hiding* it was never what that rule asked for, and hiding it was doing
+real damage. Enter a 160 kg squat; 5/3/1 opens its training max at 144 and adds
+5 kg a cycle. Four cycles later the program prescribes off 164 while the maxes
+screen still says 160, and nothing on any screen explains the gap. The athlete's
+two available conclusions are both wrong: that the app is broken, or that their
+1RM field is what needs correcting. Meanwhile the number that *is* climbing is
+the cleanest answer the product has to D-13's "is this program working?" — and
+it was the one number they could not see.
+
+So: **watch it, do not touch it.** The readout is labelled with what kind of
+number it is precisely so the two can sit on one screen without either being
+mistaken for the other, and there is no endpoint to write one. Not a guarded
+one, not a confirmed one — none. The numbers move through `advance()` or they do
+not move.
 
 ### Rounding
 

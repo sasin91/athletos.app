@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{ProgramError, Result};
 use crate::exercise::{Exercise, BENCH, DEADLIFT, MILITARY_PRESS, SQUAT};
 use crate::meta::{Equipment, Experience, Length, ProgramMeta, RecoveryDemand};
-use crate::program::{Progress, State};
+use crate::program::{Progress, Readout, State};
 use crate::{Block, Catalogued, Lift, LoggedSession, Maxes, Program, Session};
 
 /// The training max is 90% of what the athlete entered.
@@ -281,6 +281,32 @@ impl Program for Wendler531Bbb {
                 + (state.day - 1),
             total: None,
         })
+    }
+
+    /// The four training maxes, in Wendler's day order.
+    ///
+    /// This is the number every percentage in the program is taken from, and
+    /// after a few cycles it is nothing like the 1RM the athlete entered — a
+    /// 160 kg squat starts at 144 and is past 160 within four months. Watching
+    /// it climb is the legitimate read D-13 asks for, and until this method
+    /// existed the number was visible only as a weight on a set.
+    ///
+    /// `MAIN_LIFTS` order rather than the `BTreeMap`'s, because that is the
+    /// order the athlete meets the lifts in the week. Nothing downstream sorts
+    /// this, so the order is part of the answer.
+    fn readout(&self, state: &State) -> Result<Vec<Readout>> {
+        let state: Cycle = state.decode()?;
+
+        MAIN_LIFTS
+            .iter()
+            .map(|MainLift(exercise, _)| {
+                Ok(Readout {
+                    exercise: exercise.key.to_owned(),
+                    label: Readout::TRAINING_MAX,
+                    weight: Self::training_max(&state, exercise.key)?,
+                })
+            })
+            .collect()
     }
 }
 

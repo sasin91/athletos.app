@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use athletos_training::{exercise, programs, Progress, Session, State as ProgramState};
+use athletos_training::{exercise, programs, Progress, Readout, Session, State as ProgramState};
 
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
@@ -61,6 +61,22 @@ pub struct Enrollment {
     /// `active` — the schema will not have it any other way.
     pub ended_at: Option<DateTime<Utc>>,
     pub progress: ProgressView,
+
+    /// The numbers this enrolment is prescribing from, **read-only** (D-04).
+    ///
+    /// Served here rather than on `next-session` because of who asks. The
+    /// question is "what is my program working from", which the maxes screen asks
+    /// about *every* active program at once — on `next-session` that would be one
+    /// request per enrolment, and each of them would also compute a prescription
+    /// and a pace projection that nobody asked for. It would also go missing at
+    /// the moment it is most interesting: `next-session` answers 409 once a block
+    /// is finished, and where a training max ended up is exactly what an athlete
+    /// looks at when a program ends.
+    ///
+    /// It costs nothing to put here. `progress` already runs the program over the
+    /// state this row carries; this runs it once more over the same bytes, with
+    /// no extra query.
+    pub readout: Vec<ReadoutView>,
 }
 
 /// Every enrolment the athlete has ever held.
@@ -178,6 +194,56 @@ impl From<Progress> for ProgressView {
         Self {
             completed: progress.completed,
             total: progress.total,
+        }
+    }
+}
+
+/// One number a program is currently working from, and what kind of number it
+/// is.
+///
+/// The mirror of the engine's `Readout`, with the exercise's display name added
+/// the way `BlockView` adds it — a browser cannot look a key up in a Rust
+/// `static`, and this list is short enough that a second round trip to label it
+/// would be absurd.
+///
+/// There is no PUT for any of this and there must not be. A training max is the
+/// governor a program applies to an athlete who over-reaches (D-01), and letting
+/// them nudge it after a session that felt easy is letting them undo the
+/// restraint (D-04). Visible and read-only is the whole shape of the decision:
+/// the athlete may watch the number, and may not touch it.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReadoutView {
+    /// The exercise this number applies to, as a registry key.
+    #[schema(example = "squat")]
+    pub exercise: String,
+    /// The exercise's display name, resolved from the compiled registry.
+    #[schema(example = "Squat")]
+    pub exercise_label: String,
+    /// What the number *is*, in the program's own words.
+    ///
+    /// This is the field that stops the screen lying. "126" next to an entered
+    /// max of 140 is inexplicable; "Training max 126" against "Entered 1RM 140"
+    /// is the program doing its job. Only the program knows which it is — 5/3/1
+    /// took 90% and has been moving it ever since, a fixed block took the number
+    /// straight and froze it — so the words come from there and not from here.
+    #[schema(example = "Training max")]
+    pub label: String,
+    /// Kilograms, unrounded. Unlike a prescribed weight this is not something to
+    /// load on a bar; it is the number the loadable weights are derived from
+    /// (D-04).
+    #[schema(example = 126.0)]
+    pub weight: f64,
+}
+
+impl From<Readout> for ReadoutView {
+    fn from(readout: Readout) -> Self {
+        Self {
+            exercise_label: exercise::find(&readout.exercise)
+                .map(|found| found.label.to_owned())
+                .unwrap_or_else(|| readout.exercise.clone()),
+            exercise: readout.exercise,
+            label: readout.label.to_owned(),
+            weight: readout.weight,
         }
     }
 }
@@ -323,6 +389,7 @@ pub async fn create(
     let maxes = maxes::load(&state, athlete.athlete_id).await?;
     let initial = program.start(&maxes)?;
     let progress = program.progress(&initial)?;
+    let readout = program.readout(&initial)?;
 
     let id = Uuid::now_v7();
 
@@ -348,6 +415,7 @@ pub async fn create(
             started_at,
             ended_at: None,
             progress: progress.into(),
+            readout: readout.into_iter().map(Into::into).collect(),
         }),
     ))
 }
@@ -413,7 +481,9 @@ pub async fn list(
 
     for (id, program_key, stored_state, status, started_at, ended_at) in rows {
         let program = unknown_program(&program_key)?;
-        let progress = program.progress(&ProgramState::from_json(stored_state))?;
+        let program_state = ProgramState::from_json(stored_state);
+        let progress = program.progress(&program_state)?;
+        let readout = program.readout(&program_state)?;
 
         enrollments.push(Enrollment {
             id,
@@ -423,6 +493,7 @@ pub async fn list(
             started_at,
             ended_at,
             progress: progress.into(),
+            readout: readout.into_iter().map(Into::into).collect(),
         });
     }
 

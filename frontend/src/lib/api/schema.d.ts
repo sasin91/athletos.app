@@ -301,6 +301,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exercises": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every exercise a max may be entered for.
+         * @description Authenticated for the same reason the program catalogue is: nothing here is
+         *     anybody's data, but opening an endpoint later is additive and closing one is
+         *     not (D-12).
+         */
+        get: operations["list_exercises"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/programs": {
         parameters: {
             query?: never;
@@ -472,6 +494,23 @@ export interface components {
             /** @example 5/3/1 Boring But Big */
             program_name: string;
             progress: components["schemas"]["ProgressView"];
+            /**
+             * @description The numbers this enrolment is prescribing from, **read-only** (D-04).
+             *
+             *     Served here rather than on `next-session` because of who asks. The
+             *     question is "what is my program working from", which the maxes screen asks
+             *     about *every* active program at once — on `next-session` that would be one
+             *     request per enrolment, and each of them would also compute a prescription
+             *     and a pace projection that nobody asked for. It would also go missing at
+             *     the moment it is most interesting: `next-session` answers 409 once a block
+             *     is finished, and where a training max ended up is exactly what an athlete
+             *     looks at when a program ends.
+             *
+             *     It costs nothing to put here. `progress` already runs the program over the
+             *     state this row carries; this runs it once more over the same bytes, with
+             *     no extra query.
+             */
+            readout: components["schemas"]["ReadoutView"][];
             /** Format: date-time */
             started_at: string;
             status: components["schemas"]["EnrollmentStatus"];
@@ -500,6 +539,33 @@ export interface components {
         };
         /** @enum {string} */
         EnrollmentStatus: "active" | "finished" | "abandoned";
+        /**
+         * @description Every exercise the compiled-in programs know about.
+         *
+         *     An object rather than a bare array, so this can grow a cursor or a filter
+         *     without changing the type of the response (D-12).
+         */
+        ExerciseCatalogue: {
+            exercises: components["schemas"]["ExerciseSummary"][];
+        };
+        /** @description One exercise, as a client renders it in a list. */
+        ExerciseSummary: {
+            /**
+             * @description A competition lift or a close variant, as opposed to accessory work.
+             *
+             *     Carried so a picker can put the lifts an athlete is likely to track a max
+             *     for at the top, without a client holding its own opinion about which
+             *     those are.
+             */
+            is_primary: boolean;
+            /**
+             * @description Stable key. This is what the maxes document is keyed by.
+             * @example squat
+             */
+            key: string;
+            /** @example Squat */
+            label: string;
+        };
         Health: {
             /** @example athletos-api */
             service: string;
@@ -869,6 +935,52 @@ export interface components {
              *     this; one that invented a denominator would be lying (D-03).
              */
             total?: number | null;
+        };
+        /**
+         * @description One number a program is currently working from, and what kind of number it
+         *     is.
+         *
+         *     The mirror of the engine's `Readout`, with the exercise's display name added
+         *     the way `BlockView` adds it — a browser cannot look a key up in a Rust
+         *     `static`, and this list is short enough that a second round trip to label it
+         *     would be absurd.
+         *
+         *     There is no PUT for any of this and there must not be. A training max is the
+         *     governor a program applies to an athlete who over-reaches (D-01), and letting
+         *     them nudge it after a session that felt easy is letting them undo the
+         *     restraint (D-04). Visible and read-only is the whole shape of the decision:
+         *     the athlete may watch the number, and may not touch it.
+         */
+        ReadoutView: {
+            /**
+             * @description The exercise this number applies to, as a registry key.
+             * @example squat
+             */
+            exercise: string;
+            /**
+             * @description The exercise's display name, resolved from the compiled registry.
+             * @example Squat
+             */
+            exercise_label: string;
+            /**
+             * @description What the number *is*, in the program's own words.
+             *
+             *     This is the field that stops the screen lying. "126" next to an entered
+             *     max of 140 is inexplicable; "Training max 126" against "Entered 1RM 140"
+             *     is the program doing its job. Only the program knows which it is — 5/3/1
+             *     took 90% and has been moving it ever since, a fixed block took the number
+             *     straight and froze it — so the words come from there and not from here.
+             * @example Training max
+             */
+            label: string;
+            /**
+             * Format: double
+             * @description Kilograms, unrounded. Unlike a prescribed weight this is not something to
+             *     load on a bar; it is the number the loadable weights are derived from
+             *     (D-04).
+             * @example 126
+             */
+            weight: number;
         };
         /**
          * @description How a session that is already recorded turned out.
@@ -1579,6 +1691,35 @@ export interface operations {
             };
             /** @description The enrolment is over, or the block has no session left */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_exercises: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The exercise registry, in registry order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExerciseCatalogue"];
+                };
+            };
+            /** @description Missing or invalid access token */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -4,49 +4,35 @@ import { problemDetail, unwrap } from '$lib/server/api';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
- * The maxes form is built from the catalogue, not from a list of three lifts.
+ * Two lists that are deliberately not the same list.
  *
- * 5/3/1 BBB needs four maxes — press, deadlift, bench, squat — and Smolov Jr
- * needs three. Each program declares its own in `required_maxes`, and this page
- * asks for the union of them. A hardcoded `{ squat, bench, deadlift }` would
- * have been program knowledge living in a client, which is precisely what the
- * second client then has to reimplement (D-11).
+ * The **maxes** are the athlete's, a set they add to and remove from at will.
+ * The **readouts** belong to the programs they are running: 5/3/1's training max
+ * starts at 90% of the entered number and climbs every cycle, so within months
+ * it is a different number entirely, and the athlete has had no way to see it
+ * (D-03, D-04). They are loaded side by side because side by side is the only
+ * place the gap between them makes sense.
+ *
+ * This page used to build its form from the union of every program's
+ * `required_maxes`, which meant the athlete could only hold a max for a lift some
+ * compiled program happened to want. `GET /v1/exercises` is what replaces that:
+ * the registry is the set of lifts a max *may* be entered for, and no program has
+ * a vote.
  */
 export const load: PageServerLoad = async ({ locals }) => {
-	const [stored, catalogue] = await Promise.all([
+	const [stored, registry, enrollments] = await Promise.all([
 		locals.api.GET('/v1/athlete/maxes', {}),
-		locals.api.GET('/v1/programs', {})
+		locals.api.GET('/v1/exercises', {}),
+		locals.api.GET('/v1/enrollments', { params: { query: { status: 'active' } } })
 	]);
 
-	const maxes = unwrap(stored, 'Could not load your maxes.').maxes;
-	const programs = unwrap(catalogue, 'Could not load the program catalogue.').programs;
-
-	// One field per lift any program asks for, in catalogue order, plus
-	// anything the athlete has already entered that no compiled program wants —
-	// dropping those silently would delete them on the next save, since PUT is
-	// a full replace.
-	const fields = new Map<string, { exercise: string; label: string; wantedBy: string[] }>();
-
-	for (const program of programs) {
-		for (const required of program.required_maxes) {
-			const field = fields.get(required.exercise) ?? {
-				exercise: required.exercise,
-				label: required.label,
-				wantedBy: []
-			};
-
-			field.wantedBy.push(program.name);
-			fields.set(required.exercise, field);
-		}
-	}
-
-	for (const exercise of Object.keys(maxes)) {
-		if (!fields.has(exercise)) {
-			fields.set(exercise, { exercise, label: exercise, wantedBy: [] });
-		}
-	}
-
-	return { maxes, fields: [...fields.values()] };
+	return {
+		maxes: unwrap(stored, 'Could not load your maxes.').maxes,
+		registry: unwrap(registry, 'Could not load the exercise list.').exercises,
+		// Active only. A finished block's numbers are history and belong with the
+		// history, not next to a form the athlete is editing today.
+		active: unwrap(enrollments, 'Could not load your programs.').enrollments
+	};
 };
 
 export const actions: Actions = {
@@ -54,8 +40,18 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const maxes: Record<string, number> = {};
 
-		// `PUT` replaces the whole document, so a blank field is a max deleted,
-		// which is the only way the API offers to clear one.
+		/*
+		 * The form is the document.
+		 *
+		 * Every row on the screen is one field, so a row the athlete removed is
+		 * simply not in this `formData` — and `PUT` replacing the whole document
+		 * turns that absence into a deletion. There is no separate delete call and
+		 * there does not need to be, which is also why a half-applied form is not a
+		 * state anybody can end up in.
+		 *
+		 * A blank field is treated the same way as a removed row: the athlete
+		 * cleared the number, and a max of nothing is not a max.
+		 */
 		for (const [key, value] of form.entries()) {
 			const text = String(value).trim();
 			if (text === '') continue;

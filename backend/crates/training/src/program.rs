@@ -96,6 +96,62 @@ pub trait Program: Catalogued {
     /// only the program is allowed to interpret, and would therefore have to
     /// know which program it was holding.
     fn progress(&self, state: &State) -> Result<Progress>;
+
+    /// The numbers this program is currently prescribing from.
+    ///
+    /// The same argument as [`Program::progress`], applied to weights instead of
+    /// to position. 5/3/1's training max moves every cycle and lives inside
+    /// [`State`]; the athlete's entered 1RM does not move at all. Four cycles in
+    /// they have drifted apart, and without this method there is no way to *show*
+    /// the athlete the number their program is actually working from — only the
+    /// number they typed months ago, which the program stopped using on day one.
+    /// D-13 promises "is this working?", and a training max climbing 5 kg a month
+    /// is the most direct answer the product has.
+    ///
+    /// Read-only by construction, and that is the point rather than an omission.
+    /// D-04 forbids editing a training max because it is the governor, and an
+    /// athlete who can nudge it upward whenever a session felt easy has removed
+    /// the only restraint the program has. Hiding it, though, was never what D-04
+    /// asked for. There is no `set_readout`, and there is nowhere to put one: the
+    /// numbers move through [`Program::advance`] or they do not move.
+    fn readout(&self, state: &State) -> Result<Vec<Readout>>;
+}
+
+/// One number a program is currently working from.
+///
+/// Three fields rather than D-03's `(String, f64)` tuple, because a bare pair
+/// leaves a consumer holding `("squat", 126.0)` with no way to say what the 126
+/// *is* — and that is exactly the confusion this method exists to end. A screen
+/// showing 126 next to an entered max of 140 has to be able to explain the gap,
+/// and the explanation is program knowledge: nothing outside the program knows
+/// whether it took 90%, took the number straight, or has been moving it since.
+///
+/// So `label` names the *number*, not the lift. The lift's display name is
+/// resolvable by anyone from the exercise registry and would be a lookup
+/// duplicated into a struct that already carries its key; what the number means
+/// has no other home.
+///
+/// Deliberately no `Serialize`. The API mirrors this into its own DTO for the
+/// same reason it mirrors [`ProgramMeta`] — `/v1` may never change a field's
+/// type (D-12), and this crate is under no such obligation and should not
+/// acquire one by accident.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Readout {
+    /// The exercise this number applies to, as a registry key.
+    pub exercise: String,
+    /// What the number is, in the program's own words.
+    pub label: &'static str,
+    /// Kilograms, unrounded. This is a number the program *reasons* with; only
+    /// the weights derived from it have to be loadable (D-04).
+    pub weight: f64,
+}
+
+impl Readout {
+    /// A number the program derived at enrolment and has owned ever since.
+    pub const TRAINING_MAX: &'static str = "Training max";
+
+    /// The athlete's own entered number, as it stood when the block started.
+    pub const ENTERED_MAX: &'static str = "Entered 1RM";
 }
 
 /// Sessions completed, and the denominator if there is an honest one.
@@ -214,5 +270,33 @@ impl<P: Prescriptive> Program for P {
             completed: cursor.index,
             total: Some(self.schemas(&cursor.maxes)?.len() as u32),
         })
+    }
+
+    /// The maxes snapshotted at enrolment, unchanged.
+    ///
+    /// This is the honest answer for a fixed block and not a placeholder for a
+    /// missing one. Smolov Jr takes the entered 1RM straight — `schemas()` reads
+    /// exactly these numbers and nothing else — so they *are* what it prescribes
+    /// from, and inventing a "training max" here would be inventing a governor
+    /// the program does not have, which is the same lie as an invented progress
+    /// denominator (D-03).
+    ///
+    /// They are worth showing even though they do not move, because they are not
+    /// necessarily what `GET /v1/athlete/maxes` says any more: a max edited
+    /// mid-block deliberately does not rewrite a block already in progress
+    /// (D-07), so this is the only place the athlete can see the number their
+    /// current sessions were built from.
+    fn readout(&self, state: &State) -> Result<Vec<Readout>> {
+        let cursor: Cursor = state.decode()?;
+
+        Ok(cursor
+            .maxes
+            .iter()
+            .map(|(exercise, weight)| Readout {
+                exercise: exercise.to_owned(),
+                label: Readout::ENTERED_MAX,
+                weight,
+            })
+            .collect())
     }
 }

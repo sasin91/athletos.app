@@ -8,7 +8,8 @@
 use std::collections::BTreeMap;
 
 use athletos_training::{
-    exercise, programs, testing, Length, Loading, LoggedSession, Maxes, Program, Session, State,
+    exercise, programs, testing, Length, Loading, LoggedSession, Maxes, Program, Readout, Session,
+    State,
 };
 
 /// 5/3/1's four main lifts and what a completed cycle adds to each.
@@ -29,25 +30,32 @@ fn smolov() -> &'static dyn Program {
     programs::find("smolov-jr").expect("Smolov Jr is in the registry")
 }
 
-/// Reads the training max straight out of the opaque state.
+/// One lift's training max, as the program itself reports it.
 ///
-/// This is the one place in the codebase that looks inside a `State`, and it is
-/// a white-box assertion on purpose: the training max moves only through
-/// `advance()` and there is deliberately no accessor for it (D-04), so the only
-/// way to assert that it moved *exactly once per cycle, by the right amount* is
-/// to read the program's own memory. Production code that did this would be a
-/// bug; a test that could not do it would leave the product's central
-/// progression rule unverified.
-fn training_max(state: &State, lift: &str) -> f64 {
-    state.as_json()["training_max"][lift]
-        .as_f64()
-        .unwrap_or_else(|| panic!("5/3/1 state carries a training max for {lift}"))
+/// This used to index into the raw `State` JSON — `state.as_json()["training_max"][lift]`
+/// — with a comment explaining that a white-box assertion was the only way to
+/// reach a number the design deliberately gave no accessor. The comment was
+/// right about the constraint and wrong about the conclusion: a test that has to
+/// take a program's private memory apart to check the product's central rule is
+/// a report that the consuming trait is missing a method, and it was. `readout()`
+/// is that method, so this now reads the number the same way the athlete's screen
+/// does, through `&dyn Program`, with no idea which program it is holding.
+fn training_max(program: &dyn Program, state: &State, lift: &str) -> f64 {
+    let readout = program
+        .readout(state)
+        .expect("a program reports its numbers");
+
+    readout
+        .iter()
+        .find(|entry| entry.exercise == lift)
+        .unwrap_or_else(|| panic!("5/3/1 reports a training max for {lift}"))
+        .weight
 }
 
-fn training_maxes(state: &State) -> BTreeMap<&'static str, f64> {
+fn training_maxes(program: &dyn Program, state: &State) -> BTreeMap<&'static str, f64> {
     MAIN_LIFTS
         .iter()
-        .map(|(lift, _)| (*lift, training_max(state, lift)))
+        .map(|(lift, _)| (*lift, training_max(program, state, lift)))
         .collect()
 }
 
@@ -71,12 +79,12 @@ fn the_training_max_moves_exactly_once_per_cycle() {
     // 90% of the entered max, per D-04. Nothing is rounded: the training max is
     // a number the program reasons with, and only the weights derived from it
     // have to be loadable.
-    assert_eq!(training_max(&state, "squat"), 126.0);
-    assert_eq!(training_max(&state, "bench"), 90.0);
-    assert_eq!(training_max(&state, "deadlift"), 162.0);
-    assert_eq!(training_max(&state, "military-press"), 54.0);
+    assert_eq!(training_max(program, &state, "squat"), 126.0);
+    assert_eq!(training_max(program, &state, "bench"), 90.0);
+    assert_eq!(training_max(program, &state, "deadlift"), 162.0);
+    assert_eq!(training_max(program, &state, "military-press"), 54.0);
 
-    let starting = training_maxes(&state);
+    let starting = training_maxes(program, &state);
 
     // Every session at which each lift's training max changed, and by how much.
     let mut moves: BTreeMap<&str, Vec<(usize, f64)>> = BTreeMap::new();
@@ -85,9 +93,9 @@ fn the_training_max_moves_exactly_once_per_cycle() {
         let session = program.session(&state).expect("has a session");
         let logged = testing::logged_as_prescribed(&session);
 
-        let before = training_maxes(&state);
+        let before = training_maxes(program, &state);
         state = program.advance(state, &logged).expect("advances");
-        let after = training_maxes(&state);
+        let after = training_maxes(program, &state);
 
         for (lift, _) in MAIN_LIFTS {
             let change = after[lift] - before[lift];
@@ -115,7 +123,7 @@ fn the_training_max_moves_exactly_once_per_cycle() {
 
         // ...and the arithmetic adds up over the two cycles.
         assert_eq!(
-            training_max(&state, lift),
+            training_max(program, &state, lift),
             starting[lift] + increment * 2.0,
             "{lift} after two cycles"
         );
@@ -159,7 +167,7 @@ fn the_cycle_position_walks_four_weeks_of_four_days() {
 fn a_missed_amrap_holds_only_that_lifts_training_max() {
     let program = wendler();
     let mut state = program.start(&testing::maxes()).expect("starts");
-    let starting = training_maxes(&state);
+    let starting = training_maxes(program, &state);
 
     for _ in 0..SESSIONS_PER_CYCLE {
         let session = program.session(&state).expect("has a session");
@@ -176,7 +184,7 @@ fn a_missed_amrap_holds_only_that_lifts_training_max() {
     }
 
     assert_eq!(
-        training_max(&state, "squat"),
+        training_max(program, &state, "squat"),
         starting["squat"],
         "a missed 95% single holds the squat training max"
     );
@@ -186,7 +194,7 @@ fn a_missed_amrap_holds_only_that_lifts_training_max() {
             continue;
         }
         assert_eq!(
-            training_max(&state, lift),
+            training_max(program, &state, lift),
             starting[lift] + increment,
             "{lift} made its AMRAP and should still have gained"
         );
@@ -199,7 +207,10 @@ fn a_missed_amrap_holds_only_that_lifts_training_max() {
         state = program.advance(state, &logged).expect("advances");
     }
 
-    assert_eq!(training_max(&state, "squat"), starting["squat"] + 5.0);
+    assert_eq!(
+        training_max(program, &state, "squat"),
+        starting["squat"] + 5.0
+    );
 }
 
 /// The percentages from the design, and the Boring But Big work behind them.
@@ -298,6 +309,26 @@ fn drive(program: &dyn Program, maxes: &Maxes) {
         assert_eq!(progress.total, Some(plan.len() as u32));
     }
 
+    // Whatever the program is working from, named. The caller has no idea
+    // whether it is holding training maxes or the entered 1RMs, and does not
+    // need one — which is the same property `progress()` has and for the same
+    // reason.
+    let readout: Vec<Readout> = program.readout(&state).expect("reports its numbers");
+    assert!(
+        !readout.is_empty(),
+        "a program with no numbers prescribes air"
+    );
+
+    for entry in &readout {
+        assert!(
+            exercise::find(&entry.exercise).is_some(),
+            "readout names unknown exercise {}",
+            entry.exercise
+        );
+        assert!(!entry.label.is_empty(), "{} is unlabelled", entry.exercise);
+        assert!(entry.weight > 0.0, "{} weighs nothing", entry.exercise);
+    }
+
     let logged: LoggedSession = testing::logged_as_prescribed(&session);
     let advanced = program.advance(state, &logged).expect("advances");
 
@@ -365,6 +396,144 @@ fn only_a_fixed_block_can_show_you_the_plan() {
     );
     assert_eq!(wendler.progress(&state).unwrap().total, None);
     assert!(matches!(wendler.meta().length, Length::OpenEnded));
+}
+
+/// `readout()` answers with the kind of number each program actually
+/// prescribes from, and says which kind it is.
+///
+/// The gap this closes is a real one an athlete hits: enter a 140 kg squat, and
+/// 5/3/1 will prescribe off 126 on day one and off something above 140 within a
+/// year, while the maxes screen still says 140. Two numbers with no relationship
+/// on the screen and no explanation. The label is what makes the screen able to
+/// explain it.
+#[test]
+fn a_readout_says_what_kind_of_number_it_is() {
+    let maxes = testing::maxes();
+
+    let wendler = wendler();
+    let state = wendler.start(&maxes).unwrap();
+    let training = wendler.readout(&state).expect("5/3/1 reports its numbers");
+
+    // Wendler's day order, not alphabetical: it is the order the athlete meets
+    // the lifts in the week.
+    assert_eq!(
+        training,
+        vec![
+            Readout {
+                exercise: "military-press".to_owned(),
+                label: Readout::TRAINING_MAX,
+                weight: 54.0,
+            },
+            Readout {
+                exercise: "deadlift".to_owned(),
+                label: Readout::TRAINING_MAX,
+                weight: 162.0,
+            },
+            Readout {
+                exercise: "bench".to_owned(),
+                label: Readout::TRAINING_MAX,
+                weight: 90.0,
+            },
+            Readout {
+                exercise: "squat".to_owned(),
+                label: Readout::TRAINING_MAX,
+                weight: 126.0,
+            },
+        ],
+        "90% of the entered maxes, and labelled as the program's own number"
+    );
+
+    let smolov = smolov();
+    let state = smolov.start(&maxes).unwrap();
+    let entered = smolov
+        .readout(&state)
+        .expect("Smolov Jr reports its numbers");
+
+    // Not a training max, because Smolov Jr does not have one. It takes the
+    // entered number straight, so the honest readout is the snapshot it started
+    // from — inventing a governor the program does not have would be the same
+    // lie as an invented progress denominator.
+    for entry in &entered {
+        assert_eq!(entry.label, Readout::ENTERED_MAX, "{}", entry.exercise);
+        assert_eq!(
+            entry.weight,
+            maxes.get(&entry.exercise).expect("a max was entered"),
+            "{} is the entered number, untouched",
+            entry.exercise
+        );
+    }
+
+    // Every lift the athlete had at enrolment, including the press that Smolov
+    // Jr does not use: a snapshot is a snapshot of the document, not of the
+    // subset this program happened to read.
+    let listed: Vec<&str> = entered
+        .iter()
+        .map(|entry| entry.exercise.as_str())
+        .collect();
+    assert!(listed.contains(&"squat"));
+    assert!(listed.contains(&"bench"));
+    assert!(listed.contains(&"deadlift"));
+}
+
+/// The readout of an adaptive program moves; the readout of a fixed block does
+/// not. This is the whole reason the athlete needs to see both numbers.
+#[test]
+fn only_an_adaptive_programs_readout_moves_under_the_athlete() {
+    let maxes = testing::maxes();
+
+    // 5/3/1: nothing for fifteen sessions, then every lift gains at once.
+    let wendler = wendler();
+    let mut state = wendler.start(&maxes).unwrap();
+    let opening = wendler.readout(&state).unwrap();
+
+    for _ in 0..SESSIONS_PER_CYCLE - 1 {
+        let session = wendler.session(&state).unwrap();
+        let logged = testing::logged_as_prescribed(&session);
+        state = wendler.advance(state, &logged).unwrap();
+
+        assert_eq!(
+            wendler.readout(&state).unwrap(),
+            opening,
+            "the training max moves at the cycle boundary and nowhere else"
+        );
+    }
+
+    let session = wendler.session(&state).unwrap();
+    let logged = testing::logged_as_prescribed(&session);
+    state = wendler.advance(state, &logged).unwrap();
+
+    let crossed = wendler.readout(&state).unwrap();
+    assert_ne!(crossed, opening, "a completed cycle moves the training max");
+
+    for (before, after) in opening.iter().zip(&crossed) {
+        let increment = MAIN_LIFTS
+            .iter()
+            .find(|(lift, _)| *lift == before.exercise)
+            .map(|(_, increment)| *increment)
+            .expect("the readout names a main lift");
+
+        assert_eq!(after.exercise, before.exercise);
+        assert_eq!(after.weight, before.weight + increment);
+    }
+
+    // Smolov Jr: the same twelve sessions of logging, and the numbers are the
+    // ones the athlete typed, unchanged. A prescriptive block's readout is a
+    // snapshot, and a snapshot does not move.
+    let smolov = smolov();
+    let mut state = smolov.start(&maxes).unwrap();
+    let opening = smolov.readout(&state).unwrap();
+
+    for _ in 0..12 {
+        let session = smolov.session(&state).unwrap();
+        let logged = testing::logged_as_prescribed(&session);
+        state = smolov.advance(state, &logged).unwrap();
+
+        assert_eq!(
+            smolov.readout(&state).unwrap(),
+            opening,
+            "a fixed block prescribes from what it started with, start to finish"
+        );
+    }
 }
 
 /// A fixed block runs out, and says so rather than wrapping or panicking.

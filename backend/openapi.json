@@ -588,6 +588,43 @@
         ]
       }
     },
+    "/v1/exercises": {
+      "get": {
+        "tags": [
+          "exercises"
+        ],
+        "summary": "Every exercise a max may be entered for.",
+        "description": "Authenticated for the same reason the program catalogue is: nothing here is\nanybody's data, but opening an endpoint later is additive and closing one is\nnot (D-12).",
+        "operationId": "list_exercises",
+        "responses": {
+          "200": {
+            "description": "The exercise registry, in registry order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseCatalogue"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
     "/v1/programs": {
       "get": {
         "tags": [
@@ -982,7 +1019,8 @@
           "program_name",
           "status",
           "started_at",
-          "progress"
+          "progress",
+          "readout"
         ],
         "properties": {
           "ended_at": {
@@ -1007,6 +1045,13 @@
           },
           "progress": {
             "$ref": "#/components/schemas/ProgressView"
+          },
+          "readout": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadoutView"
+            },
+            "description": "The numbers this enrolment is prescribing from, **read-only** (D-04).\n\nServed here rather than on `next-session` because of who asks. The\nquestion is \"what is my program working from\", which the maxes screen asks\nabout *every* active program at once — on `next-session` that would be one\nrequest per enrolment, and each of them would also compute a prescription\nand a pace projection that nobody asked for. It would also go missing at\nthe moment it is most interesting: `next-session` answers 409 once a block\nis finished, and where a training max ended up is exactly what an athlete\nlooks at when a program ends.\n\nIt costs nothing to put here. `progress` already runs the program over the\nstate this row carries; this runs it once more over the same bytes, with\nno extra query."
           },
           "started_at": {
             "type": "string",
@@ -1052,6 +1097,45 @@
           "finished",
           "abandoned"
         ]
+      },
+      "ExerciseCatalogue": {
+        "type": "object",
+        "description": "Every exercise the compiled-in programs know about.\n\nAn object rather than a bare array, so this can grow a cursor or a filter\nwithout changing the type of the response (D-12).",
+        "required": [
+          "exercises"
+        ],
+        "properties": {
+          "exercises": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExerciseSummary"
+            }
+          }
+        }
+      },
+      "ExerciseSummary": {
+        "type": "object",
+        "description": "One exercise, as a client renders it in a list.",
+        "required": [
+          "key",
+          "label",
+          "is_primary"
+        ],
+        "properties": {
+          "is_primary": {
+            "type": "boolean",
+            "description": "A competition lift or a close variant, as opposed to accessory work.\n\nCarried so a picker can put the lifts an athlete is likely to track a max\nfor at the top, without a client holding its own opinion about which\nthose are."
+          },
+          "key": {
+            "type": "string",
+            "description": "Stable key. This is what the maxes document is keyed by.",
+            "example": "squat"
+          },
+          "label": {
+            "type": "string",
+            "example": "Squat"
+          }
+        }
       },
       "Health": {
         "type": "object",
@@ -1634,6 +1718,39 @@
           }
         }
       },
+      "ReadoutView": {
+        "type": "object",
+        "description": "One number a program is currently working from, and what kind of number it\nis.\n\nThe mirror of the engine's `Readout`, with the exercise's display name added\nthe way `BlockView` adds it — a browser cannot look a key up in a Rust\n`static`, and this list is short enough that a second round trip to label it\nwould be absurd.\n\nThere is no PUT for any of this and there must not be. A training max is the\ngovernor a program applies to an athlete who over-reaches (D-01), and letting\nthem nudge it after a session that felt easy is letting them undo the\nrestraint (D-04). Visible and read-only is the whole shape of the decision:\nthe athlete may watch the number, and may not touch it.",
+        "required": [
+          "exercise",
+          "exercise_label",
+          "label",
+          "weight"
+        ],
+        "properties": {
+          "exercise": {
+            "type": "string",
+            "description": "The exercise this number applies to, as a registry key.",
+            "example": "squat"
+          },
+          "exercise_label": {
+            "type": "string",
+            "description": "The exercise's display name, resolved from the compiled registry.",
+            "example": "Squat"
+          },
+          "label": {
+            "type": "string",
+            "description": "What the number *is*, in the program's own words.\n\nThis is the field that stops the screen lying. \"126\" next to an entered\nmax of 140 is inexplicable; \"Training max 126\" against \"Entered 1RM 140\"\nis the program doing its job. Only the program knows which it is — 5/3/1\ntook 90% and has been moving it ever since, a fixed block took the number\nstraight and froze it — so the words come from there and not from here.",
+            "example": "Training max"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double",
+            "description": "Kilograms, unrounded. Unlike a prescribed weight this is not something to\nload on a bar; it is the number the loadable weights are derived from\n(D-04).",
+            "example": 126.0
+          }
+        }
+      },
       "RecordedOutcome": {
         "type": "string",
         "description": "How a session that is already recorded turned out.\n\nA second enum rather than a `Serialize` on [`WorkoutOutcome`], because the\ntwo vocabularies are genuinely different sizes: a client may only ever\n*claim* `completed` or `cut_short`, but it must be able to *read* the\n`auto_closed` the stale-session sweep writes (D-08). Collapsing them into one\ntype would mean either letting a client claim `auto_closed` or hiding it from\nthe history, and both are worse than two enums that happen to overlap.",
@@ -2062,6 +2179,10 @@
     {
       "name": "programs",
       "description": "The compiled-in program catalogue (D-03, D-05)"
+    },
+    {
+      "name": "exercises",
+      "description": "The compiled-in exercise registry (D-03, D-04)"
     },
     {
       "name": "athlete",

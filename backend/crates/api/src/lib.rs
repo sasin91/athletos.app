@@ -45,6 +45,9 @@ pub fn app(state: AppState) -> Router {
         // The catalogue is a `static`, not a table (D-03).
         .route("/v1/programs", get(routes::programs::list))
         .route("/v1/programs/{key}", get(routes::programs::detail))
+        // The same `static`, and the reason the maxes form can offer a lift no
+        // compiled program asks for (D-04).
+        .route("/v1/exercises", get(routes::exercises::list))
         .route(
             "/v1/athlete/maxes",
             get(routes::maxes::show).put(routes::maxes::replace),

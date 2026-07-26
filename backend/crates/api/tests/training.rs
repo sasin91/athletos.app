@@ -420,6 +420,172 @@ async fn putting_a_max_for_an_unknown_exercise_is_refused(pool: PgPool) {
         .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
 }
 
+/// The maxes are a set the athlete owns: a lift goes in, a lift comes out, and
+/// no program has a vote (D-04).
+///
+/// The lift added here is `barbell-row`, which is in the exercise registry and
+/// which **no** compiled program declares in `required_maxes`. That is the whole
+/// point — before this, the client's form was the union of the programs' needs,
+/// so a number like this had nowhere to live. Removing `bench` in the same pass
+/// checks the other direction against a lift that a program very much does want:
+/// a program can refuse to *start* without a max, but it cannot stop the athlete
+/// deleting one.
+#[sqlx::test]
+async fn the_maxes_are_a_set_that_gains_and_loses_lifts(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+
+    set_maxes(&server, &token, full_maxes()).await;
+
+    // Gaining a lift no program asks for.
+    let mut wanted = full_maxes();
+    wanted["barbell-row"] = json!(85.0);
+    set_maxes(&server, &token, wanted).await;
+
+    let held: serde_json::Value = server
+        .get("/v1/athlete/maxes")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert_eq!(held["maxes"]["barbell-row"], 85.0);
+    assert_eq!(held["maxes"].as_object().unwrap().len(), 5);
+
+    // No program declares it, which is what makes it an athlete's number rather
+    // than a program's.
+    let catalogue: serde_json::Value = server
+        .get("/v1/programs")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    for program in catalogue["programs"].as_array().unwrap() {
+        for required in program["required_maxes"].as_array().unwrap() {
+            assert_ne!(
+                required["exercise"], "barbell-row",
+                "this test needs a lift no program requires"
+            );
+        }
+    }
+
+    // Losing one, by sending a document without it.
+    set_maxes(
+        &server,
+        &token,
+        json!({
+            "squat": 140.0,
+            "deadlift": 180.0,
+            "military-press": 60.0,
+            "barbell-row": 85.0,
+        }),
+    )
+    .await;
+
+    let after: serde_json::Value = server
+        .get("/v1/athlete/maxes")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert!(
+        after["maxes"].get("bench").is_none(),
+        "a key absent from the body is a key deleted"
+    );
+    assert_eq!(after["maxes"]["barbell-row"], 85.0, "and the rest survived");
+
+    // The row is gone rather than zeroed, so nothing downstream can read a max
+    // the athlete deleted.
+    let rows: i64 = sqlx::query_scalar(
+        "select count(*) from athlete_maxes where athlete_id = (select id from athletes)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rows, 4);
+
+    // Deleting a lift a program needs is allowed, and is felt at enrolment
+    // rather than silently.
+    let refused = server
+        .post("/v1/enrollments")
+        .authorization_bearer(&token)
+        .json(&json!({ "program_key": "wendler-531-bbb" }))
+        .await;
+    refused.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(refused.json::<serde_json::Value>()["detail"]
+        .as_str()
+        .unwrap()
+        .contains("bench"));
+
+    // And clearing the set entirely is a representable state, not an error.
+    set_maxes(&server, &token, json!({})).await;
+
+    let empty: serde_json::Value = server
+        .get("/v1/athlete/maxes")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert_eq!(empty["maxes"], json!({}));
+}
+
+// --- the exercise registry -------------------------------------------------
+
+/// The list the "add a lift" picker is built from. Without it the client can
+/// only offer lifts that some compiled program happens to require, which is the
+/// limitation that made maxes a form instead of a set.
+#[sqlx::test]
+async fn the_exercise_registry_offers_every_lift_a_max_can_be_entered_for(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+
+    let response = server
+        .get("/v1/exercises")
+        .authorization_bearer(&token)
+        .await;
+    response.assert_status_ok();
+
+    let body: serde_json::Value = response.json();
+    let exercises = body["exercises"].as_array().unwrap();
+    assert!(exercises.len() >= 12, "the whole registry, not a subset");
+
+    let squat = exercises
+        .iter()
+        .find(|exercise| exercise["key"] == "squat")
+        .expect("the squat is in the registry");
+    assert_eq!(squat["label"], "Squat");
+    assert_eq!(squat["is_primary"], true);
+
+    // The lifts no program declares are here too, which is the entire reason
+    // this endpoint is not just a restatement of `required_maxes`.
+    assert!(
+        exercises
+            .iter()
+            .any(|exercise| exercise["key"] == "barbell-row"),
+        "a lift no program requires must still be offerable"
+    );
+
+    // Every key a program requires can be labelled from this one list, so a
+    // client holding it never has to fall back to showing a raw key.
+    let keys: Vec<&str> = exercises
+        .iter()
+        .map(|exercise| exercise["key"].as_str().unwrap())
+        .collect();
+
+    let catalogue: serde_json::Value = server
+        .get("/v1/programs")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    for program in catalogue["programs"].as_array().unwrap() {
+        for required in program["required_maxes"].as_array().unwrap() {
+            assert!(keys.contains(&required["exercise"].as_str().unwrap()));
+        }
+    }
+
+    // Nothing here is anybody's data, and it is still behind a token: opening an
+    // endpoint later is additive, closing one is not (D-12).
+    server
+        .get("/v1/exercises")
+        .await
+        .assert_status_unauthorized();
+}
+
 // --- enrolling ------------------------------------------------------------
 
 /// The engine refuses to start a program the athlete has no number for, and the
@@ -1285,6 +1451,198 @@ async fn another_athletes_enrollments_are_not_listed(pool: PgPool) {
         .await
         .json();
     assert!(body["enrollments"].as_array().unwrap().is_empty());
+}
+
+// --- the readout: what the program is actually working from (D-03, D-04) ---
+
+/// One enrolment's `readout`, as the enrolment list carries it.
+async fn readout(server: &TestServer, token: &str, enrollment: Uuid) -> serde_json::Value {
+    let body: serde_json::Value = server
+        .get("/v1/enrollments")
+        .authorization_bearer(token)
+        .await
+        .json();
+
+    body["enrollments"]
+        .as_array()
+        .expect("the list is a list")
+        .iter()
+        .find(|row| row["id"].as_str() == Some(&enrollment.to_string()))
+        .unwrap_or_else(|| panic!("{enrollment} is in the athlete's enrolments"))["readout"]
+        .clone()
+}
+
+/// The two kinds of program answer the same question with different numbers, and
+/// each says which kind of number it is.
+///
+/// This is the gap D-03 left open. A 140 kg entered squat is a 126 kg training
+/// max on day one of 5/3/1 and neither number was reachable from outside the
+/// program; Smolov Jr takes the same 140 straight. A screen showing one of them
+/// with no label cannot explain the other.
+#[sqlx::test]
+async fn an_enrollment_reports_the_numbers_its_program_prescribes_from(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    // Adaptive: 90% of what was entered, owned by the program from here on.
+    let wendler = enrol(&server, &token, "wendler-531-bbb").await;
+    let training = readout(&server, &token, wendler).await;
+    let training = training.as_array().unwrap();
+
+    assert_eq!(training.len(), 4, "5/3/1's four main lifts");
+    assert_eq!(training[0]["exercise"], "military-press");
+    assert_eq!(training[0]["exercise_label"], "Military Press");
+    assert_eq!(training[0]["label"], "Training max");
+    assert_eq!(training[0]["weight"], 54.0, "90% of a 60 kg press");
+
+    let squat = training
+        .iter()
+        .find(|entry| entry["exercise"] == "squat")
+        .expect("the squat is one of the four");
+    assert_eq!(squat["weight"], 126.0, "90% of a 140 kg squat");
+    assert_eq!(squat["exercise_label"], "Squat");
+
+    // Prescriptive: the entered numbers, snapshotted, and labelled as such —
+    // Smolov Jr has no training max and one must not be invented for it.
+    let smolov = enrol(&server, &token, "smolov-jr").await;
+    let entered = readout(&server, &token, smolov).await;
+    let entered = entered.as_array().unwrap();
+
+    let squat = entered
+        .iter()
+        .find(|entry| entry["exercise"] == "squat")
+        .expect("the squat is in the snapshot");
+    assert_eq!(squat["label"], "Entered 1RM");
+    assert_eq!(squat["weight"], 140.0, "taken straight, not discounted");
+
+    for entry in entered {
+        assert_eq!(entry["label"], "Entered 1RM");
+    }
+
+    // Enrolling answers with the same field, so a client that has just pressed
+    // the button does not have to re-list to see the numbers.
+    let created: serde_json::Value = server
+        .post("/v1/enrollments")
+        .authorization_bearer(&token)
+        .json(&json!({ "program_key": "wendler-531-bbb" }))
+        .await
+        .json();
+    assert_eq!(created["readout"][0]["label"], "Training max");
+    assert_eq!(created["readout"][0]["weight"], 54.0);
+}
+
+/// The drift the feature exists to explain, observed end to end.
+///
+/// A cycle of 5/3/1 moves the press training max from 54 to 56.5 while
+/// `GET /v1/athlete/maxes` still says 60 — which is correct, and which is
+/// exactly what looks like a bug to an athlete who can only see one of the two
+/// numbers.
+#[sqlx::test]
+async fn the_training_max_readout_climbs_while_the_entered_max_stands_still(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let opening = readout(&server, &token, enrollment).await;
+
+    // Fifteen sessions is a cycle less one, and the number has not moved.
+    for _ in 0..15 {
+        log_a_session(&server, &token, enrollment).await;
+    }
+    assert_eq!(
+        readout(&server, &token, enrollment).await,
+        opening,
+        "the training max moves at the cycle boundary and nowhere else"
+    );
+
+    log_a_session(&server, &token, enrollment).await;
+    let crossed = readout(&server, &token, enrollment).await;
+    assert_ne!(crossed, opening, "a completed cycle moves it");
+
+    let press = |readout: &serde_json::Value| {
+        readout
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["exercise"] == "military-press")
+            .expect("the press is one of the four")["weight"]
+            .as_f64()
+            .unwrap()
+    };
+    assert_eq!(press(&opening), 54.0);
+    assert_eq!(press(&crossed), 56.5, "+2.5 kg, upper body");
+
+    // And the athlete's own number is untouched. This is the whole point: the
+    // two are allowed to disagree, and now they can both be shown.
+    let maxes: serde_json::Value = server
+        .get("/v1/athlete/maxes")
+        .authorization_bearer(&token)
+        .await
+        .json();
+    assert_eq!(maxes["maxes"]["military-press"], 60.0);
+}
+
+/// A readout is somebody's training data and is scoped like everything else.
+///
+/// It rides on the enrolment list, whose `where` clause is the ownership check,
+/// so this asserts the property rather than a second mechanism — and it asserts
+/// it against the numbers themselves, because "the list was empty" and "the list
+/// held a stranger's training max" are the same length of array to a weaker test.
+#[sqlx::test]
+async fn another_athletes_readout_is_not_reachable(pool: PgPool) {
+    let server = server(pool);
+
+    let mine = register(&server, EMAIL).await;
+    // A max nobody else in this test has, so the number itself is the evidence.
+    set_maxes(
+        &server,
+        &mine,
+        json!({ "squat": 200.0, "bench": 100.0, "deadlift": 180.0, "military-press": 60.0 }),
+    )
+    .await;
+    let enrollment = enrol(&server, &mine, "wendler-531-bbb").await;
+
+    let ours = readout(&server, &mine, enrollment).await;
+    assert!(
+        ours.to_string().contains("180.0"),
+        "the owner sees 90% of a 200 kg squat: {ours}"
+    );
+
+    let theirs = register(&server, "rival@example.com").await;
+
+    let listed: serde_json::Value = server
+        .get("/v1/enrollments")
+        .authorization_bearer(&theirs)
+        .await
+        .json();
+    assert!(listed["enrollments"].as_array().unwrap().is_empty());
+    assert!(
+        !listed.to_string().contains("180"),
+        "a stranger's list must not carry the number: {listed}"
+    );
+
+    // Filtering does not widen the scope either, and neither does the only other
+    // endpoint that runs somebody's program.
+    let filtered: serde_json::Value = server
+        .get("/v1/enrollments?status=active")
+        .authorization_bearer(&theirs)
+        .await
+        .json();
+    assert!(filtered["enrollments"].as_array().unwrap().is_empty());
+
+    server
+        .get(&format!("/v1/enrollments/{enrollment}/next-session"))
+        .authorization_bearer(&theirs)
+        .await
+        .assert_status_not_found();
+
+    // And with no token at all there is nothing to read.
+    server
+        .get("/v1/enrollments")
+        .await
+        .assert_status_unauthorized();
 }
 
 // --- the history list (D-13) ----------------------------------------------
