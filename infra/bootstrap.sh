@@ -531,6 +531,16 @@ pass in on \$ext_if inet proto tcp to port { 22, ${CADDY_HTTP_PORT}, ${CADDY_HTT
 pass in on \$ext_if inet proto icmp
 EOF
 
+# pf.ko has to be in the kernel before pfctl will do anything at all, including
+# a syntax check: on FreeBSD 15 pfctl talks to the kernel over netlink, so
+# without the module even `pfctl -n` fails with "Failed to open netlink", which
+# reads like a broken ruleset and is not one.
+#
+# `pf_load` in loader.conf is what makes it survive a reboot; `service pf start`
+# would load it too, but only after this check has already run.
+kldstat -q -m pf || kldload pf || die "could not load pf.ko"
+sysrc -f /boot/loader.conf pf_load="YES" >/dev/null
+
 pfctl -n -f /etc/pf.conf || die "pf.conf did not parse"
 sysrc pf_enable="YES" >/dev/null
 sysrc pflog_enable="YES" >/dev/null
