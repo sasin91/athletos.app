@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import NavIcon from '$lib/NavIcon.svelte';
 	import { page } from '$app/state';
 	import { flushPending, queueSummary } from '$lib/submit';
 
@@ -36,10 +37,10 @@
 	});
 
 	const nav = [
-		{ href: '/', label: 'Train' },
-		{ href: '/programs', label: 'Programs' },
-		{ href: '/maxes', label: 'Maxes' },
-		{ href: '/history', label: 'History' }
+		{ href: '/', label: 'Train', icon: 'train' },
+		{ href: '/programs', label: 'Programs', icon: 'programs' },
+		{ href: '/maxes', label: 'Maxes', icon: 'maxes' },
+		{ href: '/history', label: 'History', icon: 'history' }
 		// `as const` so each `href` keeps its literal type — `resolve()` is
 		// typed against the real route table, and a bare `string` is not a route.
 	] as const;
@@ -80,14 +81,31 @@
 		modern screen is not reachable with a thumb (D-10 is about time, but the
 		same athlete is holding the same phone).
 	-->
-	<nav class="sticky bottom-0 grid grid-cols-4 border-t bg-base-100">
+	<nav class="safe-bottom sticky bottom-0 z-20 grid grid-cols-4 border-t border-base-300 bg-base-100">
 		{#each nav as item (item.href)}
+			{@const active = page.url.pathname === item.href}
 			<a
 				href={resolve(item.href)}
-				class="btn rounded-none btn-ghost"
-				class:btn-active={page.url.pathname === item.href}
+				aria-current={active ? 'page' : undefined}
+				class="relative flex min-h-[3.75rem] flex-col items-center justify-center gap-1 pt-1
+				       transition-colors duration-150"
+				class:text-base-content={active}
+				class:opacity-45={!active}
 			>
-				{item.label}
+				<!--
+					A short rule rather than a filled pill. The bar is the chassis of
+					the app and should not light up like a button; the athlete needs
+					to know where they are, not be congratulated for arriving.
+				-->
+				{#if active}
+					<span
+						class="absolute top-0 h-[3px] w-10 rounded-b-full bg-base-content"
+						aria-hidden="true"
+					></span>
+				{/if}
+
+				<NavIcon name={item.icon} />
+				<span class="text-[0.6875rem] leading-none font-medium tracking-wide">{item.label}</span>
 			</a>
 		{/each}
 	</nav>
