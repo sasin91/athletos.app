@@ -59,8 +59,14 @@ pidfile="${athletos_api_rundir}/${name}.pid"
 # cannot contain spaces — and a desc with parentheses in it ("AthletOS web
 # (SvelteKit)") reached /bin/sh unquoted and died with a syntax error the
 # first time this ran.
+# No `-u` here. `${name}_user` is a *reserved* rc.subr variable (rc.subr:1199),
+# and rc.subr wraps the whole command in `su -m ${_user}` (rc.subr:1833) before
+# it ever runs. Passing `-u` as well made daemon(8) call setusercontext() from a
+# process that had already dropped privileges, which fails with the wonderfully
+# unhelpful "failed to set user environment" — repeated forever, because -r
+# restarts it. One privilege drop, owned by rc.subr.
 command="/usr/sbin/daemon"
-command_args="-r -R 5 -P ${pidfile} -t ${name} -u ${athletos_api_user} \
+command_args="-r -R 5 -P ${pidfile} -t ${name} \
     -o ${athletos_api_log} -- ${athletos_api_root}/api"
 
 start_precmd="athletos_api_prestart"
