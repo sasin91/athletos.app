@@ -32,7 +32,11 @@ serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tower-http = { version = "0.6", features = ["trace", "cors"] }
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "macros", "migrate"] }
+# `json` is on for one column: `enrollments.state`, the opaque program-owned
+# blob (D-03). Without it `serde_json::Value` has no `Type<Postgres>` and the
+# state could only move through the driver as a string we would have to parse
+# by hand on both sides.
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json", "macros", "migrate"] }
 uuid = { version = "1.20.0", features = ["v7", "serde"] }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde", "std"] }
 utoipa = { version = "5.5.0", features = ["axum_extras", "uuid", "chrono"] }

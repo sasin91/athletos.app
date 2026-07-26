@@ -1,0 +1,661 @@
+//! Submitting a logged session (D-07, D-08, D-09).
+//!
+//! One `POST` at the end of a session, carrying the whole set list — including
+//! the sets that were prescribed and *not* done — keyed by an id the client
+//! minted before it went offline. This is the endpoint the idempotency decision
+//! exists for, and the reason it exists is not tidiness:
+//!
+//! > Submitting a session runs `advance()` and mutates program state. A retried
+//! > POST on a flaky connection would advance twice — a 5/3/1 training max
+//! > jumping 5 kg instead of 2.5, silently and permanently.
+//!
+//! The phone is the logging device, gyms have concrete walls, and a failed POST
+//! sits in a local queue and retries on next launch (D-09). So a retry is the
+//! normal case rather than the exceptional one, and "the same body twice leaves
+//! the same state as once" is a correctness property, not an optimisation.
+//!
+//! # How the write is made atomic
+//!
+//! Everything below happens in one transaction, and in this order:
+//!
+//! 1. `select ... for update` the enrolment, filtered by `athlete_id`. The lock
+//!    is what serialises two submits against the same enrolment: the workout
+//!    row's primary key already stops the same *id* landing twice, but
+//!    `advance()` is a read-modify-write of `enrollments.state`, so two
+//!    *different* workouts arriving together would otherwise both read the old
+//!    state and one advance would be lost.
+//! 2. `insert into workouts ... on conflict (id) do nothing returning id`. The
+//!    `returning` is the whole detection mechanism — a row comes back if and
+//!    only if this insert is the one that created it. Deliberately not a
+//!    `select` first: between the select and the insert is exactly where the
+//!    duplicate gets in.
+//! 3. Only if a row came back: insert the sets, run `advance()`, write the new
+//!    `State`.
+//! 4. Commit.
+//!
+//! A crash anywhere after step 2 rolls the whole thing back, sets included, and
+//! the client's retry re-runs it from the top. A duplicate skips steps 3 and 4's
+//! state write entirely and answers 200 instead of 201 — success, because from
+//! the client's point of view the retry did succeed, and nothing moved.
+
+use std::collections::BTreeSet;
+
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::Json;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use uuid::Uuid;
+
+use athletos_training::{LoggedSession, LoggedSet, ProgramError, Session, State as ProgramState};
+
+use crate::auth::AuthenticatedAthlete;
+use crate::error::{ApiError, ApiResult};
+use crate::routes::enrollments::{unknown_program, ProgressView};
+use crate::routes::maxes::MAX_WEIGHT_KG;
+use crate::state::AppState;
+
+/// The most sets one submitted session may carry.
+///
+/// Smolov Jr's heaviest day is around forty. This is two orders of magnitude of
+/// headroom and exists only so that a malformed or hostile body cannot buy an
+/// unbounded insert inside a transaction holding a row lock.
+const MAX_SETS: usize = 500;
+
+const MAX_NOTES_LENGTH: usize = 4_000;
+
+/// Reps beyond this are not a set, they are a typo.
+const MAX_REPS: u32 = 1_000;
+
+/// A finished session, as the phone recorded it.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct WorkoutSubmission {
+    /// **Minted by the client**, before the session started and before it had a
+    /// network, and the idempotency key for this whole endpoint (D-09).
+    ///
+    /// A UUIDv7 by convention, because time-ordered ids cluster in the primary
+    /// key's btree. It is not *checked* to be v7: the idempotency comes from the
+    /// primary key and works for any uuid, whereas refusing a v4 would strand a
+    /// queued offline workout in a retry loop it could never get out of, with no
+    /// action the athlete could take to fix it.
+    pub id: Uuid,
+
+    /// Must belong to the authenticated athlete. Someone else's is a 404.
+    pub enrollment_id: Uuid,
+
+    /// Wall clock from the phone, stamped when the athlete committed to the
+    /// session — never when they merely looked at it (D-08).
+    pub started_at: DateTime<Utc>,
+    pub ended_at: DateTime<Utc>,
+
+    pub outcome: WorkoutOutcome,
+
+    /// Required when `outcome` is `cut_short`, and refused otherwise. The one
+    /// question asked when a session ends early; the program advances whatever
+    /// the answer is (D-08).
+    pub cut_reason: Option<CutReason>,
+
+    pub notes: Option<String>,
+
+    /// Every set of the session, including the ones that were never done.
+    ///
+    /// `pending` and `skipped` are first-class outcomes rather than absent rows:
+    /// what was prescribed and not performed is precisely how "work not done"
+    /// becomes the second axis of drift (D-07, D-08).
+    pub sets: Vec<SubmittedSet>,
+}
+
+/// How the session ended, as the athlete may report it.
+///
+/// Deliberately missing the schema's third value, `auto_closed`. That one
+/// belongs to the sweep that closes a session left open past three hours (D-08),
+/// and a client must not be able to claim it.
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkoutOutcome {
+    Completed,
+    CutShort,
+}
+
+/// The four answers to the one question asked when a session ends early (D-08).
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CutReason {
+    OutOfTime,
+    Pain,
+    Equipment,
+    Enough,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SetStatus {
+    Done,
+    Skipped,
+    Pending,
+}
+
+/// One set: what was asked for and what happened (D-07).
+///
+/// Four numbers, not two. Going heavier than prescribed means editing the
+/// number, and it is logged as edited — a cap would produce either dishonest
+/// logs or an abandoned app, and honesty must never cost more than dishonesty.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SubmittedSet {
+    /// From `prescribed_sets[].position` in the session payload. Unique within
+    /// the submission.
+    pub position: u16,
+    pub exercise: String,
+    pub prescribed_weight: f64,
+    pub prescribed_reps: u32,
+    /// Required when `status` is `done`; the schema will not record a set as
+    /// done with no numbers, because that is a hole in every drift query that
+    /// will ever run over this table.
+    pub actual_weight: Option<f64>,
+    pub actual_reps: Option<u32>,
+    pub status: SetStatus,
+}
+
+/// What the server recorded, and where the program stands afterwards.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WorkoutReceipt {
+    pub id: Uuid,
+    pub enrollment_id: Uuid,
+    /// Where in the program this session sat — decided by the server from the
+    /// enrolment's state, not taken from the request (D-11).
+    pub week: u32,
+    pub day: u32,
+    /// True when this submit was a retry of one already accepted, and therefore
+    /// changed nothing. The status code says the same thing: 201 the first time,
+    /// 200 for every retry.
+    pub duplicate: bool,
+    /// Progress *after* the submit. A retry reports the same numbers the first
+    /// attempt did, which is the whole point.
+    pub progress: ProgressView,
+}
+
+/// Records a finished session and advances the program exactly once.
+#[utoipa::path(
+    post,
+    path = "/v1/workouts",
+    tag = "workouts",
+    security(("bearer_token" = [])),
+    request_body = WorkoutSubmission,
+    responses(
+        (status = 201, description = "Recorded, and the program advanced", body = WorkoutReceipt),
+        (status = 200, description = "A retry of a submit already accepted; nothing moved", body = WorkoutReceipt),
+        (status = 401, description = "Missing or invalid access token", body = crate::error::ProblemDetails),
+        (status = 404, description = "No such enrolment belongs to this athlete", body = crate::error::ProblemDetails),
+        (status = 409, description = "The enrolment has nothing left to log, or the id is already used by another enrolment", body = crate::error::ProblemDetails),
+        (status = 413, description = "Too many sets in one submission", body = crate::error::ProblemDetails),
+        (status = 422, description = "The submission is inconsistent", body = crate::error::ProblemDetails),
+    )
+)]
+pub async fn submit(
+    State(state): State<AppState>,
+    athlete: AuthenticatedAthlete,
+    Json(body): Json<WorkoutSubmission>,
+) -> ApiResult<(StatusCode, Json<WorkoutReceipt>)> {
+    validate(&body)?;
+
+    let mut tx = state.db.begin().await?;
+
+    // Ownership first, and in the `where` clause. A 404 rather than a 403 for
+    // another athlete's enrolment, so the API does not confirm that the id names
+    // real data belonging to somebody.
+    //
+    // `for update` is doing real work here — see the module header.
+    let row: Option<(String, serde_json::Value, String)> = sqlx::query_as(
+        "select program_key, state, status from enrollments
+         where id = $1 and athlete_id = $2
+         for update",
+    )
+    .bind(body.enrollment_id)
+    .bind(athlete.athlete_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some((program_key, stored_state, status)) = row else {
+        return Err(ApiError::NotFound);
+    };
+
+    let program = unknown_program(&program_key)?;
+    let program_state = ProgramState::from_json(stored_state);
+
+    // The session the enrolment is currently pointing at, which is the one the
+    // athlete was shown by `next-session` and therefore the one they just did.
+    // The server decides this, not the request: a client naming its own week and
+    // day could log a session the program is not on.
+    let current: Option<Session> = if status == "active" {
+        match program.session(&program_state) {
+            Ok(session) => Some(session),
+            // Not an error yet. A block with nothing left still has to be able
+            // to acknowledge the retry of the submit that ended it.
+            Err(ProgramError::Finished) => None,
+            Err(other) => return Err(other.into()),
+        }
+    } else {
+        None
+    };
+
+    let Some(session) = current else {
+        // Nothing new can be accepted against a closed enrolment, so there is
+        // no insert to attempt and therefore no race a lookup could lose.
+        let (week, day) = already_recorded(&mut tx, body.id, body.enrollment_id)
+            .await?
+            .ok_or_else(|| {
+                ApiError::Conflict(format!(
+                    "this enrolment is {status} and has no session left to log"
+                ))
+            })?;
+
+        let progress = program.progress(&program_state)?;
+        tx.commit().await?;
+
+        return Ok((
+            StatusCode::OK,
+            Json(receipt(&body, week, day, true, progress.into())),
+        ));
+    };
+
+    let week = smallint(session.week, "week")?;
+    let day = smallint(session.day, "day")?;
+
+    // The one statement everything else hangs off. `returning id` yields a row
+    // if and only if this call is the one that inserted it — a `select` first
+    // would leave a window for the retry to slip through, and rows-affected on a
+    // conflict is zero, which is the same signal read a less direct way.
+    let inserted: Option<(Uuid,)> = sqlx::query_as(
+        "insert into workouts
+             (id, enrollment_id, week, day, started_at, ended_at, outcome, cut_reason, notes)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         on conflict (id) do nothing
+         returning id",
+    )
+    .bind(body.id)
+    .bind(body.enrollment_id)
+    .bind(week)
+    .bind(day)
+    .bind(body.started_at)
+    .bind(body.ended_at)
+    .bind(body.outcome.as_str())
+    .bind(body.cut_reason.map(CutReason::as_str))
+    .bind(body.notes.as_deref())
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if inserted.is_none() {
+        // The retry. Nothing was written, `advance()` is not run, and the state
+        // read above is already the advanced one — so the numbers reported here
+        // are the same numbers the first attempt reported.
+        let (week, day) = already_recorded(&mut tx, body.id, body.enrollment_id)
+            .await?
+            .ok_or_else(|| {
+                ApiError::Internal(
+                    "a workout insert conflicted on a row that then could not be read".to_owned(),
+                )
+            })?;
+
+        let progress = program.progress(&program_state)?;
+        tx.commit().await?;
+
+        return Ok((
+            StatusCode::OK,
+            Json(receipt(&body, week, day, true, progress.into())),
+        ));
+    }
+
+    insert_sets(&mut tx, body.id, &body.sets).await?;
+
+    // The program advances regardless of how the session went (D-08). Repeating
+    // a session because life interrupted it is precisely the guilt loop D-06
+    // exists to avoid, and a completeness threshold would force every program
+    // author to invent one.
+    let logged = LoggedSession {
+        week: session.week,
+        day: session.day,
+        sets: body.sets.iter().map(LoggedSet::from).collect(),
+        cut_reason: body.cut_reason.map(Into::into),
+    };
+
+    let advanced = program.advance(program_state, &logged)?;
+    let progress = program.progress(&advanced)?;
+
+    // A fixed block that has run out closes here rather than lingering as an
+    // `active` enrolment that prescribes nothing. Status and `ended_at` move
+    // together because the schema will not have it otherwise: an enrolment is
+    // either running or it is over, and "over" has a time.
+    let persist = if progress.is_finished() {
+        "update enrollments
+         set state = $1::jsonb, status = 'finished', ended_at = now()
+         where id = $2"
+    } else {
+        "update enrollments set state = $1::jsonb where id = $2"
+    };
+
+    sqlx::query(persist)
+        .bind(advanced.as_json().clone())
+        .bind(body.enrollment_id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(receipt(&body, week, day, false, progress.into())),
+    ))
+}
+
+fn receipt(
+    body: &WorkoutSubmission,
+    week: i16,
+    day: i16,
+    duplicate: bool,
+    progress: ProgressView,
+) -> WorkoutReceipt {
+    WorkoutReceipt {
+        id: body.id,
+        enrollment_id: body.enrollment_id,
+        week: u32::try_from(week).unwrap_or_default(),
+        day: u32::try_from(day).unwrap_or_default(),
+        duplicate,
+        progress,
+    }
+}
+
+/// Where a workout id that is already taken actually sits.
+///
+/// Called only once an insert has conflicted, or once it is known that no insert
+/// will be attempted — never speculatively, which is what would make it a race.
+///
+/// The `Some(_)` arm is the case worth being explicit about: the id exists, but
+/// under a different enrolment, possibly another athlete's. Answering 200 there
+/// would tell the client its workout landed when it did not, so it is a
+/// conflict — and the detail is neutral, since the alternative is confirming
+/// nothing while lying about the write.
+async fn already_recorded(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workout_id: Uuid,
+    enrollment_id: Uuid,
+) -> ApiResult<Option<(i16, i16)>> {
+    let row: Option<(Uuid, i16, i16)> =
+        sqlx::query_as("select enrollment_id, week, day from workouts where id = $1")
+            .bind(workout_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+
+    match row {
+        Some((owner, week, day)) if owner == enrollment_id => Ok(Some((week, day))),
+        Some(_) => Err(ApiError::Conflict(
+            "that workout id is already in use".to_owned(),
+        )),
+        None => Ok(None),
+    }
+}
+
+/// Writes every set of the session in one statement.
+///
+/// One `insert ... select from unnest(...)` rather than a statement per set,
+/// because this runs inside a transaction holding a row lock on the enrolment
+/// and forty round trips is forty times as long to hold it.
+///
+/// The `::numeric` casts are not decoration: `prescribed_weight` and
+/// `actual_weight` are `numeric(6,2)` and sqlx sends an `f64` as `float8`, so
+/// the conversion is written where it can be seen rather than left to Postgres'
+/// assignment-cast rules.
+///
+/// The unnest column is aliased `slot` rather than `position` for one reason:
+/// `position` is a keyword with a `position(sub in str)` production of its own,
+/// and while it is legal as a column alias, this is the one statement in the
+/// codebase with no test that can prove it before the next session has a
+/// database. The target column stays `"position"`, quoted, as the schema has it.
+async fn insert_sets(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workout_id: Uuid,
+    sets: &[SubmittedSet],
+) -> ApiResult<()> {
+    if sets.is_empty() {
+        return Ok(());
+    }
+
+    let mut exercises: Vec<String> = Vec::with_capacity(sets.len());
+    let mut positions: Vec<i16> = Vec::with_capacity(sets.len());
+    let mut prescribed_weights: Vec<f64> = Vec::with_capacity(sets.len());
+    let mut prescribed_reps: Vec<i16> = Vec::with_capacity(sets.len());
+    let mut actual_weights: Vec<Option<f64>> = Vec::with_capacity(sets.len());
+    let mut actual_reps: Vec<Option<i16>> = Vec::with_capacity(sets.len());
+    let mut statuses: Vec<String> = Vec::with_capacity(sets.len());
+
+    for set in sets {
+        exercises.push(set.exercise.trim().to_owned());
+        positions.push(i16::try_from(set.position).map_err(|_| {
+            ApiError::Validation(format!("position {} is out of range", set.position))
+        })?);
+        prescribed_weights.push(set.prescribed_weight);
+        prescribed_reps.push(smallint(set.prescribed_reps, "prescribed_reps")?);
+        actual_weights.push(set.actual_weight);
+        actual_reps.push(
+            set.actual_reps
+                .map(|reps| smallint(reps, "actual_reps"))
+                .transpose()?,
+        );
+        statuses.push(set.status.as_str().to_owned());
+    }
+
+    sqlx::query(
+        "insert into workout_sets
+             (workout_id, exercise, \"position\", prescribed_weight, prescribed_reps,
+              actual_weight, actual_reps, status)
+         select $1,
+                logged.exercise,
+                logged.slot,
+                logged.prescribed_weight::numeric,
+                logged.prescribed_reps,
+                logged.actual_weight::numeric,
+                logged.actual_reps,
+                logged.status
+         from unnest($2::text[], $3::int2[], $4::float8[], $5::int2[],
+                     $6::float8[], $7::int2[], $8::text[])
+              as logged(exercise, slot, prescribed_weight, prescribed_reps,
+                        actual_weight, actual_reps, status)",
+    )
+    .bind(workout_id)
+    .bind(&exercises)
+    .bind(&positions)
+    .bind(&prescribed_weights)
+    .bind(&prescribed_reps)
+    .bind(&actual_weights)
+    .bind(&actual_reps)
+    .bind(&statuses)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+/// Everything about a submission that can be judged without the database.
+///
+/// Each of these has a matching `check` constraint on the table, and that is the
+/// point of doing them here: a constraint violation surfaces as a 500 with
+/// "an internal error occurred", which tells a client with a queued offline
+/// workout nothing at all about why it will never be accepted.
+fn validate(body: &WorkoutSubmission) -> ApiResult<()> {
+    if body.ended_at < body.started_at {
+        return Err(ApiError::Validation(
+            "a session cannot end before it started".to_owned(),
+        ));
+    }
+
+    match (body.outcome, body.cut_reason) {
+        (WorkoutOutcome::CutShort, None) => {
+            return Err(ApiError::Validation(
+                "a session that was cut short must say why".to_owned(),
+            ))
+        }
+        (WorkoutOutcome::Completed, Some(_)) => {
+            return Err(ApiError::Validation(
+                "only a session that was cut short carries a reason".to_owned(),
+            ))
+        }
+        _ => {}
+    }
+
+    if body.sets.len() > MAX_SETS {
+        return Err(ApiError::PayloadTooLarge(format!(
+            "a session may carry at most {MAX_SETS} sets"
+        )));
+    }
+
+    if body
+        .notes
+        .as_deref()
+        .is_some_and(|notes| notes.chars().count() > MAX_NOTES_LENGTH)
+    {
+        return Err(ApiError::Validation(format!(
+            "notes must be at most {MAX_NOTES_LENGTH} characters"
+        )));
+    }
+
+    let mut positions = BTreeSet::new();
+
+    for set in &body.sets {
+        // `workout_sets` is unique on `(workout_id, position)`, because two sets
+        // claiming the same slot make the session's order arbitrary — and it is
+        // an offline, retrying client that decides these numbers.
+        if !positions.insert(set.position) {
+            return Err(ApiError::Validation(format!(
+                "two sets both claim position {}",
+                set.position
+            )));
+        }
+
+        if i16::try_from(set.position).is_err() {
+            return Err(ApiError::Validation(format!(
+                "position {} is out of range",
+                set.position
+            )));
+        }
+
+        if set.exercise.trim().is_empty() {
+            return Err(ApiError::Validation(
+                "every set names the exercise it belongs to".to_owned(),
+            ));
+        }
+
+        weight(set.prescribed_weight, "prescribed_weight")?;
+        if let Some(actual) = set.actual_weight {
+            weight(actual, "actual_weight")?;
+        }
+
+        if set.prescribed_reps == 0 || set.prescribed_reps > MAX_REPS {
+            return Err(ApiError::Validation(format!(
+                "prescribed_reps must be between 1 and {MAX_REPS}"
+            )));
+        }
+
+        if set.actual_reps.is_some_and(|reps| reps > MAX_REPS) {
+            return Err(ApiError::Validation(format!(
+                "actual_reps must be at most {MAX_REPS}"
+            )));
+        }
+
+        // The converse is left permissive on purpose, matching the schema: a
+        // pending set carrying a half-entered weight is odd but not a lie, and
+        // refusing the submit would cost the athlete the whole session's data
+        // over one field they touched.
+        if matches!(set.status, SetStatus::Done)
+            && (set.actual_weight.is_none() || set.actual_reps.is_none())
+        {
+            return Err(ApiError::Validation(format!(
+                "the set at position {} is marked done but records no weight or reps",
+                set.position
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn weight(value: f64, field: &str) -> ApiResult<()> {
+    if !value.is_finite() || !(0.0..=MAX_WEIGHT_KG).contains(&value) {
+        return Err(ApiError::Validation(format!(
+            "{field} must be a weight in kilograms between 0 and {MAX_WEIGHT_KG}"
+        )));
+    }
+
+    Ok(())
+}
+
+/// Narrows to the `smallint` the schema uses, with the caller's field name in
+/// the refusal rather than a bare overflow.
+fn smallint(value: u32, field: &str) -> ApiResult<i16> {
+    i16::try_from(value)
+        .map_err(|_| ApiError::Validation(format!("{field} is out of range: {value}")))
+}
+
+impl WorkoutOutcome {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Completed => "completed",
+            Self::CutShort => "cut_short",
+        }
+    }
+}
+
+impl CutReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::OutOfTime => "out_of_time",
+            Self::Pain => "pain",
+            Self::Equipment => "equipment",
+            Self::Enough => "enough",
+        }
+    }
+}
+
+impl SetStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Done => "done",
+            Self::Skipped => "skipped",
+            Self::Pending => "pending",
+        }
+    }
+}
+
+impl From<CutReason> for athletos_training::CutReason {
+    fn from(reason: CutReason) -> Self {
+        match reason {
+            CutReason::OutOfTime => Self::OutOfTime,
+            CutReason::Pain => Self::Pain,
+            CutReason::Equipment => Self::Equipment,
+            CutReason::Enough => Self::Enough,
+        }
+    }
+}
+
+impl From<SetStatus> for athletos_training::SetStatus {
+    fn from(status: SetStatus) -> Self {
+        match status {
+            SetStatus::Done => Self::Done,
+            SetStatus::Skipped => Self::Skipped,
+            SetStatus::Pending => Self::Pending,
+        }
+    }
+}
+
+impl From<&SubmittedSet> for LoggedSet {
+    fn from(set: &SubmittedSet) -> Self {
+        Self {
+            exercise: set.exercise.trim().to_owned(),
+            position: set.position,
+            prescribed_weight: set.prescribed_weight,
+            prescribed_reps: set.prescribed_reps,
+            actual_weight: set.actual_weight,
+            actual_reps: set.actual_reps,
+            status: set.status.into(),
+        }
+    }
+}

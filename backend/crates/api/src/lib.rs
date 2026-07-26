@@ -36,10 +36,27 @@ pub fn app(state: AppState) -> Router {
         .route("/health/ready", get(routes::health::ready))
         // Everything a client calls lives under `/v1` from the first commit
         // (D-12) — retrofitting the prefix later means touching every client.
+        .route("/v1/auth/register", post(routes::auth::register))
         .route("/v1/auth/login", post(routes::auth::login))
         .route("/v1/auth/refresh", post(routes::auth::refresh))
         .route("/v1/auth/logout", post(routes::auth::logout))
         .route("/v1/auth/me", get(routes::auth::me))
+        // The catalogue is a `static`, not a table (D-03).
+        .route("/v1/programs", get(routes::programs::list))
+        .route("/v1/programs/{key}", get(routes::programs::detail))
+        .route(
+            "/v1/athlete/maxes",
+            get(routes::maxes::show).put(routes::maxes::replace),
+        )
+        .route("/v1/enrollments", post(routes::enrollments::create))
+        // Read-only, and it must stay that way: peeking at the session is not
+        // committing to it, and only committing starts the clock (D-08).
+        .route(
+            "/v1/enrollments/{id}/next-session",
+            get(routes::enrollments::next_session),
+        )
+        // Idempotent on a client-minted id (D-09).
+        .route("/v1/workouts", post(routes::workouts::submit))
         // Served at the RFC 8615 well-known location so any future verifier can
         // discover it without configuration. Deliberately *not* under `/v1`:
         // the path is fixed by the RFC, not by us.

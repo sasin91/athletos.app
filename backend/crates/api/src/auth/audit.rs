@@ -7,6 +7,7 @@ use crate::auth::refresh::DeviceContext;
 /// enumerated here so the vocabulary stays stable enough to query.
 #[derive(Debug, Clone, Copy)]
 pub enum AuthAction {
+    Registered,
     LoginSucceeded,
     LoginFailed,
     LoggedOut,
@@ -15,6 +16,7 @@ pub enum AuthAction {
 impl AuthAction {
     fn as_str(self) -> &'static str {
         match self {
+            Self::Registered => "auth.register",
             Self::LoginSucceeded => "auth.login.succeeded",
             Self::LoginFailed => "auth.login.failed",
             Self::LoggedOut => "auth.logout",

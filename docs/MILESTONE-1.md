@@ -215,16 +215,53 @@ GET    /v1/enrollments/{id}/next-session      READ-ONLY. no timer. (D-08)
 POST   /v1/workouts                   idempotent, client UUIDv7 (D-09)
 ```
 
-- [ ] `POST /v1/workouts` → `ON CONFLICT (id) DO NOTHING`, and `advance()` runs
+- [x] `POST /v1/workouts` → `ON CONFLICT (id) DO NOTHING`, and `advance()` runs
       **only** when the insert actually inserted.
-- [ ] Accept `pending` and `skipped` sets in the payload — the client sends what
+- [x] Accept `pending` and `skipped` sets in the payload — the client sends what
       was prescribed-but-not-done (D-08).
-- [ ] Accept `cut_reason`; advance regardless.
-- [ ] Commit the generated `openapi.json`; add the `oasdiff` CI gate (D-12).
+- [x] Accept `cut_reason`; advance regardless.
+- [x] Commit the generated `openapi.json` (`backend/openapi.json`).
+- [ ] Add the `oasdiff` CI gate (D-12). **Not done** — there is no CI yet.
 
 **Done when:** an `axum-test` case POSTs the same workout body **twice** and
 asserts the training max advanced exactly once. This is the correctness test
 the whole idempotency decision exists for.
+
+> The tests are written and compile; **none of them have been run**, because the
+> machine still has no Postgres (see DEVELOPMENT.md). Running them is the first
+> task of the next session.
+
+### What building it taught
+
+**`numeric` and `f64` do not meet.** sqlx will not decode a Postgres `numeric`
+into an `f64` — it wants `bigdecimal` or `rust_decimal`, a dependency bought for
+two decimal places of kilograms. `numeric(6,2)` is still the right column type
+(phase 1's reasoning holds: 0.1 kg of binary rounding error in a prescribed
+weight is a support ticket), so every query that touches a weight carries an
+explicit cast instead: `::float8` reading, `::numeric` writing. Recorded because
+it is invisible from the schema and will bite the next query written.
+
+**Idempotency and "the block is over" collide, and the order resolves it.** A
+fixed block closes its enrolment on the last submit. The queued *retry* of that
+same submit then arrives against an enrolment that is already `finished` — so
+"refuse writes to a closed enrolment" and "a retry must always succeed" cannot
+both be checked first. The status check therefore happens **after** the insert
+has been attempted (or, when the program has nothing left to prescribe, in place
+of it), which is not a case D-08 or D-09 anticipated and is the sort of thing
+only writing the handler surfaces.
+
+**A PWA cannot resolve an exercise key.** The engine deliberately puts only the
+key in a `Block`, on the grounds that consumers resolve it through the static
+registry. The API is such a consumer; the browser is not, and giving it its own
+`/v1/exercises` to cache would be a second round trip before the first session
+renders. So labels and cues are resolved server-side and travel inside the
+session payload. Nothing is stored that way — the objection the engine records is
+to *persisting* a copy of the registry, and that still holds.
+
+**There is no `GET /v1/enrollments`.** Phase 4 has no way to find the athlete's
+active enrolment after a reload except by remembering the id the `POST`
+returned. Additive, so it can be added without breaking anything (D-12), but it
+is a hole phase 4 will walk into on its first page refresh.
 
 ---
 

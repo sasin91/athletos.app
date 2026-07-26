@@ -488,6 +488,13 @@ this one but a philosophy.
   and `sqlx::migrate!` only reads the directory — but nothing that touches a
   database has been executed. The two acceptance tests that matter most
   (double-POST idempotency, offline round-trip) are blocked on this.
+
+  > Phase 3 amendment: the double-POST test is now **written** — it drives a
+  > full 5/3/1 cycle submitting every session twice and asserts the training max
+  > moved by exactly one increment — along with the rest of the training feature
+  > suite. It compiles. It has never run. Nothing about the API's SQL is
+  > verified, only that it type-checks and that the driver will accept the
+  > binds.
 - **Deployment.** Untouched. Two services (Axum + Node) plus Postgres.
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.

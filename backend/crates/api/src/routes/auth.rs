@@ -17,7 +17,7 @@ use uuid::Uuid;
 use crate::auth::audit::{self, AuthAction};
 use crate::auth::extractor::bearer_token;
 use crate::auth::keys::Jwks;
-use crate::auth::password::{hash_password, verify_password};
+use crate::auth::password::{hash_password, verify_password, PasswordContext};
 use crate::auth::refresh::{self, DeviceContext};
 use crate::auth::token::{issue_access_token, verify_access_token};
 use crate::auth::{denylist, throttle, AuthenticatedAthlete};
@@ -29,6 +29,19 @@ use crate::state::AppState;
 pub const MAX_EMAIL_LENGTH: usize = 254;
 
 pub const MAX_DISPLAY_NAME_LENGTH: usize = 128;
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct RegisterRequest {
+    #[schema(example = "athlete@example.com")]
+    pub email: String,
+    /// The athlete's own name, shown back to them and used as context the
+    /// password may not be built out of.
+    #[schema(example = "Alex Berg")]
+    pub display_name: String,
+    /// Checked against the guessability policy of NIST SP 800-63B-4 §3.1.1.2
+    /// before the account exists — see `auth::password`.
+    pub password: String,
+}
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
@@ -65,6 +78,108 @@ pub struct TokenPair {
     pub refresh_token: String,
     /// When the refresh token stops working, RFC 3339.
     pub refresh_token_expires_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Creates an athlete and signs them straight in.
+///
+/// Registration is open (D-02). The inherited design was invitation-only, with a
+/// `bootstrap` binary that refused to run twice; that is the wrong shape for a
+/// product whose unit is one athlete.
+///
+/// Three things about this handler are deliberate.
+///
+/// **It answers 409 when the address is taken**, which is an account
+/// enumeration oracle, and there is no way to build an open registration
+/// endpoint without one: the alternative — accept everything and say "check your
+/// email" — requires mail, and v1 has no SMTP by decision (D-02, D-14). Saying
+/// so plainly is better than a refusal the athlete cannot act on. The detail
+/// text is neutral about *why*, so it reads the same to whoever receives it.
+///
+/// **The password is checked before it is hashed and before the row exists.**
+/// The policy needs the address and the name as context — they are the first two
+/// things anyone guessing this account tries — so validation has to run in this
+/// order rather than in the order the fields arrive.
+///
+/// **It is not throttled.** `auth::throttle` exists to bound guessing against an
+/// address that already has an account (SP 800-63B-4 §3.2.2), and there is
+/// nothing here to guess. What does bound this endpoint is the Argon2 hash it
+/// spends before touching the database, including on a duplicate address.
+#[utoipa::path(
+    post,
+    path = "/v1/auth/register",
+    tag = "auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "The account exists and is signed in", body = TokenPair),
+        (status = 409, description = "An account already uses that address", body = crate::error::ProblemDetails),
+        (status = 422, description = "The address, name or password was refused", body = crate::error::ProblemDetails),
+    )
+)]
+pub async fn register(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<RegisterRequest>,
+) -> ApiResult<(StatusCode, Json<TokenPair>)> {
+    let device = device_context(&headers);
+
+    let email = validate_email(&body.email)?;
+    let display_name = validate_display_name(&body.display_name)?;
+
+    state
+        .auth
+        .passwords
+        .check(
+            &body.password,
+            PasswordContext {
+                email: &email,
+                display_name: &display_name,
+            },
+        )
+        .await?;
+
+    let password_hash = hash_password(body.password).await?;
+    let athlete_id = Uuid::now_v7();
+
+    let inserted = sqlx::query(
+        "insert into athletes (id, email, display_name, password_hash)
+         values ($1, $2, $3, $4)",
+    )
+    .bind(athlete_id)
+    .bind(&email)
+    .bind(&display_name)
+    .bind(&password_hash)
+    .execute(&state.db)
+    .await;
+
+    // Caught by SQLSTATE rather than by `on conflict`, because the index that
+    // enforces this is both an expression index and a partial one
+    // (`lower(email) where deleted_at is null`), and naming it correctly for
+    // arbiter inference is a detail this handler should not have to be right
+    // about. It also gets the soft-delete case free: re-registering an address
+    // whose old account was deleted does not conflict, and must not.
+    if let Err(sqlx::Error::Database(error)) = &inserted {
+        if error.is_unique_violation() {
+            return Err(ApiError::Conflict(
+                "that email address cannot be registered".to_owned(),
+            ));
+        }
+    }
+    inserted?;
+
+    // Deliberately outside the insert's transaction. Should issuing the token
+    // pair fail here, the account still exists and `/v1/auth/login` works with
+    // the password just chosen — a worse first impression than a clean rollback,
+    // but a recoverable one, and folding the two together would mean exposing
+    // `refresh::insert` purely so this handler could hold the transaction.
+    let issued =
+        refresh::issue_new_family(&state.db, &state.auth.config, athlete_id, &device).await?;
+
+    audit::record(&state.db, AuthAction::Registered, Some(athlete_id), &device).await;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(token_pair(&state, athlete_id, issued)?),
+    ))
 }
 
 /// Exchanges an athlete's email and password for a token pair.

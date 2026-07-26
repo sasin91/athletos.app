@@ -63,7 +63,7 @@ cargo check --workspace --all-targets
 cargo test  -p athletos-training       # pure, no database
 cargo test  --workspace                # needs DATABASE_URL
 cargo run   --bin api
-cargo run   --bin openapi > openapi.json   # no database needed
+cargo run   --bin openapi -- openapi.json  # no database needed; committed
 cargo run   --bin set-password             # the only password recovery (D-02)
 
 # frontend
@@ -80,4 +80,10 @@ npm run check
   `reqwest`'s `rustls-tls` — builds C and assembly through `cc`.
 - `cargo run --bin openapi` works from a checkout alone, by design (D-11). It
   is how the frontend's TypeScript client is generated, and it is the one piece
-  of backend tooling that is not blocked on the database.
+  of backend tooling that is not blocked on the database. The generated document
+  is committed at **`backend/openapi.json`** and is what phase 4 consumes;
+  regenerate and commit it in the same change as any handler or DTO edit.
+- Every weight column is `numeric(6,2)` and sqlx will not decode one into an
+  `f64` without `bigdecimal` or `rust_decimal`. The casts are written into the
+  SQL instead — `weight::float8` on the way out, `$n::numeric` on the way in.
+  A new query that forgets one fails at runtime, not at compile time.
