@@ -86,20 +86,53 @@ pub enum EnrollmentStatus {
 }
 
 impl EnrollmentStatus {
+    /// The vocabulary, in one place, so the two parsers below cannot disagree
+    /// about it and neither can drift from the `check` constraint.
+    const NAMES: [&'static str; 3] = ["active", "finished", "abandoned"];
+
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "active" => Some(Self::Active),
+            "finished" => Some(Self::Finished),
+            "abandoned" => Some(Self::Abandoned),
+            _ => None,
+        }
+    }
+
     /// Reads the vocabulary back out of the `text` column.
     ///
     /// A `check` constraint restricts the column to these three, so an unknown
     /// value means the constraint and this enum have drifted apart — our
     /// problem, and not something to explain to a client.
     fn parse(stored: &str) -> ApiResult<Self> {
-        match stored {
-            "active" => Ok(Self::Active),
-            "finished" => Ok(Self::Finished),
-            "abandoned" => Ok(Self::Abandoned),
-            other => Err(ApiError::Internal(format!(
-                "an enrolment has status {other}, which is not a status"
-            ))),
-        }
+        Self::from_name(stored).ok_or_else(|| {
+            ApiError::Internal(format!(
+                "an enrolment has status {stored}, which is not a status"
+            ))
+        })
+    }
+
+    /// Reads the same vocabulary out of a query string.
+    ///
+    /// Deliberately *not* [`Self::parse`], though it was at first and the
+    /// difference is the whole point. That one answers "the database holds
+    /// something impossible", which is a 500. This one answers "you asked for
+    /// `?status=activ`", which is the client's typo and a 422 naming the three
+    /// legal values. Sharing one function gave `?status=activ` a 500 and an
+    /// opaque "an internal error occurred" — a bug that only surfaced once
+    /// there was a database to run the test against.
+    ///
+    /// This is the running cost of `text` + `check` over a Postgres enum
+    /// (chosen in the training migration for D-12 reasons): a vocabulary that
+    /// is a string on both sides of the process has two parsers, and they fail
+    /// differently.
+    fn from_query(supplied: &str) -> ApiResult<Self> {
+        Self::from_name(supplied).ok_or_else(|| {
+            ApiError::Validation(format!(
+                "`status` must be one of {}, not `{supplied}`",
+                Self::NAMES.join(", ")
+            ))
+        })
     }
 }
 
@@ -338,8 +371,11 @@ pub async fn list(
     // Parsed here purely to refuse an unknown value up front. Left unparsed it
     // would simply match nothing, and "no enrolments" is the wrong answer to
     // "?status=activ".
+    //
+    // `from_query`, not `parse` — the client's typo is a 422, while the same
+    // string arriving out of the database would be a 500.
     if let Some(status) = &filter.status {
-        EnrollmentStatus::parse(status)?;
+        EnrollmentStatus::from_query(status)?;
     }
 
     // `enrollments_athlete_id_idx (athlete_id, started_at desc)` serves the
