@@ -1,0 +1,96 @@
+#!/bin/sh
+#
+# PROVIDE: athletos_api
+# REQUIRE: LOGIN FILESYSTEMS
+# KEYWORD: shutdown
+#
+# The Rust API, run inside a jail.
+#
+# Everything that differs between blue and green comes from the jail's own
+# /etc/rc.conf; everything secret comes from /usr/local/etc/athletos/env, which
+# is nullfs-mounted read-only from the host at 0600. The script itself is
+# static — it lives in the shared read-only base and is identical in both jails.
+#
+# rc.conf variables:
+#
+#   athletos_api_enable       (bool)   NO
+#   athletos_api_user         (str)    athletos
+#   athletos_api_root         (str)    /srv/athletos/current
+#   athletos_api_bind         (str)    0.0.0.0:8080
+#   athletos_api_env_file     (str)    /usr/local/etc/athletos/env
+#   athletos_api_key_file     (str)    /usr/local/etc/athletos/signing-key.pem
+#   athletos_api_log          (str)    /var/log/athletos/api.log
+
+# rc.subr reads `name`, `rcvar`, `desc`, `command`, `command_args`, `pidfile`
+# and `start_precmd` out of this script's environment rather than being passed
+# them, so every one of them looks unused to a linter and is not.
+# shellcheck disable=SC2034
+
+# shellcheck source=/dev/null
+. /etc/rc.subr
+
+name="athletos_api"
+rcvar="athletos_api_enable"
+desc="AthletOS API"
+
+load_rc_config $name
+
+: "${athletos_api_enable:=NO}"
+: "${athletos_api_user:=athletos}"
+: "${athletos_api_root:=/srv/athletos/current}"
+: "${athletos_api_bind:=0.0.0.0:8080}"
+: "${athletos_api_env_file:=/usr/local/etc/athletos/env}"
+: "${athletos_api_key_file:=/usr/local/etc/athletos/signing-key.pem}"
+: "${athletos_api_log:=/var/log/athletos/api.log}"
+
+pidfile="/var/run/${name}.pid"
+
+# daemon(8) supervises: -r restarts the child if it dies, -R spaces the
+# restarts out so a binary that exits immediately does not spin. Caddy's active
+# health checks notice the gap and route around this jail while it flaps; a
+# release that never comes up is caught by deploy.sh's health gate and rolled
+# back rather than left restarting forever.
+command="/usr/sbin/daemon"
+command_args="-r -R 5 -P ${pidfile} -t ${desc} -u ${athletos_api_user} \
+    -o ${athletos_api_log} -- ${athletos_api_root}/api"
+
+start_precmd="athletos_api_prestart"
+
+athletos_api_prestart()
+{
+	if [ ! -x "${athletos_api_root}/api" ]; then
+		err 1 "${athletos_api_root}/api is missing — has anything been deployed?"
+	fi
+
+	install -d -o "${athletos_api_user}" -m 0750 "$(dirname "${athletos_api_log}")"
+
+	if [ ! -r "${athletos_api_env_file}" ]; then
+		err 1 "${athletos_api_env_file} is missing or unreadable"
+	fi
+
+	# `set -a` so the file can be a plain list of KEY=value with no `export`
+	# on every line — it is the same file format .env uses in development,
+	# and it is read by dotenvy there and by sh here.
+	set -a
+	# shellcheck source=/dev/null
+	. "${athletos_api_env_file}"
+	set +a
+
+	# The signing key is its own file, root-owned and 0400, and is read here
+	# — as root, before daemon(8) drops to ${athletos_api_user}. The service
+	# account therefore never has permission to read the key it signs with,
+	# and no PEM has to survive a round trip through a shell-sourced env
+	# file.
+	if [ -r "${athletos_api_key_file}" ]; then
+		AUTH_SIGNING_KEY_PEM=$(cat "${athletos_api_key_file}")
+		export AUTH_SIGNING_KEY_PEM
+	fi
+
+	BIND_ADDR="${athletos_api_bind}"
+	export BIND_ADDR
+
+	: "${RUST_LOG:=info,tower_http=warn}"
+	export RUST_LOG
+}
+
+run_rc_command "$1"

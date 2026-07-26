@@ -1,7 +1,7 @@
 //! Ed25519 signing and verification keys, and the JWKS derived from them.
 //!
 //! ADR-0003 chose an asymmetric algorithm now, before anything external needs
-//! it, so that a future "Login with PixMyDay" is additive rather than a token
+//! it, so that a future "Login with AthletOS" is additive rather than a token
 //! format migration. That decision lives here: one signing key plus any number
 //! of verification keys, keyed by `kid`.
 

@@ -1,7 +1,7 @@
 //! Authentication endpoints (ADR-0003).
 //!
-//! The Nuxt BFF keeps the refresh token in an httpOnly cookie and attaches the
-//! access token when it calls this API (ADR-0002); a mobile app does the same
+//! The SvelteKit BFF keeps the refresh token in an httpOnly cookie and attaches
+//! the access token when it calls this API (D-11); a mobile app does the same
 //! directly. Neither cookie handling nor CSRF lives here — this API speaks
 //! bearer tokens only, which is what keeps the two clients symmetric.
 
@@ -17,18 +17,31 @@ use uuid::Uuid;
 use crate::auth::audit::{self, AuthAction};
 use crate::auth::extractor::bearer_token;
 use crate::auth::keys::Jwks;
-use crate::auth::password::{hash_password, verify_password};
+use crate::auth::password::{hash_password, verify_password, PasswordContext};
 use crate::auth::refresh::{self, DeviceContext};
 use crate::auth::token::{issue_access_token, verify_access_token};
-use crate::auth::{denylist, throttle, Authenticatedathlete};
+use crate::auth::{denylist, throttle, AuthenticatedAthlete};
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
 /// The longest address this API accepts anywhere, from the RFC 5321 §4.5.3.1.3
 /// forward-path limit of 256 octets minus the enclosing angle brackets.
-pub(crate) const MAX_EMAIL_LENGTH: usize = 254;
+pub const MAX_EMAIL_LENGTH: usize = 254;
 
-pub(crate) const MAX_DISPLAY_NAME_LENGTH: usize = 128;
+pub const MAX_DISPLAY_NAME_LENGTH: usize = 128;
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct RegisterRequest {
+    #[schema(example = "athlete@example.com")]
+    pub email: String,
+    /// The athlete's own name, shown back to them and used as context the
+    /// password may not be built out of.
+    #[schema(example = "Alex Berg")]
+    pub display_name: String,
+    /// Checked against the guessability policy of NIST SP 800-63B-4 §3.1.1.2
+    /// before the account exists — see `auth::password`.
+    pub password: String,
+}
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
@@ -51,7 +64,7 @@ pub struct LogoutRequest {
 }
 
 /// A new pair of credentials. The refresh token is single-use: the next call to
-/// `/auth/refresh` invalidates it and returns its successor.
+/// `/v1/auth/refresh` invalidates it and returns its successor.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TokenPair {
     /// Ed25519-signed JWT. Verifiable against `/.well-known/jwks.json`.
@@ -67,20 +80,112 @@ pub struct TokenPair {
     pub refresh_token_expires_at: chrono::DateTime<chrono::Utc>,
 }
 
-// There is deliberately no `POST /auth/register` (ADR-0016). Registration is
-// invitation-only: an account comes from `POST /auth/invitations/accept`
-// (`routes::invitations`) or from the one-shot `bootstrap` binary, and nothing
-// else. The endpoint that used to live here answered 409 for an address that
-// already had an account, which made it a free account-enumeration oracle over
-// a population defined by supporting an autistic person — see
-// `docs/dpia-inputs.md`. The accept endpoint that replaced it takes no email
-// address at all: the address comes from the invitation row, so there is
-// nothing for a caller to probe with.
-
-/// Exchanges a athlete's email and password for a token pair.
+/// Creates an athlete and signs them straight in.
+///
+/// Registration is open (D-02). The inherited design was invitation-only, with a
+/// `bootstrap` binary that refused to run twice; that is the wrong shape for a
+/// product whose unit is one athlete.
+///
+/// Three things about this handler are deliberate.
+///
+/// **It answers 409 when the address is taken**, which is an account
+/// enumeration oracle, and there is no way to build an open registration
+/// endpoint without one: the alternative — accept everything and say "check your
+/// email" — requires mail, and v1 has no SMTP by decision (D-02, D-14). Saying
+/// so plainly is better than a refusal the athlete cannot act on. The detail
+/// text is neutral about *why*, so it reads the same to whoever receives it.
+///
+/// **The password is checked before it is hashed and before the row exists.**
+/// The policy needs the address and the name as context — they are the first two
+/// things anyone guessing this account tries — so validation has to run in this
+/// order rather than in the order the fields arrive.
+///
+/// **It is not throttled.** `auth::throttle` exists to bound guessing against an
+/// address that already has an account (SP 800-63B-4 §3.2.2), and there is
+/// nothing here to guess. What does bound this endpoint is the Argon2 hash it
+/// spends before touching the database, including on a duplicate address.
 #[utoipa::path(
     post,
-    path = "/auth/login",
+    path = "/v1/auth/register",
+    tag = "auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "The account exists and is signed in", body = TokenPair),
+        (status = 409, description = "An account already uses that address", body = crate::error::ProblemDetails),
+        (status = 422, description = "The address, name or password was refused", body = crate::error::ProblemDetails),
+    )
+)]
+pub async fn register(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<RegisterRequest>,
+) -> ApiResult<(StatusCode, Json<TokenPair>)> {
+    let device = device_context(&headers);
+
+    let email = validate_email(&body.email)?;
+    let display_name = validate_display_name(&body.display_name)?;
+
+    state
+        .auth
+        .passwords
+        .check(
+            &body.password,
+            PasswordContext {
+                email: &email,
+                display_name: &display_name,
+            },
+        )
+        .await?;
+
+    let password_hash = hash_password(body.password).await?;
+    let athlete_id = Uuid::now_v7();
+
+    let inserted = sqlx::query(
+        "insert into athletes (id, email, display_name, password_hash)
+         values ($1, $2, $3, $4)",
+    )
+    .bind(athlete_id)
+    .bind(&email)
+    .bind(&display_name)
+    .bind(&password_hash)
+    .execute(&state.db)
+    .await;
+
+    // Caught by SQLSTATE rather than by `on conflict`, because the index that
+    // enforces this is both an expression index and a partial one
+    // (`lower(email) where deleted_at is null`), and naming it correctly for
+    // arbiter inference is a detail this handler should not have to be right
+    // about. It also gets the soft-delete case free: re-registering an address
+    // whose old account was deleted does not conflict, and must not.
+    if let Err(sqlx::Error::Database(error)) = &inserted {
+        if error.is_unique_violation() {
+            return Err(ApiError::Conflict(
+                "that email address cannot be registered".to_owned(),
+            ));
+        }
+    }
+    inserted?;
+
+    // Deliberately outside the insert's transaction. Should issuing the token
+    // pair fail here, the account still exists and `/v1/auth/login` works with
+    // the password just chosen — a worse first impression than a clean rollback,
+    // but a recoverable one, and folding the two together would mean exposing
+    // `refresh::insert` purely so this handler could hold the transaction.
+    let issued =
+        refresh::issue_new_family(&state.db, &state.auth.config, athlete_id, &device).await?;
+
+    audit::record(&state.db, AuthAction::Registered, Some(athlete_id), &device).await;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(token_pair(&state, athlete_id, issued)?),
+    ))
+}
+
+/// Exchanges an athlete's email and password for a token pair.
+#[utoipa::path(
+    post,
+    path = "/v1/auth/login",
     tag = "auth",
     request_body = LoginRequest,
     responses(
@@ -159,7 +264,7 @@ pub async fn login(
 /// family — see `auth::refresh` for why.
 #[utoipa::path(
     post,
-    path = "/auth/refresh",
+    path = "/v1/auth/refresh",
     tag = "auth",
     request_body = RefreshRequest,
     responses(
@@ -210,7 +315,7 @@ pub async fn refresh(
 /// success, and is the one case that is refused.
 #[utoipa::path(
     post,
-    path = "/auth/logout",
+    path = "/v1/auth/logout",
     tag = "auth",
     security(("bearer_token" = [])),
     request_body = LogoutRequest,
@@ -259,31 +364,25 @@ pub async fn logout(
     }
 
     if let Some(athlete_id) = revoked_family_for.or(access_claims.map(|claims| claims.sub)) {
-        audit::record(
-            &state.db,
-            AuthAction::LoggedOut,
-            Some(athlete_id),
-            &device,
-        )
-        .await;
+        audit::record(&state.db, AuthAction::LoggedOut, Some(athlete_id), &device).await;
     }
 
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// The athlete the presented access token identifies, with their Team
-/// memberships. Also the smallest possible proof that the extractor works.
+/// The athlete the presented access token identifies. Also the smallest
+/// possible proof that the extractor works.
 #[utoipa::path(
     get,
-    path = "/auth/me",
+    path = "/v1/auth/me",
     tag = "auth",
     security(("bearer_token" = [])),
     responses(
-        (status = 200, description = "The authenticated athlete", body = Authenticatedathlete),
+        (status = 200, description = "The authenticated athlete", body = AuthenticatedAthlete),
         (status = 401, description = "Missing or invalid access token", body = crate::error::ProblemDetails),
     )
 )]
-pub async fn me(athlete: Authenticatedathlete) -> Json<Authenticatedathlete> {
+pub async fn me(athlete: AuthenticatedAthlete) -> Json<AuthenticatedAthlete> {
     Json(athlete)
 }
 
@@ -310,7 +409,7 @@ pub async fn jwks(State(state): State<AppState>) -> Json<Jwks> {
 /// the shape the rest of the system relies on — a non-empty local part, a
 /// dotted domain, no whitespace, within the RFC 5321 length limit — and leaves
 /// the rest to the (not yet built) verification mail.
-pub(crate) fn validate_email(raw: &str) -> ApiResult<String> {
+pub fn validate_email(raw: &str) -> ApiResult<String> {
     let email = raw.trim();
 
     let invalid = || ApiError::Validation("email is not a valid address".to_owned());
@@ -345,10 +444,10 @@ pub(crate) fn validate_email(raw: &str) -> ApiResult<String> {
     Ok(email.to_owned())
 }
 
-/// Shared by the athlete's own name and their Team's, because both land in
-/// `text not null check (length(trim(...)) > 0)` columns and both are rendered
-/// to other people.
-pub(crate) fn validate_display_name(raw: &str) -> ApiResult<String> {
+/// The athlete's own name: it lands in a
+/// `text not null check (length(trim(...)) > 0)` column, so an all-whitespace
+/// name has to be refused here rather than by the database.
+pub fn validate_display_name(raw: &str) -> ApiResult<String> {
     let name = raw.trim();
 
     if name.is_empty() {
@@ -370,9 +469,9 @@ pub(crate) fn token_pair(
     issued: refresh::IssuedRefreshToken,
 ) -> ApiResult<TokenPair> {
     let (access_token, expires_in) =
-        issue_access_token(&state.auth.keys, &state.auth.config, athlete_id).map_err(
-            |error| ApiError::Internal(format!("could not issue an access token: {error}")),
-        )?;
+        issue_access_token(&state.auth.keys, &state.auth.config, athlete_id).map_err(|error| {
+            ApiError::Internal(format!("could not issue an access token: {error}"))
+        })?;
 
     Ok(TokenPair {
         access_token,

@@ -10,6 +10,11 @@ const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
 
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),
+	{
+		// Generated from backend/openapi.json by `npm run generate:api`. Linting
+		// machine output only produces findings nobody may act on.
+		ignores: ['src/lib/api/schema.d.ts']
+	},
 	js.configs.recommended,
 	ts.configs.recommended,
 	svelte.configs.recommended,

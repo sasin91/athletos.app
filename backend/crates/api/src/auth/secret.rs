@@ -1,11 +1,10 @@
 //! Bearer secrets that are stored only as a digest.
 //!
-//! Two credentials have this exact shape — the opaque refresh token (ADR-0003)
-//! and the invitation token (ADR-0016) — and both live or die on the same two
-//! properties: full-entropy CSPRNG output, and a database that holds the digest
-//! rather than the secret. Writing the generator and the digest twice would be
-//! two chances to get a security primitive subtly wrong, so it is written once
-//! here and nowhere else.
+//! The opaque refresh token (ADR-0003) has this shape, and any bearer secret
+//! added later should too: full-entropy CSPRNG output, and a database that
+//! holds the digest rather than the secret. Writing the generator and the
+//! digest more than once would be more chances to get a security primitive
+//! subtly wrong, so it is written here and nowhere else.
 //!
 //! Nothing in this module ever logs a secret.
 
@@ -34,7 +33,7 @@ pub fn generate() -> ApiResult<String> {
 /// space for a slow hash to protect, and both lookups sit on a request path.
 ///
 /// Public because a test has to be able to plant a row — an expired or revoked
-/// invitation — whose token it also holds.
+/// token — whose secret it also holds.
 pub fn digest(secret: &str) -> Vec<u8> {
     Sha256::digest(secret.as_bytes()).to_vec()
 }

@@ -1,0 +1,35 @@
+# AthletOS scheduled work.
+#
+# Installed by infra/bootstrap.sh to /usr/local/etc/cron.d/athletos. FreeBSD's
+# cron has read /etc/cron.d and /usr/local/etc/cron.d since 13.0; on anything
+# older, paste these four lines into /etc/crontab instead — the format is the
+# same, six fields with a user column.
+#
+# Nothing here is in periodic(8). periodic is for the base system's own daily
+# and weekly housekeeping, and putting application jobs in it means their output
+# arrives inside the daily security run where nobody reads it.
+
+SHELL=/bin/sh
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+MAILTO=root
+
+# Snapshots. sanoid is a no-op when nothing is due, so running it every minute
+# is both the documented usage and cheaper than reasoning about which minute the
+# 15-minute snapshots should land on.
+*       *       *       *       *       root    /usr/local/bin/sanoid --cron --quiet
+
+# The backup. Five past the hour rather than on the hour, so it is not competing
+# with sanoid's hourly snapshot for the same page cache.
+5       *       *       *       *       root    /usr/local/sbin/athletos-backup
+
+# A backup that has not been restored is a rumour. This does not restore
+# anything — it checks that the newest offsite dump is recent and is not
+# suspiciously small, which catches the two failures that actually happen: the
+# push silently stopping, and pg_dump writing nothing. The real drill is
+# `athletos-restore --drill`, which needs the age identity and therefore needs a
+# human; put it in the calendar quarterly.
+17      6       *       *       *       root    /usr/local/sbin/athletos-backup --check-only
+
+# Certificates renew themselves — that is the entire reason Caddy is here rather
+# than nginx and certbot — so there is no renewal entry, no reload hook, and no
+# expired certificate on a Sunday.

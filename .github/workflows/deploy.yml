@@ -1,0 +1,89 @@
+name: Deploy
+
+# Ship a published release to the box.
+#
+# HONEST STATUS: this has never run. There is no server yet, so nothing here has
+# been executed against a real host — it is written to be correct rather than
+# claimed to be working, and the first run will be the first test of it. What it
+# does is deliberately small, which is the best defence available in that
+# situation: it opens an SSH connection and runs one command that already exists
+# on the box and has its own health gate and its own rollback.
+#
+# All the interesting behaviour lives in /usr/local/sbin/athletos-deploy, on the
+# box, in a script that is in this repository under deploy/deploy.sh. A CI job
+# that rsynced files into place would be re-implementing that logic in YAML,
+# where it cannot be read, tested or run by hand at three in the morning.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to deploy'
+        required: true
+
+concurrency:
+  # Two deploys rolling two jails at once would interleave their health gates
+  # and their symlink swaps. One at a time, and never cancelled halfway.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # A GitHub environment, so the secrets below are scoped to it and a manual
+    # approval can be required without touching this file.
+    environment:
+      name: production
+      url: https://${{ vars.APP_DOMAIN }}
+
+    steps:
+      - name: Deploy
+        env:
+          TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+
+          test -n "$TAG"
+
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+
+          # The host key is pinned from a secret rather than accepted on first
+          # use. `StrictHostKeyChecking=no` on a deploy connection means the one
+          # connection in the system that has root-equivalent authority is also
+          # the one that will talk to anybody.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/known_hosts
+
+          # doas.conf on the box permits exactly this command for this user and
+          # nothing else. A deploy key that can run `athletos-deploy` is a very
+          # different thing from a deploy key that can run anything.
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              -i ~/.ssh/id_ed25519 \
+              "${SSH_USER}@${SSH_HOST}" \
+              "doas /usr/local/sbin/athletos-deploy '${TAG}'"
+
+      - name: Report where it stopped
+        if: failure()
+        run: |
+          cat <<'EOF'
+          The deploy exited non-zero. What that means depends on the code:
+
+            1  green never became healthy, was put back on its previous
+               release, and blue was never touched. The site is serving the
+               old version. Nothing further is required.
+
+            2  green is on the new release and healthy; blue failed and was
+               put back. The site is up and serving a mix of two versions.
+               This one needs a decision — roll green back with
+               `athletos-rollback`, or fix forward.
+
+          Either way the box has the logs: /jails/{blue,green}/var/log/athletos/.
+          EOF

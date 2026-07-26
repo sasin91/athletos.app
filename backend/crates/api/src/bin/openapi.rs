@@ -1,10 +1,10 @@
 //! Prints the OpenAPI document to stdout, or writes it to a file.
 //!
-//! ADR-0014 makes the Nuxt BFF's TypeScript client a build artefact generated
-//! from the Rust DTOs. Generating it must therefore be possible from a checkout
-//! alone — no `DATABASE_URL`, no Postgres, no object storage, no bound port.
-//! The document lives entirely in the type system (`openapi::ApiDoc`), so this
-//! binary touches none of that: it serialises the doc and exits.
+//! ADR-0014 makes the SvelteKit BFF's TypeScript client a build artefact
+//! generated from the Rust DTOs (D-11). Generating it must therefore be
+//! possible from a checkout alone — no `DATABASE_URL`, no Postgres, no bound
+//! port. The document lives entirely in the type system (`openapi::ApiDoc`), so
+//! this binary touches none of that: it serialises the doc and exits.
 //!
 //! It is a separate `[[bin]]` rather than a flag on `api` deliberately. A
 //! `--dump-openapi` flag would have to short-circuit `main` *before* config,
@@ -14,13 +14,13 @@
 //! cannot accidentally acquire a dependency on a running service.
 //!
 //! ```text
-//! cargo run -p pixmyday-api --bin openapi                  # to stdout
-//! cargo run -p pixmyday-api --bin openapi -- openapi.json  # to a file
+//! cargo run -p athletos-api --bin openapi                  # to stdout
+//! cargo run -p athletos-api --bin openapi -- openapi.json  # to a file
 //! ```
 
 use std::io::Write;
 
-use pixmyday_api::openapi::ApiDoc;
+use athletos_api::openapi::ApiDoc;
 use utoipa::OpenApi;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

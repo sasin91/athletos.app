@@ -7,3 +7,7 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# Generated from backend/openapi.json by `npm run generate:api`. Committed so
+# the client is reproducible from a checkout, and never hand-edited (D-11).
+src/lib/api/schema.d.ts

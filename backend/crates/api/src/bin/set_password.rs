@@ -1,23 +1,23 @@
-//! Sets an existing athlete's password, offline (companion to `bootstrap`).
+//! Sets an existing athlete's password, offline.
 //!
-//! There is no password-reset endpoint yet (`PasswordPolicy::check` documents
-//! that a future one must go through it), and `bootstrap` refuses once a
-//! deployment has any athlete — so a forgotten password would otherwise mean
-//! editing `password_hash` by hand. This tool is that edit done properly: the
-//! same policy check and Argon2id parameters the API applies when a password
-//! is chosen, and every refresh token for the account revoked in the same
+//! There is no password-reset endpoint (`PasswordPolicy::check` documents that
+//! a future one must go through it), so this is the only recovery path there
+//! is (D-02) — without it a forgotten password would mean editing
+//! `password_hash` by hand. This tool is that edit done properly: the same
+//! policy check and Argon2id parameters the API applies when a password is
+//! chosen, and every refresh token for the account revoked in the same
 //! transaction. Access tokens are left to expire on their own short TTL.
 //!
 //! ```text
-//! cargo run -p pixmyday-api --bin set-password -- alex@example.com
+//! cargo run -p athletos-api --bin set-password -- alex@example.com
 //! ```
 //!
 //! The password is read from stdin, never from a command-line argument: `argv`
 //! is world-readable in `/proc` on Linux and lands in shell history.
 //!
-//! Deliberately not gated the way `bootstrap` is: whoever can run this already
-//! holds `DATABASE_URL`, and with that they can write `password_hash` with
-//! `psql` directly. A gate here would add a step, not a barrier.
+//! Deliberately not gated behind a flag: whoever can run this already holds
+//! `DATABASE_URL`, and with that they can write `password_hash` with `psql`
+//! directly. A gate here would add a step, not a barrier.
 
 use std::io::Read;
 use std::sync::Arc;
@@ -25,10 +25,10 @@ use std::sync::Arc;
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
-use pixmyday_api::auth::password::{hash_password, PasswordContext};
-use pixmyday_api::config::AuthConfig;
-use pixmyday_api::migrate;
-use pixmyday_api::state::AuthContext;
+use athletos_api::auth::password::{hash_password, PasswordContext};
+use athletos_api::config::AuthConfig;
+use athletos_api::migrate;
+use athletos_api::state::AuthContext;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,8 +58,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&database_url)
         .await?;
 
-    // The same migrations the server applies on boot, matching `bootstrap`, so
-    // this tool never has to be sequenced after a first server start.
+    // The same migrations the server applies on boot, so this tool never has to
+    // be sequenced after a first server start.
     migrate(&db).await?;
 
     let Some((athlete_id, stored_email, display_name)) =

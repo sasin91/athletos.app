@@ -12,7 +12,7 @@ use crate::state::AppState;
 pub struct Health {
     #[schema(example = "ok")]
     pub status: &'static str,
-    #[schema(example = "pixmyday-api")]
+    #[schema(example = "athletos-api")]
     pub service: &'static str,
 }
 
@@ -26,7 +26,7 @@ pub struct Health {
 pub async fn health() -> Json<Health> {
     Json(Health {
         status: "ok",
-        service: "pixmyday-api",
+        service: "athletos-api",
     })
 }
 
@@ -46,6 +46,6 @@ pub async fn ready(State(state): State<AppState>) -> ApiResult<Json<Health>> {
 
     Ok(Json(Health {
         status: "ready",
-        service: "pixmyday-api",
+        service: "athletos-api",
     }))
 }

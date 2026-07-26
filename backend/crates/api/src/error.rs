@@ -2,9 +2,10 @@
 //! details.
 //!
 //! Internal failures are logged in full but reported to the client only as a
-//! generic message — the API serves data about vulnerable people, so error
-//! bodies must never leak schema details, ids, or driver text.
+//! generic message: error bodies must never leak schema details, ids, or
+//! driver text.
 
+use athletos_training::ProgramError;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -27,13 +28,6 @@ pub enum ApiError {
     /// less", 422 says "send something else".
     #[error("{0}")]
     PayloadTooLarge(String),
-
-    /// The SMTP relay refused or was unreachable while an invitation mail was
-    /// being sent. 502 rather than 500 because the failing dependency is
-    /// upstream of us, and the caller's next move — try again — is real advice.
-    /// The cause is logged where it happens; this message is all a client sees.
-    #[error("the invitation email could not be sent — try again")]
-    MailDelivery,
 
     /// Too many consecutive failed sign-in attempts for an address
     /// (`auth::throttle`, ADR-0017). Carries the remaining
@@ -61,6 +55,41 @@ pub enum ApiError {
     Internal(String),
 }
 
+/// A program refusing to work is nearly always something the caller can fix,
+/// and the engine already names the fix precisely — so translating its errors
+/// here, once, is what keeps every handler that touches a program from either
+/// inventing its own wording or falling back on a 500.
+///
+/// The `MissingMax` case is the one that matters. The engine refuses to start a
+/// program the athlete has no number for (5/3/1 needs four lifts, Smolov Jr
+/// three), and answering that with "an internal error occurred" would leave the
+/// athlete with a form to fill in and no way to learn which field. So the
+/// exercise key travels into the message together with the endpoint that
+/// accepts it: 422, and actionable.
+impl From<ProgramError> for ApiError {
+    fn from(error: ProgramError) -> Self {
+        match error {
+            ProgramError::MissingMax { exercise } => Self::Validation(format!(
+                "this program needs a one-rep max for {exercise}; \
+                 set it with PUT /v1/athlete/maxes and enrol again"
+            )),
+
+            // Not the caller's fault and not fixable by them, but not a
+            // malformed request either: the block is simply over.
+            ProgramError::Finished => Self::Conflict(
+                "this program has no session left to prescribe; the block is finished".to_owned(),
+            ),
+
+            // Only reachable when a row written by an older build of a program
+            // is read back by a newer one, which is our problem and not
+            // something to explain to a client.
+            ProgramError::UnreadableState { reason } => Self::Internal(format!(
+                "a stored program state could not be read: {reason}"
+            )),
+        }
+    }
+}
+
 /// RFC 9457 problem details. `type` is omitted until we publish stable problem
 /// type URIs; consumers should branch on `status` plus `title` for now.
 #[derive(Debug, Serialize, ToSchema)]
@@ -82,7 +111,6 @@ impl ApiError {
             Self::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::MailDelivery => StatusCode::BAD_GATEWAY,
             Self::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             Self::Unauthenticated => StatusCode::UNAUTHORIZED,
             Self::Forbidden => StatusCode::FORBIDDEN,

@@ -10,10 +10,25 @@ node_modules/
 /frontend/test-results/
 /frontend/playwright-report/
 
+# Terraform. The provider cache is a download; the lock file is committed,
+# because the point of a lock file is that everyone resolves the same versions.
+# State lives in HCP, never on disk.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
 # Environment
 .env
 .env.*
 !.env.example
+
+# Keys. Never, under any circumstances. The signing key and the age identity
+# live on the box and in a password manager respectively, and neither has any
+# business being in a working tree.
+*.pem
+*.key
 
 # Editors / OS
 .DS_Store
