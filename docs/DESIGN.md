@@ -77,19 +77,30 @@ bar, and end-of-program handling — five branches on day one, growing with ever
 feature that reads a program.
 
 ```rust
+/// Everything in the catalogue can describe itself. A third trait, because a
+/// method declared on both authoring traits is ambiguous (E0034) on any
+/// concrete prescriptive type — `SmolovJr.meta()` would not compile.
+trait Catalogued: Debug + Send + Sync {
+    fn meta(&self) -> &ProgramMeta;
+}
+
 /// What a fixed-percentage program author writes. Pure, and that is all.
-trait Prescriptive {
-    fn schemas(&self, maxes: &Maxes) -> Vec<Session>;
+trait Prescriptive: Catalogued {
+    fn schemas(&self, maxes: &Maxes) -> Result<Vec<Session>>;
 }
 
 /// What every consumer sees. Object-safe, stateful.
-trait Program {
-    fn meta(&self) -> &ProgramMeta;
-    fn start(&self, athlete: &Athlete) -> State;
-    fn session(&self, state: &State) -> Session;
-    fn advance(&self, state: State, logged: &LoggedSession) -> State;
+trait Program: Catalogued {
+    fn start(&self, maxes: &Maxes) -> Result<State>;
+    fn session(&self, state: &State) -> Result<Session>;
+    fn advance(&self, state: State, logged: &LoggedSession) -> Result<State>;
     /// `Some` for a block with a knowable end; `None` for open-ended.
-    fn preview(&self, state: &State) -> Option<Vec<Session>>;
+    fn preview(&self, state: &State) -> Result<Option<Vec<Session>>>;
+    /// Where we are. Without this a consumer wanting "session 7 of 12" has to
+    /// read `State` — which only the program may interpret — and therefore has
+    /// to know which program it holds. That is the branch this design exists
+    /// to remove, so the method is load-bearing, not convenience.
+    fn progress(&self, state: &State) -> Result<Progress>;
 }
 
 /// Every prescriptive program is trivially a Program.
@@ -97,12 +108,34 @@ trait Program {
 impl<P: Prescriptive> Program for P { /* ... */ }
 ```
 
-`SmolovJr` implements one method. `Wendler531` implements `Program` directly,
-because its training max moves. The dashboard, session view and progress bar
-only ever hold `&dyn Program` and **never branch**.
+`SmolovJr` implements one method. `Wendler531Bbb` implements `Program`
+directly, because its training max moves. The dashboard, session view and
+progress bar only ever hold `&dyn Program` and **never branch**.
 
 `State` is an opaque, program-owned blob (JSON in Postgres). The program is the
 only thing that reads or writes it.
+
+> **Amended after building it.** The blanket impl works, and coexists with a
+> hand-written `impl Program for Wendler531Bbb` with no coherence error — the
+> orphan rule proves non-overlap, since only the defining crate can add a
+> `Prescriptive` impl. It also buys something the design did not ask for: give
+> one type *both* traits and rustc reports E0119. "A program is prescriptive or
+> adaptive, never both" is a compile-time invariant rather than a comment.
+>
+> Three costs, all real. `meta()` had to move to `Catalogued` (above).
+> `progress()` had to be added, or the never-branch property is not actually
+> achievable. And a prescriptive program's `State` must **snapshot the maxes at
+> enrolment**, because `schemas()` needs them and `session()` is not given
+> them. That last one turned out to be correct behaviour rather than a
+> workaround: editing a max mid-block must not retroactively rewrite sessions
+> the athlete was already shown, since drift is measured against the
+> `prescribed_weight` that was actually displayed (D-07).
+>
+> Still open: there is no way to *show* an athlete their training max. It lives
+> only inside `State`, and D-04 rightly forbids editing it — but D-13 wants "is
+> this working?", and a 5/3/1 lifter watching the TM climb is a legitimate
+> read. The clean fix is a `readout(&self, state) -> Vec<(String, f64)>` on
+> `Program`: still object-safe, still branch-free. Not built.
 
 ### Programs and exercises are code
 
@@ -155,8 +188,15 @@ float, so it can prescribe 113.4375 kg. With `prescribed_weight` now persisted
 and drift measured against it (D-07), an unloadable prescription would register
 as drift on every single set.
 
-**The session screen shows the plate breakdown**: `112.5 kg — bar + 25, 15, 5,
-1.25 per side`. The athlete is holding the phone in front of the rack.
+**The session screen shows the plate breakdown**, greedy largest-first:
+`112.5 kg — bar + 25, 20, 1.25 per side`. The athlete is holding the phone in
+front of the rack.
+
+> Corrected after building it. This example originally read `25, 15, 5, 1.25`.
+> That sums to the same 46.25 kg per side and is arithmetically fine, but it is
+> not what largest-first produces — the specified algorithm gets there in three
+> plates, not four. A worked example that the implementation contradicts is
+> worse than no example.
 
 ### Units
 
@@ -420,8 +460,12 @@ model (D-06) has no due dates, so there is nothing else to notify about.
 
 Amendment, taken during the build. D-03 fixes the trait shape but not where it
 lives. The training engine is `backend/crates/training` (`athletos-training`),
-depending on `serde` and `thiserror` and nothing else — no `sqlx`, no `axum`,
-`#![forbid(unsafe_code)]`.
+depending on `serde`, `serde_json` and `thiserror` and nothing else — no
+`sqlx`, no `axum`, `#![forbid(unsafe_code)]`.
+
+> `serde_json` was missing from the first draft of this decision, which
+> contradicted D-03's requirement that `State` be an opaque JSON blob. D-03
+> wins; the dependency is deliberate and its scope is exactly `State`.
 
 Two reasons. The rules that are genuinely hard to get right — rounding down to
 a loadable weight, a training max that moves exactly once per cycle — become
