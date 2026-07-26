@@ -1,0 +1,19 @@
+[package]
+name = "athletos-training"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "athletos_training"
+path = "src/lib.rs"
+
+# Deliberately four dependencies, none of which can touch a socket or a disk.
+# Anything that would need `sqlx`, `axum` or `chrono` belongs on the other side
+# of this crate's boundary — see the module documentation in `src/lib.rs`.
+[dependencies]
+serde.workspace = true
+# `State` is an opaque, program-owned blob (D-03), and JSON is the shape
+# Postgres stores it in. This is the whole reason serde_json is here.
+serde_json.workspace = true
+thiserror.workspace = true

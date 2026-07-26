@@ -64,6 +64,7 @@ name = "athletos-api"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "athletos-training",
  "axum",
  "axum-test",
  "base64",
@@ -87,6 +88,15 @@ dependencies = [
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
+]
+
+[[package]]
+name = "athletos-training"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

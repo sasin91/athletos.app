@@ -144,27 +144,53 @@ existing `tests/auth.rs` passes against the real schema.
 
 ## Phase 2 · Engine
 
-- [ ] `Maxes`, `Session`, `Block`, `Lift`, `ProgramMeta`, `State` —
+- [x] `Maxes`, `Session`, `Block`, `Lift`, `ProgramMeta`, `State` —
       pure `serde` types, **no formatting, no unit strings** (D-03).
-- [ ] `trait Prescriptive`, `trait Program`, `impl<P: Prescriptive> Program for P`.
+- [x] `trait Prescriptive`, `trait Program`, `impl<P: Prescriptive> Program for P`.
       **Verify `Program` is object-safe** — this is the assumption the whole
       milestone exists to test.
-- [ ] Loading + rounding: `Loading::{Barbell, Dumbbell, Bodyweight, Machine}`,
+- [x] Loading + rounding: `Loading::{Barbell, Dumbbell, Bodyweight, Machine}`,
       **round down** to the nearest loadable weight (D-04). Barbell = 20 kg +
       2.5 kg resolution. Return the plate breakdown alongside the weight.
-- [ ] Exercise trait + registry: the ~8 exercises the two programs need
+- [x] Exercise trait + registry: the ~8 exercises the two programs need
       (squat, bench, deadlift, OHP, barbell row, RDL, curl, hanging leg raise).
-      Port `cues()` from the reference.
-- [ ] `impl Prescriptive for SmolovJr` — port from
+      Port `cues()` from the reference.\*
+- [x] `impl Prescriptive for SmolovJr` — port from
       `~/Herd/sasin91.xyz/app/Training/Programs/SmolovJr.php`.
-- [ ] `impl Program for Wendler531Bbb` — `State` holds per-lift training max
+- [x] `impl Program for Wendler531Bbb` — `State` holds per-lift training max
       and cycle position; `advance()` bumps the TM at cycle end;
       `preview()` returns `None`.
-- [ ] Static program registry.
+- [x] Static program registry.
+
+\* Twelve, not eight: a faithful Smolov Jr also prescribes lateral raises,
+hammer curls, dumbbell tricep extensions and incline dumbbell press. `Exercise`
+is a `const` struct rather than a trait — its five members are all constants, so
+a trait would have been twelve unit structs implementing nothing, and a struct
+is what leaves a v2 data-driven path able to *construct* an exercise rather than
+compile a new type.
 
 **Done when:** a unit test drives 5/3/1 through two full cycles and asserts the
 training max moved exactly once per cycle; and a test asserts no consumer code
 path matches on program kind.
+
+### The assumption held, and the compiler enforces more than was asked
+
+`impl<P: Prescriptive> Program for P` coexists with a hand-written `impl Program
+for Wendler531Bbb` without a coherence error. The orphan rule is why: only the
+crate defining a type can give it a `Prescriptive` impl, so until one does, the
+two impls provably do not overlap. Give a type *both* traits and rustc reports
+E0119 — which is the invariant "a program is prescriptive or adaptive, never
+both", enforced at compile time rather than asserted in a comment.
+
+Two adjustments the shape forced, neither of which changes it:
+
+- `meta()` moved to a third trait, `Catalogued`, which both authoring traits
+  inherit. A method on both `Prescriptive` and `Program` is ambiguous (E0034) on
+  any concrete prescriptive type — `SmolovJr.meta()` would not compile.
+- `Program` gained `progress()`. Without it a progress bar cannot get "session 7
+  of 12" without reading `State`, which only the program may interpret — so the
+  consumer would have had to know which program it held, which is the branch
+  D-03 exists to remove.
 
 ---
 

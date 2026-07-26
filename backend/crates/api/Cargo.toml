@@ -37,8 +37,11 @@ uuid = { version = "1.20.0", features = ["v7", "serde"] }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde", "std"] }
 utoipa = { version = "5.5.0", features = ["axum_extras", "uuid", "chrono"] }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
-thiserror = "2.0.19"
+thiserror.workspace = true
 dotenvy = "0.15.7"
+# The training engine (D-03). Pure: no sqlx, no axum, no clock. Everything the
+# API does with a program goes through `&dyn Program`.
+athletos-training = { path = "../training" }
 # jsonwebtoken 10 made the crypto backend pluggable and panics at *runtime* if
 # neither provider feature is on — `default` only enables `use_pem`. rust_crypto
 # is pure Rust, so no cmake/C toolchain is needed to build, which keeps both the
