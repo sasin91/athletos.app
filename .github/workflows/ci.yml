@@ -100,6 +100,22 @@ jobs:
             exit 1
           fi
 
+      # Every operation needs an explicit, unique `operation_id`. Left off,
+      # utoipa derives one from the handler's function name, so two modules
+      # that both have a `list` or a `show` collide — and `openapi-typescript`
+      # keys its `operations` map on that id, so one operation silently
+      # generates with another's types. Phase 4 found `GET /v1/programs`
+      # carrying the enrolment list's response type this way.
+      #
+      # This cannot be folded into the oasdiff step below: nothing about the
+      # wire format changes, so it is non-breaking by every measure oasdiff
+      # has. It is a codegen bug, not an API bug, and needs its own check.
+      # Python rather than jq, for the dull reason that the machine this was
+      # written on has python and not jq, so this script was actually run
+      # before being committed.
+      - name: Operation ids are present and unique
+        run: python3 scripts/check_operation_ids.py backend/openapi.json
+
       - name: Install oasdiff
         run: |
           curl -fsSL https://raw.githubusercontent.com/oasdiff/oasdiff/main/install.sh | sh
