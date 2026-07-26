@@ -1,0 +1,102 @@
+#!/bin/sh
+#
+# PROVIDE: athletos_web
+# REQUIRE: LOGIN FILESYSTEMS athletos_api
+# KEYWORD: shutdown
+#
+# The SvelteKit backend-for-frontend, run inside a jail by the node in the
+# shared read-only base. There is no npm on this box: the release tarball
+# carries build/ and a production-only node_modules/, so nothing is installed at
+# deploy time. Running a package install on a production host at deploy time is
+# a step that can half-succeed, which is the failure class this whole design
+# exists to remove.
+#
+# node is invoked on build/index.js by absolute path rather than with a working
+# directory of the release root. Node resolves node_modules by walking up from
+# the importing file, so build/index.js finds ../node_modules on its own — and
+# an rc script that does not have to chdir is an rc script with one fewer thing
+# to get wrong.
+#
+# rc.conf variables:
+#
+#   athletos_web_enable        (bool)  NO
+#   athletos_web_user          (str)   athletos
+#   athletos_web_root          (str)   /srv/athletos/current
+#   athletos_web_host          (str)   0.0.0.0
+#   athletos_web_port          (int)   3000
+#   athletos_web_api_base_url  (str)   http://127.0.0.1:8080
+#   athletos_web_env_file      (str)   /usr/local/etc/athletos/env
+#   athletos_web_log           (str)   /var/log/athletos/web.log
+
+# rc.subr reads `name`, `rcvar`, `desc`, `command`, `command_args`, `pidfile`
+# and `start_precmd` out of this script's environment rather than being passed
+# them, so every one of them looks unused to a linter and is not.
+# shellcheck disable=SC2034
+
+# shellcheck source=/dev/null
+. /etc/rc.subr
+
+name="athletos_web"
+rcvar="athletos_web_enable"
+desc="AthletOS web (SvelteKit)"
+
+load_rc_config $name
+
+: "${athletos_web_enable:=NO}"
+: "${athletos_web_user:=athletos}"
+: "${athletos_web_root:=/srv/athletos/current}"
+: "${athletos_web_host:=0.0.0.0}"
+: "${athletos_web_port:=3000}"
+: "${athletos_web_api_base_url:=http://127.0.0.1:8080}"
+: "${athletos_web_env_file:=/usr/local/etc/athletos/env}"
+: "${athletos_web_log:=/var/log/athletos/web.log}"
+: "${athletos_web_node:=/usr/local/bin/node}"
+
+pidfile="/var/run/${name}.pid"
+
+command="/usr/sbin/daemon"
+command_args="-r -R 5 -P ${pidfile} -t ${desc} -u ${athletos_web_user} \
+    -o ${athletos_web_log} -- ${athletos_web_node} ${athletos_web_root}/web/build/index.js"
+
+start_precmd="athletos_web_prestart"
+
+athletos_web_prestart()
+{
+	if [ ! -f "${athletos_web_root}/web/build/index.js" ]; then
+		err 1 "${athletos_web_root}/web/build/index.js is missing — has anything been deployed?"
+	fi
+	if [ ! -x "${athletos_web_node}" ]; then
+		err 1 "${athletos_web_node} is missing; node lives in the shared base jail"
+	fi
+
+	install -d -o "${athletos_web_user}" -m 0750 "$(dirname "${athletos_web_log}")"
+
+	if [ ! -r "${athletos_web_env_file}" ]; then
+		err 1 "${athletos_web_env_file} is missing or unreadable"
+	fi
+
+	set -a
+	# shellcheck source=/dev/null
+	. "${athletos_web_env_file}"
+	set +a
+
+	# adapter-node reads all three at runtime, which is what makes one built
+	# bundle servable from a staging hostname without a rebuild. ORIGIN is
+	# not optional: SvelteKit's CSRF check compares the Origin header against
+	# it, and form actions fail closed without it. It comes from the env file
+	# because it is the public name, shared by both jails; HOST, PORT and the
+	# API address come from rc.conf because they are the jail's own.
+	HOST="${athletos_web_host}"
+	PORT="${athletos_web_port}"
+	API_BASE_URL="${athletos_web_api_base_url}"
+	export HOST PORT API_BASE_URL
+
+	if [ -z "${ORIGIN:-}" ]; then
+		err 1 "ORIGIN is not set in ${athletos_web_env_file}; SvelteKit form actions will fail without it"
+	fi
+
+	NODE_ENV="production"
+	export NODE_ENV
+}
+
+run_rc_command "$1"

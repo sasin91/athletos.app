@@ -1,0 +1,164 @@
+name: Release
+
+# Build on FreeBSD, run on FreeBSD.
+#
+# ci.yml stays Linux-native and runs on every pull request, because that is
+# where the fast feedback belongs. This workflow is the other half: it runs the
+# *entire* test suite on the operating system the code will actually be served
+# from, and only then builds the binary that gets shipped.
+#
+# That is not ceremony. Rust is Tier 2 on FreeBSD — the toolchain is built by
+# upstream but not tested by them — so "it compiles" is a materially weaker
+# statement there than on Linux. Running 131 tests against a real Postgres on
+# the target platform is the mitigation, and it is cheap: one VM, one job.
+#
+# No musl, no cross-compilation, no glibc anywhere. Those problems belong to a
+# Linux deployment and this is not one. The artifact is a native FreeBSD
+# amd64 binary produced by a FreeBSD toolchain against FreeBSD libc.
+#
+# Cirrus CI, which is the usual answer to "FreeBSD in CI", is shutting down.
+# vmactions/freebsd-vm runs a FreeBSD guest inside the GitHub-hosted Linux
+# runner instead, which keeps everything in one place.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and release'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  freebsd:
+    name: Test and build on FreeBSD
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test and build inside a FreeBSD guest
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: '14.3'
+          usesh: true
+          # The workspace is shared into the guest and copied back out, which
+          # is how the artifacts built in here reach the release step below.
+          copyback: true
+          # `rust` from packages rather than rustup. There is no rustup in the
+          # guest, so rust-toolchain.toml is ignored — which is correct here:
+          # the pinned channel is a floor for contributors, and the package is
+          # a recent stable well above it. `cargo --version` is printed below
+          # so a version regression is visible in the log rather than implied.
+          prepare: |
+            pkg install -y rust node24 npm-node24 postgresql17-server postgresql17-client git
+
+          run: |
+            set -eux
+
+            echo "::group::Toolchain"
+            uname -a
+            cargo --version
+            rustc --version
+            node --version
+            npm --version
+            echo "::endgroup::"
+
+            echo "::group::Postgres"
+            sysrc postgresql_enable=YES
+            service postgresql initdb
+            service postgresql start
+            # `#[sqlx::test]` creates and drops a database per test case, so
+            # the role needs CREATEDB. The `postgres` superuser has it, and
+            # initdb's default pg_hba trusts local connections.
+            su -m postgres -c 'createdb athletos'
+            echo "::endgroup::"
+
+            export DATABASE_URL=postgres://postgres@127.0.0.1:5432/athletos
+            # No PEM to manage in CI. Refused when APP_ENV=production, which is
+            # exactly why APP_ENV is not set here.
+            export AUTH_ALLOW_EPHEMERAL_SIGNING_KEY=true
+            export AUTH_HIBP_ENABLED=false
+            export CARGO_TERM_COLOR=always
+
+            echo "::group::Backend — format, clippy, tests"
+            cd backend
+            cargo fmt --all --check
+            cargo clippy --workspace --all-targets -- -D warnings
+            # The engine is pure. Run it on its own first so a failure reads as
+            # "the training logic is wrong" rather than being buried.
+            cargo test -p athletos-training
+            cargo test --workspace
+            echo "::endgroup::"
+
+            echo "::group::Backend — release binary"
+            cargo build --release --bin api
+            cd ..
+            echo "::endgroup::"
+
+            echo "::group::Frontend — check, lint, unit tests, build"
+            cd frontend
+            npm ci
+            npm run check
+            npm run lint
+            npm run test:unit
+            npm run build
+            echo "::endgroup::"
+
+            echo "::group::Frontend — production tree"
+            # The box has node and no npm, by design: running a package install
+            # on a production host at deploy time is a step that can
+            # half-succeed. So the install happens here and ships as an
+            # artifact. `--omit=dev` after the build, because the build needs
+            # the dev dependencies and the box does not.
+            npm ci --omit=dev
+            cd ..
+            echo "::endgroup::"
+
+            echo "::group::Artifacts"
+            rm -rf dist && mkdir -p dist/web
+            cp backend/target/release/api dist/athletos-api-freebsd-amd64
+            strip dist/athletos-api-freebsd-amd64 || true
+            cp -R frontend/build dist/web/build
+            cp -R frontend/node_modules dist/web/node_modules
+            cp frontend/package.json dist/web/package.json
+            tar -czf dist/athletos-web.tar.gz -C dist/web .
+            rm -rf dist/web
+            cd dist
+            sha256 -r athletos-api-freebsd-amd64 athletos-web.tar.gz \
+              | awk '{ print $1 "  " $2 }' > SHA256SUMS
+            ls -l
+            cat SHA256SUMS
+            echo "::endgroup::"
+
+      - name: Sanity-check what came back out of the VM
+        run: |
+          set -eux
+          test -s dist/athletos-api-freebsd-amd64
+          test -s dist/athletos-web.tar.gz
+          test -s dist/SHA256SUMS
+          # If this says anything but FreeBSD, the build did not happen where it
+          # was supposed to and the box will refuse to execute it.
+          file dist/athletos-api-freebsd-amd64
+          file dist/athletos-api-freebsd-amd64 | grep -q FreeBSD
+
+      - name: Attach the artifacts to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -eux
+          # Artifacts go on a Release rather than being copied straight to the
+          # box, so that any previous version can be redeployed without being
+          # rebuilt — which is what makes `athletos-rollback` work offline and
+          # a year later.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" --clobber \
+            dist/athletos-api-freebsd-amd64 \
+            dist/athletos-web.tar.gz \
+            dist/SHA256SUMS

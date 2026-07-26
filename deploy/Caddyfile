@@ -1,0 +1,97 @@
+# AthletOS edge.
+#
+# Caddy runs on the host, unprivileged, on two high ports; pf redirects 80 and
+# 443 to them. Nothing here has to be root, and there is no certbot, no renewal
+# timer and no expired certificate on a Sunday.
+#
+# Both jails are upstreams of both sites, all the time, with active health
+# checks. This is the part that is worth more than the deploy sequence: a
+# backend that crashes at three in the morning is taken out of rotation within
+# five seconds by a health check, not at the next deploy. The rolling update in
+# deploy.sh then gets failover for free, because it is the same mechanism.
+#
+# {$APP_DOMAIN} and {$ACME_EMAIL} come from the process environment, set by
+# `caddy_env` in /etc/rc.conf. The alternative — generating this file from a
+# template at bootstrap time — is one more thing that can be generated wrong.
+{
+	email {$ACME_EMAIL}
+
+	# pf sends 80 here and 443 to https_port below. The sites are named
+	# without a port, so the automatic HTTP->HTTPS redirect points at the
+	# public 443 and not at 8843 — verified against caddy 2.11.4, which
+	# answers `Location: https://app.athletos.example/`. ACME solvers bind
+	# these same two ports and are reached through the same redirect.
+	#
+	# The listeners are behind a packet redirect, not behind a proxy that
+	# adds X-Forwarded-For, so `trusted_proxies` stays unset: the client
+	# address pf hands Caddy is the real one.
+	http_port 8880
+	https_port 8843
+}
+
+# Health-check settings, written once. Both sites use the same policy because
+# both have the same shape: two identical upstreams, either of which can serve
+# any request, with no session affinity to preserve — D-11 keeps the token in a
+# cookie the browser presents on every request, so nothing is pinned to a
+# process.
+(athletos_lb) {
+	lb_policy least_conn
+
+	# How long a request waits for *some* healthy upstream before giving up.
+	# Long enough to cover a jail restart mid-request, short enough that a
+	# genuinely dead pair fails fast rather than hanging the browser.
+	lb_try_duration 10s
+	lb_try_interval 250ms
+
+	health_interval 5s
+	health_timeout 2s
+
+	# Two consecutive failures, not one, so a single dropped packet does not
+	# take a jail out of rotation.
+	health_passes 1
+	health_fails 2
+
+	fail_duration 30s
+	max_fails 3
+}
+
+# The application. Server-rendered by the SvelteKit process in each jail.
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# The service worker and the app shell are versioned by the build, so the
+	# immutable assets can be cached hard. Everything else is a server render
+	# and must not be.
+	@immutable path /_app/immutable/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+	reverse_proxy 10.0.0.2:3000 10.0.0.3:3000 {
+		import athletos_lb
+
+		# /login renders for an anonymous request and touches no database,
+		# so a 200 here means "this SvelteKit process can render", which
+		# is exactly what the check should mean. The root path would
+		# answer with a redirect to /login and make the check depend on
+		# how a redirect is classified.
+		health_uri /login
+		health_status 200
+	}
+}
+
+# The API on its own name, because D-11 has a native client talking to it
+# directly rather than through the BFF.
+api.{$APP_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy 10.0.0.2:8080 10.0.0.3:8080 {
+		import athletos_lb
+
+		# /health/ready, not /health: liveness says the process is
+		# answering, readiness says it can reach Postgres. An API that
+		# cannot reach the database can still return 200 from /health and
+		# 500 from everything a client actually asks for, so readiness is
+		# the only one worth routing on.
+		health_uri /health/ready
+		health_status 200
+	}
+}
