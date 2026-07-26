@@ -617,147 +617,188 @@ this one but a philosophy.
 
 ## D-16 · One box, and why not high availability
 
-A single Hetzner server in `hel1` runs everything: Caddy, the API, the
-SvelteKit BFF, and Postgres. No load balancer, no second node, no failover.
+A single Hetzner CX22 in `hel1` runs everything: Caddy, the API, the SvelteKit
+BFF, and Postgres. No load balancer, no second machine, no failover.
 
-High availability was the opening requirement, and it was the wrong target.
-The failure being defended against was a CI pipeline that rsynced over a
-running application — and that is an **atomicity** failure, not an availability
-one. It would have hurt exactly as much across three nodes. The effort belongs
-in making releases immutable and rollback instant (D-17), not in redundancy.
+High availability was the opening requirement and it was the wrong target. The
+failure actually being defended against was a pipeline that rsynced over a
+running application — an **atomicity** failure, which would have hurt exactly
+as much across three nodes. The effort belongs in making releases immutable and
+switchover safe (D-17), not in redundancy.
 
 Two things make skipping HA unusually cheap here:
 
 - **The app is offline-first (D-09).** The session is cached before training
   starts and the submit is queued. A dead box during a workout costs the
-  athlete nothing at all — the one moment the product is actually in use is
-  the one moment it does not need the server.
+  athlete nothing — the one moment the product is in use is the one moment it
+  does not need the server.
 - **The expensive half of HA is Postgres, not the app tier.** Two app nodes
-  behind a load balancer is an afternoon. Automatic database failover is
-  Patroni or repmgr, and a failover path is itself a thing that breaks. That
-  is a standing operational commitment to protect one athlete's training log.
+  behind a balancer is an afternoon. Automatic database failover is Patroni or
+  repmgr, and a failover path is itself a thing that breaks.
 
 ### Both services on the same box
 
-The BFF calls the API over loopback, about 1 ms. Hosting the frontend on
-Cloudflare would add ~50–80 ms per page load from an edge in Copenhagen;
-Netlify's free tier pins functions to `us-east-1`, which would cross the
-Atlantic twice to reach a database in Helsinki.
+The BFF calls the API over loopback. Hosting the frontend on Cloudflare would
+add ~50–80 ms per page load from an edge in Copenhagen; Netlify's free tier
+pins functions to `us-east-1`, crossing the Atlantic twice to reach a database
+in Helsinki.
 
-Latency was not the deciding argument, though. **Co-location means one
-release.** The generated TypeScript client and the API that serves it ship as
-a single unit and cannot drift apart. Split across two providers, there is
-always a window where the frontend calls a shape that no longer exists.
+Latency was not the deciding argument. **Co-location means one release**, so
+the generated TypeScript client and the API serving it cannot drift apart.
+And it costs nothing where it matters: `/session`, the screen open in the gym,
+is `ssr = false, prerender = true` and served by the service worker. It never
+touches the server at all.
 
-It costs almost nothing at the point of use: `/session`, the screen actually
-open in the gym, is `ssr = false, prerender = true` and served by the service
-worker. It never touches the server whatever happens.
+### Sized by measurement
 
-### Caddy at the edge
+Taken from release builds under load rather than estimated:
 
-Automatic certificates. No certbot, no renewal timer, no reload hook, and no
-expired certificate on a Sunday. `${APP_DOMAIN}` routes to the Node process
-and `api.${APP_DOMAIN}` to the Rust one — the API is publicly routed on its
-own name because D-11 has a native client talking to it directly.
+| | RSS |
+|---|---|
+| Rust API | 29.8 MB — flat across 200 full session generations |
+| Node SSR | ~40–60 MB |
+| Caddy | ~20 MB |
+| Postgres | ~200–300 MB |
+| FreeBSD base + jails | ~150 MB |
+| **Total** | **~1.1 GB against 4 GB** |
 
-nginx would work and is better documented; it also makes certificate expiry a
-failure mode that exists. haproxy — proven in previous projects — earns its
-keep when there is something to balance and drain between. Here each upstream
-is one process on the same machine.
+**`vfs.zfs.arc_max=512M` in `/boot/loader.conf` from the first boot.** ZFS ARC
+defaults to half of RAM, which on this box would claim 2 GB and present as a
+mysterious Postgres problem under memory pressure.
+
+The box compiles nothing — CI produces every artifact — which is what makes
+4 GB generous rather than tight. A Rust release build wants 2–4 GB on its own
+and never happens there.
 
 ---
 
-## D-17 · Releases are immutable; rollback is a symlink
+## D-17 · FreeBSD, two warm jails, rolling updates
+
+> **This decision replaced a Debian/systemd/musl design**, which is worth
+> recording because the reasoning above survived the change and only the
+> mechanism moved. The pivot came from one fact: FreeBSD is a system the author
+> already enjoys maintaining. That deleted the objection the Linux design
+> rested on — that a third unfamiliar technology alongside Rust and SvelteKit
+> deployment is how a canary fails to ship — and once it was gone, FreeBSD won
+> on merit.
+
+### The glibc problem stops existing
+
+The Linux design's most fragile element was a fully static
+`x86_64-unknown-linux-musl` binary, needed because a binary built on GitHub's
+glibc 2.39 will not start against Debian's 2.36, and `ring` compiles C so the
+musl link was the one load-bearing unproven step in the whole plan.
+
+Build on FreeBSD, run on FreeBSD, and none of that exists. No musl, no static
+linking trick, no cross-compilation, no sysroot, no glibc.
+
+The cost is that **Rust is Tier 2 on FreeBSD** — the project ships official
+binaries and verifies that it *builds* on every change, but does not run the
+test suite against it. That is the same tier Intel macOS was demoted to in
+2025, so it is unremarkable rather than exotic; the mitigation is that our own
+suite runs on FreeBSD at release time, which matters more here than it would
+on a Tier 1 platform.
+
+### Two static jails, and only ever two
 
 ```
-/srv/athletos/releases/<sha>/{api, web/}
-/srv/athletos/current -> releases/<sha>
+zroot/jails/base           read-only, nullfs-mounted into both
+zroot/jails/blue           small writable layer   10.0.0.2
+zroot/jails/green          small writable layer   10.0.0.3
+zroot/data/pgdata          persistent, never cloned
 ```
 
-Nothing is ever written into a path that is being served from. That single
-property is the fix for the failure that motivated this whole design.
+Two hand-written `jail.conf.d` snippets, written once and never generated.
 
-### The binary is static
+The insight that makes this small: **a rolling update needs exactly two slots,
+not one per release.** With `blue` and `green` alternating and their *contents*
+replaced, there is no dynamic jail creation, no IP allocation scheme, no
+lifecycle tracking and no orphan cleanup — which is most of what jail
+management tooling exists to provide. Bastille, pot and iocage were all
+considered and declined on that basis: they earn their keep across a dozen
+varied jails, and there are two identical ones here. The deploy script is
+about forty lines of shell with nothing between it and `jail(8)`.
 
-Built `x86_64-unknown-linux-musl` with `musl-tools`, fully static, no libc
-dependency of any kind.
+Postgres deliberately sits outside the release cycle, on a persistent dataset,
+listening on a **unix socket only** so it is unreachable from the network
+regardless of firewall state.
 
-This is not a preference. Building on GitHub's glibc 2.39 and running on
-Debian 12's 2.36 fails at the loader with an error that explains nothing, and
-it is the classic first Rust deployment. Nothing here needs glibc — TLS is
-rustls throughout and there is no OpenSSL — so the static target is free.
+### Caddy, with both jails as upstreams
 
-`ring` compiles C, so the musl link is the riskiest unproven step in the
-design and is tested first rather than last. The documented fallback is
-`cargo-zigbuild` against the same target.
+One daemon on the host, one hop, automatic TLS.
 
-**Nix was considered and declined.** It would solve glibc drift, but so does
-one cargo flag. NixOS's real attraction is different and genuine — whole-system
-generations with atomic rollback of the OS, not just the app — but `npm` under
-Nix is the roughest corner of that ecosystem, and it is exactly the half of
-this stack with the least existing experience behind it. Three unfamiliar
-things at once is how a canary fails to ship. Worth revisiting once deploying
-this stack is boring; migrating later is a packaging exercise, not an
-architectural one, because the app is already a static binary beside a
-static-ish node tree. Note also that Railway, the reference point for
-Nix-based builds, [moved off it in 2026](https://blog.railway.com/p/introducing-railpack)
-after 14 million builds.
+The deciding fact was that the CA/Browser Forum is cutting maximum certificate
+lifetime from 398 days to **47**. Any design where renewal is a separate moving
+part — certbot plus a reload hook, or `acme.sh` concatenating a PEM for
+haproxy — now gets roughly eight chances a year to fail silently instead of
+one. Certificate expiry is the highest-probability outage in a self-hosted
+edge, and Caddy is the only option where it cannot rot.
 
-**mimalloc was considered and shelved, with a trigger.** musl's allocator is
-slower than glibc's under concurrency. But mimalloc is a C library, and adding
-it would double the C surface of the musl cross-compile that is already the
-riskiest step, to fix a cost this workload cannot measure — a request here is
-dominated by one database round trip, not by allocation. If a profile ever
-shows otherwise, the cheaper first move is switching the target to
-`cargo zigbuild --target x86_64-unknown-linux-gnu.2.36`, which drops the musl
-allocator and adds no dependency. mimalloc only after that.
+`nginx → haproxy`, the author's proven stack, was declined for this box.
+haproxy's runtime API is genuinely the better switchover mechanism — flip a
+server through the socket with no reload at all — and its continuous health
+checking is excellent. But it optimises hardest for the risk already handled by
+rolling updates while leaving the biggest risk manual, and the extra hop adds
+a layer where timeout mismatches manufacture 504s and every 503 needs a
+"which layer?" question first. Caddy also does active health checks across
+multiple upstreams, so that capability was never the trade.
 
-### The frontend is an artifact, not a checkout
+### Rolling, not blue-green-then-destroy
 
-CI runs `npm ci --omit=dev` and ships `build/` plus `node_modules/` as one
-tarball. Both production dependencies are pure JavaScript, so there is nothing
-to compile on the target. **The box has a Node runtime and no npm.** Running a
-package install on a production host at deploy time is the same class of thing
-as rsyncing over a live directory: a step that can half-succeed.
+Both jails run at all times, both are health-checked upstreams. A deploy
+updates one at a time:
 
-### The deploy is health-gated
+1. Stop `green`, replace its contents, start it, wait for its health check.
+   **`blue` serves throughout.**
+2. Do the same to `blue`. **`green` serves throughout.**
 
-A symlink swap prevents overwriting a good release. It does not prevent
-pointing at a bad one. So the sequence is: download into `releases/<sha>/`,
-start the new binary on a spare port, poll `/health/ready`, and only then flip
-and restart. Any failure removes the new directory and exits non-zero with
-`current` never having moved.
+At no instant are zero backends healthy. Failure at any step aborts with the
+other jail still serving, and rollback means restoring the retained previous
+release into one jail rather than a race to fix the live one.
 
-Artifacts come from a GitHub Release rather than being copied straight from
-CI, so any previous version can be redeployed without rebuilding it.
+Crash failover falls out of the same structure for free: if a process dies at
+3am, Caddy marks that jail down and the other one serves until somebody looks.
 
-### Rollback does not roll back the schema
+### Migrations must be backward-compatible with the previous release
 
-`migrate()` runs at API startup. The moment a new binary boots, the schema has
-moved — and flipping the symlink back leaves old code against a new database.
+`migrate()` runs at API startup, so a rollback does not revert the schema. The
+rolling update sharpens this from prudent to load-bearing: for a few seconds
+**two releases are live against one database by design**.
 
-There is no tooling fix for this, only a rule:
-
-> **A migration must be backward-compatible with the release before it.**
-> Add columns; do not drop them in the same deploy that stops using them. Drop
+> Add columns; never drop them in the same deploy that stops using them. Drop
 > them one release later, once the previous version is no longer a rollback
 > target.
 
-It costs a two-step dance a few times a year and it is what makes "just roll
-back" true rather than merely comforting.
+There is no tooling fix. It costs a two-step dance a few times a year and it is
+what makes rollback honest rather than merely comforting.
+
+### Build and delivery
+
+GitHub Actions throughout, and no second billing relationship. Linux-native
+jobs on every pull request for fast feedback; a `vmactions/freebsd-vm` job on
+release tags that runs the full suite **on FreeBSD** and then builds the
+artifact, which is what closes the Tier 2 gap.
+
+Cirrus CI would have been the natural home for native FreeBSD builds and was
+the original plan; it announced shutdown in April 2026 and stops running jobs
+on 1 June. The whole FreeBSD ecosystem is migrating to `vmactions`.
+
+Artifacts attach to a GitHub Release, so any past version is redeployable
+without rebuilding it.
 
 ### Provisioning
 
-Terraform for the server, firewall and SSH key, with **HCP's free remote
-backend** — versioned, locked, and not a file on a laptop. State loss is the
-scar that shaped this choice; for five resources the recovery cost is a
-handful of `terraform import` lines, but the same fix applies to larger
-estates and is worth establishing once.
+Terraform with **HCP's free remote backend** — versioned, locked state rather
+than a file on a laptop, which is the scar that shaped the choice. Terraform is
+deliberately thin: Hetzner has no FreeBSD image, so it declares a server and a
+firewall while the OS arrives via a mounted ISO and one `bsdinstall` run. That
+manual step is acceptable precisely because it is not where the rebuild value
+lives — packages, datasets, the base jail, users, PF rules and Caddy config all
+live in an idempotent `bootstrap.sh`.
 
-Terraform is deliberately thin here. It declares that a server exists. The
-part that actually needs to be reproducible — packages, service user,
-directory layout, units, Caddy config, backup timers — lives in an idempotent
-`bootstrap.sh`, because that is where the rebuild value is.
+`bectl` boot environments give atomic OS-level rollback, which is the property
+that made NixOS attractive earlier in this design without any of its packaging
+cost.
 
 ---
 
@@ -766,26 +807,41 @@ directory layout, units, Caddy config, backup timers — lives in an idempotent
 The training history is the only thing here that cannot be regenerated.
 Binaries, configuration and the box itself can be rebuilt within the hour.
 
-**Hourly** `pg_dump`, compressed and encrypted, pushed to a Hetzner Storage
-Box over SSH. Retention 24 hourly, 30 daily, 12 monthly.
+Two layers, protecting against different things:
 
-Hourly rather than nightly because the economics invert at this size: a year
-of one athlete's training is a few megabytes, so frequency is nearly free, and
-it moves the worst case from "lose a session" to "lose nothing". A daily
-schedule would be optimising for a storage cost that does not exist.
+**`sanoid` ZFS snapshots, locally.** Copy-on-write, so frequent snapshots are
+nearly free, with instant `zfs rollback`. One caveat decides the layout: a
+snapshot of a running Postgres is **crash-consistent, not logically
+consistent** — equivalent to pulling the power cord. Postgres recovers by
+replaying WAL, which is safe *only if the entire data directory including
+`pg_wal` sits on one dataset snapshotted atomically*. Split across datasets,
+a restore can be silently corrupt.
 
-Two failure modes are worth naming, because both look like working backups:
+**Hourly `pg_dump`, compressed and encrypted, offsite to a Hetzner Storage
+Box.** 24 hourly, 30 daily, 12 monthly. Hourly because a year of one athlete's
+training is a few megabytes, so frequency is nearly free and the worst case
+moves from "lose a session" to "lose nothing".
+
+`syncoid` was considered and left optional. Its value is replicating large
+datasets incrementally, and it needs a target that speaks `zfs receive` —
+rsync.net offers that but with a 10 TB minimum, and a Hetzner Storage Box
+speaks only SFTP and rsync. For megabytes, `pg_dump | age | scp` is simpler and
+portable.
+
+Two failure modes are worth naming, because both look exactly like working
+backups:
 
 - **A dump on the same box is not a backup.** It shares a failure domain with
-  the thing it protects. This is why the destination is offsite and why the
-  local copy is a staging area rather than the artifact.
+  what it protects, which is why the destination is offsite and the local copy
+  is staging rather than the artifact.
 - **An untested backup is not a backup.** A `pg_dump` writing a zero-byte file
   for eight months is indistinguishable from a healthy one until the day it
-  matters. The restore procedure is therefore a script, not a paragraph, and
-  it is run once before it is needed.
+  matters. The restore procedure is therefore a script, run once before it is
+  needed.
 
-Postgres listens on a **unix socket only** — no TCP port, so the database is
-not reachable from the network regardless of firewall state.
+Note what the dump gives that a snapshot cannot: it is portable across Postgres
+versions, it is readable, and **completing at all is evidence the database is
+healthy**. A snapshot succeeds whether or not the data inside it is fine.
 
 ---
 
@@ -807,8 +863,28 @@ not reachable from the network regardless of firewall state.
   `unnest` bulk insert, the `::float8` casts and the quoted `"position"`
   column, passed first time.
 
+  The suite has since grown to **131 backend and 48 frontend tests**, still
+  green.
+
   The **offline round-trip** is still unverified: it needs a browser, a phone
   in airplane mode, and a human. No database fixes that.
-- **Deployment.** Untouched. Two services (Axum + Node) plus Postgres.
+
+- **Nothing FreeBSD-specific has ever run.** The design in D-16 to D-18 was
+  written and reviewed on a Windows machine with a Linux container for
+  Postgres. `jail.conf` syntax, thin jails over nullfs, the `rc.d` scripts, PF
+  redirects, `bectl`, `sanoid`, and Caddy's active health checks against a
+  restarting jail are all reasoned rather than executed. The first `bsdinstall`
+  is where that changes, and the ZFS layout is the part no amount of local
+  rehearsal can cover.
+
+- **CI has still never run.** There is no git remote, so the `postgres:17`
+  service job, the `oasdiff` gate and the `vmactions` FreeBSD build are all
+  theoretical. Creating the repository is the cheapest unblocking act available.
+
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.
+
+- **`enrolment` vs `enrollment`.** `CONTEXT.md` settles the spelling as
+  `enrollment`, matching the 148 identifiers and the published `/v1/enrollments`
+  path. About 70 prose comments still disagree. Cosmetic, and cheap to fix in
+  one pass.
