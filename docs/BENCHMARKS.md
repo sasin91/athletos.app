@@ -52,6 +52,33 @@ rests on: one backend is out of service for about half a second while the other
 serves, and Caddy's health check interval is 5 s, so in practice it never even
 observes the gap.
 
+## Rolling deploy
+
+`athletos-deploy v0.1.1`, artifact already on disk, both jails updated one at
+a time:
+
+| step | elapsed |
+|---|---|
+| green: stop, repoint, start | 0 s |
+| green: start → `/health/ready` and `/login` both 200 | **2 s** |
+| blue: stop, repoint, start | 1 s |
+| blue: start → healthy | **2 s** |
+| **total, both jails on the new release** | **5 s** |
+
+The health gate allows 120 s and used 2. At no point in those five seconds were
+both backends down — Caddy's health check interval is 5 s, so it never even
+observed the gap.
+
+## Live, end to end
+
+Measured from a laptop in Denmark to `hel1`, over the public internet:
+
+| | |
+|---|---|
+| `https://athletos.app` (303 → /login) | 0.324 s |
+| `https://api.athletos.app/health` | 0.233 s |
+| TLS | Let's Encrypt, obtained automatically, no certbot |
+
 ## Build and release
 
 | | |
@@ -79,6 +106,5 @@ cost lands where nobody is waiting on it.
 ## Still to measure
 
 - Request latency through Caddy to a jail, and the loopback hop the BFF makes.
-- A full `athletos-deploy` run, start to finish, and time-to-healthy per jail.
 - `bectl` boot-environment rollback.
 - Restore drill: `pg_dump` size and restore duration.
