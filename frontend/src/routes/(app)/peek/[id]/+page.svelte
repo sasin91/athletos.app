@@ -4,6 +4,7 @@
 
 	import { commitSession } from '$lib/session';
 	import { loadActiveSession, saveActiveSession } from '$lib/storage';
+	import { formatMinutes } from '$lib/time';
 	import { uuidv7 } from '$lib/uuid';
 	import type { PageData } from './$types';
 
@@ -36,7 +37,9 @@
 				commitSession(data.session, {
 					id: uuidv7(),
 					startedAt: new Date().toISOString(),
-					secondsPerSet: data.secondsPerSet
+					// Cached with the session, because the logger runs with no
+					// network and cannot ask again (D-09).
+					secondsPerSet: data.session.pace.median_seconds_per_set ?? null
 				})
 			);
 
@@ -63,6 +66,16 @@
 			Session {session.progress.completed + 1} of {session.progress.total}
 		{/if}
 		· {session.prescribed_sets.length} sets
+		<!--
+			"Will this fit in the hour", answered before committing rather than
+			discovered afterwards (D-01, D-10). The number is the athlete's own
+			median pace over their recent sessions, computed in Rust and already
+			multiplied out — shown only when there is enough history to mean
+			anything, because an invented estimate is worse than none.
+		-->
+		{#if session.pace.can_project}
+			· about {formatMinutes(session.pace.projected_seconds)} at your pace
+		{/if}
 	</p>
 	<p class="mb-4 text-xs opacity-70">
 		Looking at this costs nothing. The clock starts when you commit.

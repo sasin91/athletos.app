@@ -289,7 +289,8 @@ export interface paths {
          *     stamped on commit, which happens on the phone and arrives later as a
          *     `POST /v1/workouts` — this endpoint exists precisely so that looking is free.
          *     If this handler ever acquires a write, the distinction D-08 is built on has
-         *     been lost.
+         *     been lost. It acquired a second *read* in phase 5, for the pace projection,
+         *     and that is the line: reads are what "free" means.
          */
         get: operations["next_session"];
         put?: never;
@@ -637,6 +638,21 @@ export interface components {
              */
             focus?: string | null;
             /**
+             * @description When this session will be over, at the athlete's own pace (D-10).
+             *
+             *     Added in phase 5, and served here rather than on an endpoint of its own
+             *     because this is the only screen that asks the question. The peek page
+             *     shows the projection and the logger caches it with the committed session,
+             *     so a separate endpoint would be a second request that every caller of the
+             *     first one makes — and the header would then be drawable only after both
+             *     landed. It also keeps the *offline* story intact: what the phone caches at
+             *     commit is one response, and the pace is in it.
+             *
+             *     The cost is one more query on a read-only handler, over the same
+             *     enrolments the athlete already owns. Peeking still writes nothing (D-08).
+             */
+            pace: components["schemas"]["PaceProjection"];
+            /**
              * @description The same prescription as the athlete *logs* it: every set, expanded and
              *     numbered.
              *
@@ -653,6 +669,59 @@ export interface components {
             progress: components["schemas"]["ProgressView"];
             /** Format: int32 */
             week: number;
+        };
+        /**
+         * @description What the session header needs, with the arithmetic already done.
+         *
+         *     Every field is a fact about *this* athlete and *this* session. There is
+         *     deliberately nothing here that would let a client recompute the median for
+         *     itself, because a client that could would eventually be asked to.
+         */
+        PaceProjection: {
+            /**
+             * @description Whether the athlete has logged enough to project from (D-10).
+             *
+             *     Not the same question as `projected_seconds != null`, though today they
+             *     answer together: this one is about the athlete's history, and a session
+             *     with nothing prescribed in it would have a pace to project *from* and
+             *     nothing to project *onto*. A client branching on "do I show the finish
+             *     time" wants this one, and a name reads better at the call site than a
+             *     null check whose meaning has to be looked up.
+             */
+            can_project: boolean;
+            /**
+             * Format: double
+             * @description The athlete's median seconds per set, or `null` when there is not enough
+             *     history to say.
+             *
+             *     Carried so the logger can re-project as sets are logged, with no network
+             *     (D-09). It is a measurement the server made, not an input the client is
+             *     expected to reason about.
+             * @example 96
+             */
+            median_seconds_per_set?: number | null;
+            /**
+             * Format: int64
+             * @description How long this whole session should take at that pace, in seconds.
+             *
+             *     Whole seconds, and every prescribed set counted — this is the number the
+             *     peek screen shows before a single set exists to be remaining. `null`
+             *     whenever there is no pace, because an invented finish time is worse than
+             *     none, for the same reason an invented progress denominator is (D-03).
+             * @example 3264
+             */
+            projected_seconds?: number | null;
+            /**
+             * Format: int32
+             * @description How many of the recent sessions were usable — the number the floor is
+             *     compared against, not the number of sessions looked at.
+             *
+             *     Sent because "not yet" is a more useful answer with a count attached: a
+             *     client can say "one more session" rather than going quiet for reasons the
+             *     athlete cannot see.
+             * @example 5
+             */
+            sample_size: number;
         };
         /** @description One prescribed set, ready to be logged. */
         PrescribedSet: {

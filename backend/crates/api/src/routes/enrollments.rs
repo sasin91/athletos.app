@@ -36,6 +36,7 @@ use athletos_training::{exercise, programs, Progress, Session, State as ProgramS
 
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
+use crate::pace::{self, PaceProjection};
 use crate::routes::maxes;
 use crate::state::AppState;
 
@@ -205,6 +206,20 @@ pub struct NextSession {
     /// keeps the round trip symmetric: what comes back in `POST /v1/workouts` is
     /// this list with the `actual_*` fields and a status filled in.
     pub prescribed_sets: Vec<PrescribedSet>,
+
+    /// When this session will be over, at the athlete's own pace (D-10).
+    ///
+    /// Added in phase 5, and served here rather than on an endpoint of its own
+    /// because this is the only screen that asks the question. The peek page
+    /// shows the projection and the logger caches it with the committed session,
+    /// so a separate endpoint would be a second request that every caller of the
+    /// first one makes — and the header would then be drawable only after both
+    /// landed. It also keeps the *offline* story intact: what the phone caches at
+    /// commit is one response, and the pace is in it.
+    ///
+    /// The cost is one more query on a read-only handler, over the same
+    /// enrolments the athlete already owns. Peeking still writes nothing (D-08).
+    pub pace: PaceProjection,
 }
 
 /// One exercise and everything prescribed for it in this session.
@@ -420,7 +435,8 @@ pub async fn list(
 /// stamped on commit, which happens on the phone and arrives later as a
 /// `POST /v1/workouts` — this endpoint exists precisely so that looking is free.
 /// If this handler ever acquires a write, the distinction D-08 is built on has
-/// been lost.
+/// been lost. It acquired a second *read* in phase 5, for the pace projection,
+/// and that is the line: reads are what "free" means.
 #[utoipa::path(
     get,
     path = "/v1/enrollments/{id}/next-session",
@@ -471,6 +487,15 @@ pub async fn next_session(
     let session = program.session(&program_state)?;
     let progress = program.progress(&program_state)?;
 
+    let prescribed_sets = prescribed_sets_of(&session);
+
+    // Measured over the athlete's history, not this enrolment's: how fast
+    // somebody moves between sets is a fact about them, and restricting it to
+    // one program would throw away the sessions that make the sample big enough
+    // on the day they start a new block — which is exactly when they most want
+    // to know whether it fits in the hour (D-10).
+    let pace = pace::measure(&state.db, athlete.athlete_id, prescribed_sets.len()).await?;
+
     Ok(Json(NextSession {
         enrollment_id: id,
         program_key,
@@ -479,7 +504,8 @@ pub async fn next_session(
         focus: session.focus.clone(),
         progress: progress.into(),
         blocks: blocks_of(&session),
-        prescribed_sets: prescribed_sets_of(&session),
+        prescribed_sets,
+        pace,
     }))
 }
 

@@ -22,6 +22,12 @@ const peeked: NextSession = {
 	day: 4,
 	focus: 'squat',
 	progress: { completed: 3, total: null },
+	pace: {
+		can_project: true,
+		median_seconds_per_set: 90,
+		projected_seconds: 270,
+		sample_size: 5
+	},
 	blocks: [
 		{
 			exercise: 'squat',

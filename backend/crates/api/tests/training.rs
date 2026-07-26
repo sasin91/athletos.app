@@ -574,6 +574,285 @@ async fn the_session_carries_loadable_weights_and_their_plates(pool: PgPool) {
     assert_eq!(session["progress"]["total"], 12);
 }
 
+// --- the pace projection (D-10) -------------------------------------------
+
+/// Logs the enrolment's current session with a chosen wall clock and a chosen
+/// number of sets actually performed, leaving the rest `pending`.
+///
+/// The date is a day index rather than a fixed instant, because the pace window
+/// is ordered by `started_at` and two sessions sharing one would leave the
+/// window's contents up to the tiebreak.
+async fn log_a_session_lasting(
+    server: &TestServer,
+    token: &str,
+    enrollment: Uuid,
+    session: &serde_json::Value,
+    day: u32,
+    seconds: i64,
+    done: usize,
+) {
+    let started: chrono::DateTime<chrono::Utc> = format!("2026-08-{day:02}T09:00:00Z")
+        .parse()
+        .expect("the day index makes a real date");
+    let ended = started + chrono::Duration::seconds(seconds);
+
+    let prescribed = session["prescribed_sets"].as_array().unwrap();
+
+    let sets: Vec<serde_json::Value> = prescribed
+        .iter()
+        .enumerate()
+        .map(|(index, set)| {
+            if index < done {
+                json!({
+                    "position": set["position"],
+                    "exercise": set["exercise"],
+                    "prescribed_weight": set["prescribed_weight"],
+                    "prescribed_reps": set["prescribed_reps"],
+                    "actual_weight": set["prescribed_weight"],
+                    "actual_reps": set["prescribed_reps"],
+                    "status": "done",
+                })
+            } else {
+                json!({
+                    "position": set["position"],
+                    "exercise": set["exercise"],
+                    "prescribed_weight": set["prescribed_weight"],
+                    "prescribed_reps": set["prescribed_reps"],
+                    "status": "pending",
+                })
+            }
+        })
+        .collect();
+
+    // Anything short of every set has to answer D-08's one question, and the
+    // schema enforces the pairing either way.
+    let cut = done < prescribed.len();
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(token)
+        .json(&json!({
+            "id": Uuid::now_v7(),
+            "enrollment_id": enrollment,
+            "started_at": started.to_rfc3339(),
+            "ended_at": ended.to_rfc3339(),
+            "outcome": if cut { "cut_short" } else { "completed" },
+            "cut_reason": if cut { Some("out_of_time") } else { None },
+            "sets": sets,
+        }))
+        .await
+        .assert_status(StatusCode::CREATED);
+}
+
+/// Logs the current session at an exact seconds-per-set.
+///
+/// The wall clock is derived from the session's own size rather than fixed, so
+/// the rate the pace query recovers is exactly `seconds_per_set` however many
+/// sets that day happens to prescribe — 5/3/1's four weeks are not the same
+/// length as each other, and a fixed hour would make every assertion depend on
+/// the program's set count.
+async fn log_a_session_at(
+    server: &TestServer,
+    token: &str,
+    enrollment: Uuid,
+    day: u32,
+    seconds_per_set: i64,
+) {
+    let session = next_session(server, token, enrollment).await;
+    let sets = session["prescribed_sets"].as_array().unwrap().len();
+
+    log_a_session_lasting(
+        server,
+        token,
+        enrollment,
+        &session,
+        day,
+        seconds_per_set * sets as i64,
+        sets,
+    )
+    .await;
+}
+
+/// The pace as the peek response carries it.
+async fn pace(server: &TestServer, token: &str, enrollment: Uuid) -> serde_json::Value {
+    next_session(server, token, enrollment).await["pace"].clone()
+}
+
+/// D-10 shows a finish time only once there is data to compute one from, and
+/// "roughly three sessions" is where that line is drawn.
+#[sqlx::test]
+async fn the_pace_says_nothing_until_three_sessions_have_been_logged(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let fresh = pace(&server, &token, enrollment).await;
+    assert_eq!(fresh["can_project"], false);
+    assert!(fresh["median_seconds_per_set"].is_null());
+    assert!(fresh["projected_seconds"].is_null());
+    assert_eq!(fresh["sample_size"], 0);
+
+    for day in 1..=2 {
+        log_a_session_at(&server, &token, enrollment, day, 90).await;
+
+        let so_far = pace(&server, &token, enrollment).await;
+        assert_eq!(so_far["sample_size"], day);
+        assert_eq!(
+            so_far["can_project"], false,
+            "two sessions is not three, and one outlier would be the whole median"
+        );
+        assert!(so_far["projected_seconds"].is_null());
+    }
+
+    log_a_session_at(&server, &token, enrollment, 3, 90).await;
+
+    let session = next_session(&server, &token, enrollment).await;
+    let projection = &session["pace"];
+
+    assert_eq!(projection["can_project"], true);
+    assert_eq!(projection["sample_size"], 3);
+    assert_eq!(projection["median_seconds_per_set"], 90.0);
+
+    // The whole session, already multiplied out. The client formats this; it
+    // does not work it out (D-11).
+    let sets = session["prescribed_sets"].as_array().unwrap().len() as i64;
+    assert_eq!(projection["projected_seconds"], 90 * sets);
+}
+
+/// The median is the median. A mean would be pulled by the long session, which
+/// is the entire reason D-10 names this statistic and not that one.
+#[sqlx::test]
+async fn the_pace_is_the_median_and_not_the_mean(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    // 60, 300 and 90 seconds a set. The median is 90; the mean is 150, which
+    // would promise a session two thirds longer than the one about to happen.
+    for (day, seconds_per_set) in [(1, 60), (2, 300), (3, 90)] {
+        log_a_session_at(&server, &token, enrollment, day, seconds_per_set).await;
+    }
+
+    let projection = pace(&server, &token, enrollment).await;
+    assert_eq!(projection["sample_size"], 3);
+    assert_eq!(projection["median_seconds_per_set"], 90.0);
+}
+
+/// One session that ran long is a phone call, not a change of pace.
+#[sqlx::test]
+async fn a_session_that_ran_long_does_not_dominate_the_projection(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    for day in 1..=3 {
+        log_a_session_at(&server, &token, enrollment, day, 90).await;
+    }
+    assert_eq!(
+        pace(&server, &token, enrollment).await["median_seconds_per_set"],
+        90.0
+    );
+
+    // Fifty minutes a set: the gym was full, or the phone rang, or the session
+    // was left open and swept. The mean of the four is now 817 s/set.
+    log_a_session_at(&server, &token, enrollment, 4, 3_000).await;
+
+    let projection = pace(&server, &token, enrollment).await;
+    assert_eq!(projection["sample_size"], 4);
+    assert_eq!(
+        projection["median_seconds_per_set"], 90.0,
+        "the outlier is in the sample and is not the answer"
+    );
+}
+
+/// A session with nothing logged in it took no time per set, because there were
+/// no sets. Counting it as zero would drag the median toward a pace nobody ever
+/// lifted at — and unlike a long session, which the median survives by design, a
+/// zero is not a slow session at all.
+#[sqlx::test]
+async fn a_session_with_no_sets_logged_is_dropped_rather_than_counted(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    for day in 1..=2 {
+        log_a_session_at(&server, &token, enrollment, day, 90).await;
+    }
+
+    // Committed, on the clock for an hour, and not one set performed.
+    let abandoned = next_session(&server, &token, enrollment).await;
+    log_a_session_lasting(&server, &token, enrollment, &abandoned, 3, 3_600, 0).await;
+
+    let after = pace(&server, &token, enrollment).await;
+    assert_eq!(
+        after["sample_size"], 2,
+        "an hour over no sets is not a rate, and does not count toward the floor"
+    );
+    assert_eq!(after["can_project"], false);
+
+    log_a_session_at(&server, &token, enrollment, 4, 90).await;
+
+    let now = pace(&server, &token, enrollment).await;
+    assert_eq!(now["sample_size"], 3);
+    assert_eq!(now["can_project"], true);
+    assert_eq!(
+        now["median_seconds_per_set"], 90.0,
+        "the empty session is dropped, not counted as zero seconds a set"
+    );
+}
+
+/// The pace is the athlete's, not the enrolment's — see the comment at the call
+/// site in `routes::enrollments`. A new block is exactly when the question "does
+/// this fit in the hour" is being asked, and it is also exactly when a
+/// per-enrolment sample would be empty.
+#[sqlx::test]
+async fn the_pace_follows_the_athlete_into_a_new_program(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let first = enrol(&server, &token, "wendler-531-bbb").await;
+    for day in 1..=3 {
+        log_a_session_at(&server, &token, first, day, 90).await;
+    }
+
+    let second = enrol(&server, &token, "smolov-jr").await;
+    let projection = pace(&server, &token, second).await;
+
+    assert_eq!(projection["can_project"], true);
+    assert_eq!(projection["median_seconds_per_set"], 90.0);
+}
+
+/// One athlete's pace is not another's, and the scope is a join rather than a
+/// column on `workouts` — so this is the assertion that the join is right.
+#[sqlx::test]
+async fn the_pace_is_measured_over_the_athletes_own_sessions(pool: PgPool) {
+    let server = server(pool);
+
+    let stranger = register(&server, "stranger@example.com").await;
+    set_maxes(&server, &stranger, full_maxes()).await;
+    let theirs = enrol(&server, &stranger, "wendler-531-bbb").await;
+    for day in 1..=3 {
+        log_a_session_at(&server, &stranger, theirs, day, 90).await;
+    }
+
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let mine = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let projection = pace(&server, &token, mine).await;
+    assert_eq!(projection["sample_size"], 0);
+    assert_eq!(projection["can_project"], false);
+}
+
 // --- authorization --------------------------------------------------------
 
 /// Another athlete's enrolment is a 404, not a 403. A 403 would confirm that the

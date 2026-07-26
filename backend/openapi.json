@@ -525,7 +525,7 @@
           "enrollments"
         ],
         "summary": "What the athlete is doing next. **Read-only** (D-08).",
-        "description": "No row is written, no timer starts, and no state moves. `started_at` is\nstamped on commit, which happens on the phone and arrives later as a\n`POST /v1/workouts` — this endpoint exists precisely so that looking is free.\nIf this handler ever acquires a write, the distinction D-08 is built on has\nbeen lost.",
+        "description": "No row is written, no timer starts, and no state moves. `started_at` is\nstamped on commit, which happens on the phone and arrives later as a\n`POST /v1/workouts` — this endpoint exists precisely so that looking is free.\nIf this handler ever acquires a write, the distinction D-08 is built on has\nbeen lost. It acquired a second *read* in phase 5, for the pace projection,\nand that is the line: reads are what \"free\" means.",
         "operationId": "next_session",
         "parameters": [
           {
@@ -1292,7 +1292,8 @@
           "day",
           "progress",
           "blocks",
-          "prescribed_sets"
+          "prescribed_sets",
+          "pace"
         ],
         "properties": {
           "blocks": {
@@ -1318,6 +1319,10 @@
             ],
             "description": "The exercise key this session is built around, when there is one. A key\nrather than a title, so it is data a client can act on."
           },
+          "pace": {
+            "$ref": "#/components/schemas/PaceProjection",
+            "description": "When this session will be over, at the athlete's own pace (D-10).\n\nAdded in phase 5, and served here rather than on an endpoint of its own\nbecause this is the only screen that asks the question. The peek page\nshows the projection and the logger caches it with the committed session,\nso a separate endpoint would be a second request that every caller of the\nfirst one makes — and the header would then be drawable only after both\nlanded. It also keeps the *offline* story intact: what the phone caches at\ncommit is one response, and the pace is in it.\n\nThe cost is one more query on a read-only handler, over the same\nenrolments the athlete already owns. Peeking still writes nothing (D-08)."
+          },
           "prescribed_sets": {
             "type": "array",
             "items": {
@@ -1334,6 +1339,45 @@
           "week": {
             "type": "integer",
             "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "PaceProjection": {
+        "type": "object",
+        "description": "What the session header needs, with the arithmetic already done.\n\nEvery field is a fact about *this* athlete and *this* session. There is\ndeliberately nothing here that would let a client recompute the median for\nitself, because a client that could would eventually be asked to.",
+        "required": [
+          "can_project",
+          "sample_size"
+        ],
+        "properties": {
+          "can_project": {
+            "type": "boolean",
+            "description": "Whether the athlete has logged enough to project from (D-10).\n\nNot the same question as `projected_seconds != null`, though today they\nanswer together: this one is about the athlete's history, and a session\nwith nothing prescribed in it would have a pace to project *from* and\nnothing to project *onto*. A client branching on \"do I show the finish\ntime\" wants this one, and a name reads better at the call site than a\nnull check whose meaning has to be looked up."
+          },
+          "median_seconds_per_set": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The athlete's median seconds per set, or `null` when there is not enough\nhistory to say.\n\nCarried so the logger can re-project as sets are logged, with no network\n(D-09). It is a measurement the server made, not an input the client is\nexpected to reason about.",
+            "example": 96.0
+          },
+          "projected_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "How long this whole session should take at that pace, in seconds.\n\nWhole seconds, and every prescribed set counted — this is the number the\npeek screen shows before a single set exists to be remaining. `null`\nwhenever there is no pace, because an invented finish time is worse than\nnone, for the same reason an invented progress denominator is (D-03).",
+            "example": 3264
+          },
+          "sample_size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many of the recent sessions were usable — the number the floor is\ncompared against, not the number of sessions looked at.\n\nSent because \"not yet\" is a more useful answer with a count attached: a\nclient can say \"one more session\" rather than going quiet for reasons the\nathlete cannot see.",
+            "example": 5,
             "minimum": 0
           }
         }
