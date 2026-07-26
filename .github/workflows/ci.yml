@@ -1,0 +1,142 @@
+name: CI
+
+# The dev machine this was built on has no Postgres and no Docker, so every
+# `#[sqlx::test]` in the tree compiles but has never executed. This workflow is
+# the first place they actually run — which makes it not a formality but the
+# verification step the build has been deferring.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    # `#[sqlx::test]` creates and drops a database per test case, so the role
+    # needs CREATEDB. The default `postgres` superuser has it.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: athletos
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/athletos
+      # No PEM to manage in CI. Refused when APP_ENV=production, which is why
+      # APP_ENV is left unset here.
+      AUTH_ALLOW_EPHEMERAL_SIGNING_KEY: 'true'
+      # The breach corpus is bundled; the HIBP range lookup is the optional
+      # outbound call. Off, so CI never depends on a third party being up.
+      AUTH_HIBP_ENABLED: 'false'
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml pins the channel and asks for rustfmt + clippy.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      # Warnings are errors here and nowhere else. Locally a warning is a note
+      # to yourself; on main it is a thing nobody will ever come back to.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The engine is pure and needs no database. Run it separately so a
+      # failure here reads as "the training logic is wrong" rather than being
+      # buried in a suite that also talks to Postgres.
+      - name: Engine tests
+        run: cargo test -p athletos-training
+
+      - name: Full test suite
+        run: cargo test --workspace
+
+  # D-12: `/v1` is additive-only. That discipline is worth more than any
+  # versioning scheme and is the one usually skipped, so it is checked by a
+  # machine rather than by memory.
+  openapi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+
+      # The committed document must match the code that generates it, or every
+      # downstream client is built from a contract nobody is serving.
+      - name: openapi.json is current
+        working-directory: backend
+        run: |
+          cargo run --bin openapi -- /tmp/openapi.generated.json
+          if ! diff -u openapi.json /tmp/openapi.generated.json; then
+            echo "::error::backend/openapi.json is stale. Regenerate it: cargo run --bin openapi -- openapi.json"
+            exit 1
+          fi
+
+      - name: Install oasdiff
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/oasdiff/oasdiff/main/install.sh | sh
+
+      # Only meaningful on a PR, where there is a base to compare against.
+      # A push to main has already passed this as a PR.
+      - name: No breaking API changes
+        if: github.event_name == 'pull_request'
+        run: |
+          git show "origin/${{ github.base_ref }}:backend/openapi.json" > /tmp/openapi.base.json 2>/dev/null || {
+            echo "No base openapi.json — nothing to break yet."
+            exit 0
+          }
+          oasdiff breaking /tmp/openapi.base.json backend/openapi.json --fail-on ERR
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build

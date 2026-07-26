@@ -73,6 +73,24 @@ npm run dev
 npm run check
 ```
 
+## CI
+
+`.github/workflows/ci.yml`. Three jobs, and the first one matters more than
+CI usually does: **it is the first place the database tests actually run.**
+Everything written against Postgres so far compiles and has never executed,
+because this machine has neither Postgres nor Docker. GitHub Actions gives the
+backend job a `postgres:17` service container, so the moment this is pushed,
+every `#[sqlx::test]` runs for real.
+
+Expect failures on that first run. They are the point of it.
+
+- **backend** — `fmt --check`, `clippy -D warnings`, the pure engine tests on
+  their own, then the full suite against a real database.
+- **openapi** — asserts `backend/openapi.json` regenerates byte-identically
+  from the code, then runs `oasdiff breaking` against the PR's base to enforce
+  D-12's additive-only rule by machine rather than by memory.
+- **frontend** — `check`, `lint`, `build`.
+
 ## Notes
 
 - A C compiler is still a build requirement. `libwebp-sys` and `cmake` are
