@@ -75,8 +75,14 @@ async fn openapi_document_describes_every_route(pool: PgPool) {
 /// edited every time one lands stops being a guard and starts being a chore.
 #[sqlx::test]
 async fn migrations_create_the_identity_schema(pool: PgPool) {
+    // `table_name::text` for the same reason the training-schema test does it:
+    // `information_schema.table_name` is a domain over `name`, and this query
+    // has never once run against a non-empty result — there were no tables to
+    // find until the migrations landed. An uncast domain that sqlx declines to
+    // decode would fail here as a decode error rather than a missing table,
+    // which is a confusing way to learn your migrations are fine.
     let tables: Vec<String> = sqlx::query_scalar(
-        "select table_name from information_schema.tables
+        "select table_name::text from information_schema.tables
          where table_schema = 'public' and table_name <> '_sqlx_migrations'
          order by table_name",
     )

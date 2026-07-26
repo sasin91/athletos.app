@@ -30,9 +30,16 @@ served by a human coach in v2. No recommendation algorithm is built.
 ## D-02 · Inherited backend: salvage auth, discard the rest
 
 `backend/` arrived as a partial copy of PixMyDay (`~/Code/pixmyday`) and does
-not compile — `lib.rs` declares `images`, `mail`, `points`, `schedule`,
-`routes::invitations` and `routes::activities`, none of which exist, and
+not compile — `lib.rs` declares `images`, `mail`, `points`, `schedule` and
+wires `routes::invitations`; `routes/mod.rs` declares `activities` and
+`invitations`; `auth/mod.rs` declares `display`. None of them exist, and
 `sqlx::migrate!("./migrations")` points at a directory that was never created.
+
+> Amended during phase 0: `auth/display.rs` was a fifth missing module, not
+> found until the compiler was actually run. `config.rs` also had to be cut
+> harder than "keep" implies — `Config::from_env` refused to boot without
+> `S3_*`, `SMTP_*`, `MAIL_FROM` and `APP_PUBLIC_URL`, credentials for features
+> that no longer exist.
 
 **Keep:** `crates/api/src/auth/**` (keys, token, refresh, password, throttle,
 denylist, audit, extractor), `config.rs`, `error.rs`, `state.rs`,
@@ -409,9 +416,34 @@ model (D-06) has no due dates, so there is nothing else to notify about.
 
 ---
 
+## D-15 · The engine lives in its own crate
+
+Amendment, taken during the build. D-03 fixes the trait shape but not where it
+lives. The training engine is `backend/crates/training` (`athletos-training`),
+depending on `serde` and `thiserror` and nothing else — no `sqlx`, no `axum`,
+`#![forbid(unsafe_code)]`.
+
+Two reasons. The rules that are genuinely hard to get right — rounding down to
+a loadable weight, a training max that moves exactly once per cycle — become
+testable in milliseconds with no database, which matters a great deal on a
+machine that does not have one. And purity is enforced by the dependency graph
+rather than by discipline: a query cannot leak into program logic if the crate
+cannot see `sqlx`.
+
+This is the same reasoning the inherited `crates/domain` was built on. The
+crate slot is deliberately *not* reused — a fresh name keeps the git history
+legible, since the old crate was RFC 5545 recurrence and shares nothing with
+this one but a philosophy.
+
+---
+
 ## Open
 
+- **No Postgres on the dev machine.** No `psql`, no Docker. Migrations and
+  handlers can be written and compiled — `sqlx::query(..)` is runtime-checked
+  and `sqlx::migrate!` only reads the directory — but nothing that touches a
+  database has been executed. The two acceptance tests that matter most
+  (double-POST idempotency, offline round-trip) are blocked on this.
 - **Deployment.** Untouched. Two services (Axum + Node) plus Postgres.
-- **`git init`.** The project is not currently a git repository.
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.

@@ -210,7 +210,14 @@ create table workout_sets (
     -- Order within the session, as prescribed. Held here rather than inferred
     -- from `id` because the client materialises every set at commit time and
     -- submits them as one list, so insertion order is an accident of the wire.
-    position          smallint     not null check (position >= 0),
+    --
+    -- Quoted because `position` is a `col_name_keyword` — legal as a column
+    -- name, but the grammar also has a `position(sub in str)` production. A
+    -- bare `position >= 0` should parse, since the disambiguating lookahead is
+    -- `>=` rather than `(`. Quoting removes the need to be right about that,
+    -- and costs nothing: a quoted all-lowercase identifier is the same column
+    -- name as an unquoted one, so nothing downstream has to quote it.
+    "position"        smallint     not null check ("position" >= 0),
 
     -- What the program asked for. Already rounded down to a loadable weight by
     -- the engine (D-04) — an unloadable prescription such as 113.4375 kg would
@@ -246,5 +253,5 @@ create table workout_sets (
     -- a plain index because two sets claiming the same slot would make that
     -- ordering arbitrary, and because it is the client — offline, retrying —
     -- that decides these numbers.
-    unique (workout_id, position)
+    unique (workout_id, "position")
 );
