@@ -81,7 +81,9 @@
 		modern screen is not reachable with a thumb (D-10 is about time, but the
 		same athlete is holding the same phone).
 	-->
-	<nav class="safe-bottom sticky bottom-0 z-20 grid grid-cols-4 border-t border-base-300 bg-base-100">
+	<nav
+		class="sticky bottom-0 z-20 grid grid-cols-4 border-t border-base-300 bg-base-100 safe-bottom"
+	>
 		{#each nav as item (item.href)}
 			{@const active = page.url.pathname === item.href}
 			<a
