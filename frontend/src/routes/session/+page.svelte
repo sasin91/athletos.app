@@ -179,8 +179,21 @@
 									<Plates plates={set.platesPerSide} />
 								</div>
 
+								<!--
+									One cue per line. Joined with a separator they read as a
+									single sentence, and an athlete glancing down mid-set has to
+									parse the whole run to find the one thing they are about to
+									get wrong. Keyed by index: cues are plain strings off the
+									response and nothing stops an exercise carrying the same one
+									twice, which is exactly how the peek screen threw
+									`each_key_duplicate`.
+								-->
 								{#if cues.length > 0}
-									<p class="text-sm opacity-60">{cues.join(' · ')}</p>
+									<ul class="list-disc space-y-1 pl-5 text-sm opacity-60 marker:opacity-50">
+										{#each cues as cue, index (index)}
+											<li>{cue}</li>
+										{/each}
+									</ul>
 								{/if}
 							{:else}
 								<div class="flex items-baseline justify-between">
