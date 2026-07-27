@@ -2015,7 +2015,7 @@ async fn a_logged_session_reports_where_its_time_went(pool: PgPool) {
     let server = server(pool);
     let token = register(&server, "timing@example.com").await;
     set_maxes(&server, &token, full_maxes()).await;
-    let enrollment = enrol(&server, &token, "five-three-one").await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
 
     let session = next_session(&server, &token, enrollment).await;
     let prescribed = session["prescribed_sets"].as_array().unwrap().clone();
@@ -2109,7 +2109,7 @@ async fn a_session_submitted_without_stamps_has_no_timing_rather_than_an_empty_o
     let server = server(pool);
     let token = register(&server, "untimed@example.com").await;
     set_maxes(&server, &token, full_maxes()).await;
-    let enrollment = enrol(&server, &token, "five-three-one").await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
 
     let workout_id = log_a_session(&server, &token, enrollment).await;
 
