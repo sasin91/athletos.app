@@ -786,13 +786,23 @@ on 1 June. The whole FreeBSD ecosystem is migrating to `vmactions`.
 Artifacts attach to a GitHub Release, so any past version is redeployable
 without rebuilding it.
 
-> **Amended after measuring it.** The FreeBSD job took 13m, and the reason was
-> that Rust compiled the whole dependency graph twice — once at opt-level 0 for
-> clippy and the tests, once at opt-level 3 for the binary. It now uses one
-> profile throughout: the tests and the shipped binary are both `--release`, so
-> the dependencies are built once and shared.
+> **Amended after measuring it, then amended again after measuring the fix.**
+> The FreeBSD job took 13m06s. The theory was that Rust compiled the whole
+> dependency graph twice — opt-level 0 for clippy and the tests, opt-level 3
+> for the binary — so v0.1.6 put the tests on `--release` to share one profile.
 >
-> **`cargo fmt` and `cargo clippy` left this job entirely.** They are
+> **That theory was wrong and the numbers say so.** Release compilation costs
+> roughly twice as much per crate: the suite went from 2m56s to 5m53s, and
+> `cargo build --release` still took 2m03s instead of becoming the link it was
+> supposed to become. Eliminating the debug pass bought less than the release
+> pass cost. Net gain, once clippy was gone, was about **twenty seconds** — in
+> exchange for losing `debug_assertions` and integer overflow checks on the one
+> platform that serves traffic, in a codebase that does arithmetic on weights.
+> The tests are back on debug. The lesson is the ordinary one: the expensive
+> thing was not the one that looked expensive.
+>
+> **`cargo fmt` and `cargo clippy` left this job entirely**, and that was the
+> change that actually paid. They are
 > platform-independent, ci.yml already runs them on Linux, and the backend has
 > no `cfg(target_os)` anywhere — so clippy here was analysing byte-identical
 > code to clippy there. Keeping them meant a seven-minute VM run could be
@@ -802,19 +812,6 @@ without rebuilding it.
 > gets it from rustup; the moment those versions drift, the newer clippy's
 > fresh lints start failing releases. **This job now does only what needs this
 > platform: run the suite, produce the binary.**
->
-> That changes what this job proves, which is why it is recorded here rather
-> than left in the workflow. `--release` turns off `debug_assertions` and
-> integer overflow checks, and this codebase does arithmetic on weights. **The
-> debug-mode suite is not gone, it has moved to ci.yml** — Linux, cached, on
-> every push and every pull request — and a tag is only ever cut from a commit
-> that has already been through it.
->
-> The claim above is therefore narrower than it was: the FreeBSD job proves the
-> code *runs correctly on FreeBSD*, not that it is free of overflow. In exchange
-> it now exercises the exact artifact it ships rather than a differently
-> compiled build of the same source, which is the stronger half of the Tier 2
-> mitigation.
 >
 > Two smaller cuts in the same pass. The web tree builds on Linux in parallel:
 > its production closure is `openapi-fetch` and `openapi-typescript-helpers`,

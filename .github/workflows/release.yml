@@ -119,34 +119,29 @@ jobs:
             # producing the binary.
 
             echo "::group::Backend — tests"
-            # Release-mode tests here, debug-mode tests in ci.yml.
+            # Debug, deliberately, and this was measured before it was decided.
             #
-            # One profile throughout, which is the point: the tests compile the
-            # dependency graph at opt-level 3 and the binary below then reuses
-            # all of it. A debug test run would have compiled the whole graph a
-            # second time at opt-level 0.
+            # v0.1.6 ran these `--release` on the theory that sharing one
+            # profile with the binary below would collapse two compiles into
+            # one. It did not: release compilation costs roughly twice as much
+            # per crate, so `cargo test --release --workspace` took 5m53s
+            # against 2m56s in debug, and `cargo build --release` still took
+            # 2m03s rather than the link-and-little-more it was supposed to
+            # become. Net gain over debug, once clippy was gone, was about
+            # twenty seconds.
             #
-            # The cost is real and worth stating: `--release` turns off
+            # Twenty seconds is not worth what it cost. `--release` turns off
             # `debug_assertions` and integer overflow checks, and this codebase
-            # does arithmetic on weights. Those checks are not lost, they are
-            # relocated — ci.yml runs the same suite in debug, cached, on every
-            # push and every pull request, and a tag is only ever cut from a
-            # commit that has been through it.
-            #
-            # What this job gains is that it now exercises the artifact it is
-            # about to ship rather than a differently-compiled build of the
-            # same source, and that the release compile happens once rather
-            # than alongside a debug one.
+            # does arithmetic on weights — on the one platform that actually
+            # serves traffic. Debug it is.
             #
             # The engine is pure. Run it on its own first so a failure reads as
             # "the training logic is wrong" rather than being buried.
-            cargo test --release -p athletos-training
-            cargo test --release --workspace
+            cargo test -p athletos-training
+            cargo test --workspace
             echo "::endgroup::"
 
             echo "::group::Backend — release binary"
-            # Nearly free: every dependency and every workspace crate above was
-            # compiled into this same profile, so this is a link and little more.
             cargo build --release --bin api
             cd ..
             echo "::endgroup::"
