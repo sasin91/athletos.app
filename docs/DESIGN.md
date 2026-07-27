@@ -789,8 +789,19 @@ without rebuilding it.
 > **Amended after measuring it.** The FreeBSD job took 13m, and the reason was
 > that Rust compiled the whole dependency graph twice — once at opt-level 0 for
 > clippy and the tests, once at opt-level 3 for the binary. It now uses one
-> profile throughout: clippy, the tests and the shipped binary are all
-> `--release`, so the dependencies are built once and shared.
+> profile throughout: the tests and the shipped binary are both `--release`, so
+> the dependencies are built once and shared.
+>
+> **`cargo fmt` and `cargo clippy` left this job entirely.** They are
+> platform-independent, ci.yml already runs them on Linux, and the backend has
+> no `cfg(target_os)` anywhere — so clippy here was analysing byte-identical
+> code to clippy there. Keeping them meant a seven-minute VM run could be
+> thrown away over a style rule, which is not hypothetical: v0.1.4 spent 11
+> minutes in this job and failed on a Prettier complaint. They were also a
+> slow-acting liability, because the guest gets rust from `pkg` and ci.yml
+> gets it from rustup; the moment those versions drift, the newer clippy's
+> fresh lints start failing releases. **This job now does only what needs this
+> platform: run the suite, produce the binary.**
 >
 > That changes what this job proves, which is why it is recorded here rather
 > than left in the workflow. `--release` turns off `debug_assertions` and

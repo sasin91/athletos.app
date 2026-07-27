@@ -96,19 +96,35 @@ jobs:
 
             cd backend
 
-            echo "::group::Backend — format and clippy"
-            cargo fmt --all --check
-            # `--release`, and that matters more than it looks. Everything
-            # below is a release build; a debug clippy would compile the whole
-            # dependency graph at opt-level 0 and the release test build would
-            # then compile all of it again. One profile throughout means the
-            # dependencies are built exactly once and clippy, the tests and the
-            # shipped binary all share them.
-            cargo clippy --release --workspace --all-targets -- -D warnings
-            echo "::endgroup::"
+            # No `cargo fmt --check` and no `cargo clippy` in here. Both are
+            # platform-independent and ci.yml already runs them on Linux,
+            # cached, on every push and every pull request.
+            #
+            # Redundant is the weak objection. The real one is that a lint
+            # failure in this job is a seven-minute VM run thrown away for a
+            # reason that has nothing to do with FreeBSD — which is not
+            # hypothetical: v0.1.4 spent 11 minutes here and died on a Prettier
+            # complaint about a nav element.
+            #
+            # It also removes a liability. This guest gets rust from `pkg` and
+            # ci.yml gets it from rustup's stable channel; they happen to be
+            # the same build today (1.97.1, 8bab26f4f) and will not stay that
+            # way. Whichever drifts ahead first brings new clippy lints with
+            # it, and those would fail a *release* — the one build where a
+            # style opinion is least welcome. The backend has no
+            # `cfg(target_os)` anywhere, so there is no FreeBSD-specific lint
+            # to catch in exchange.
+            #
+            # What stays is what needs this platform: running the suite, and
+            # producing the binary.
 
             echo "::group::Backend — tests"
             # Release-mode tests here, debug-mode tests in ci.yml.
+            #
+            # One profile throughout, which is the point: the tests compile the
+            # dependency graph at opt-level 3 and the binary below then reuses
+            # all of it. A debug test run would have compiled the whole graph a
+            # second time at opt-level 0.
             #
             # The cost is real and worth stating: `--release` turns off
             # `debug_assertions` and integer overflow checks, and this codebase
