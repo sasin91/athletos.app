@@ -58,6 +58,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::routes::enrollments::{unknown_program, ProgressView};
 use crate::routes::maxes::MAX_WEIGHT_KG;
 use crate::state::AppState;
+use crate::timing::{self, SessionTiming, TimedSet};
 
 /// The most sets one submitted session may carry.
 ///
@@ -186,6 +187,23 @@ pub struct SubmittedSet {
     pub actual_weight: Option<f64>,
     pub actual_reps: Option<u32>,
     pub status: SetStatus,
+
+    /// When the athlete tapped Log or Skip for this set, from the phone's clock
+    /// at that moment (D-10).
+    ///
+    /// Optional, and additively so (D-12): a client that does not send it still
+    /// submits a valid workout, it simply has no timing to show afterwards.
+    /// Stamped on the device rather than here because the logger runs offline
+    /// and a submission can arrive hours late — a server clock would be
+    /// measuring when the queue flushed, not when the work happened.
+    ///
+    /// Not validated against `started_at` and `ended_at`. A stamp outside them
+    /// is a phone whose clock moved, which is a fact about the measurement
+    /// rather than a malformed request, and refusing the submission would cost
+    /// the athlete a whole session's log over it. `timing` discards the
+    /// intervals it cannot believe instead.
+    #[serde(default)]
+    pub logged_at: Option<DateTime<Utc>>,
 }
 
 /// What the server recorded, and where the program stands afterwards.
@@ -261,6 +279,12 @@ pub struct WorkoutDetail {
     /// done. Both the prescribed and the actual numbers, because drift is the
     /// thing this screen exists to show (D-07, D-13).
     pub sets: Vec<LoggedSetView>,
+    /// Where the hour went, when the sets carry stamps to work it out from.
+    ///
+    /// Absent rather than empty for a session logged before timing existed, so
+    /// a client cannot render a breakdown of nothing (D-10).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timing: Option<SessionTiming>,
 }
 
 /// One set as it was recorded.
@@ -279,6 +303,9 @@ pub struct LoggedSetView {
     pub actual_weight: Option<f64>,
     pub actual_reps: Option<u32>,
     pub status: SetStatus,
+    /// When this set was logged or skipped, as the phone recorded it (D-10).
+    /// Null for anything logged before timing existed.
+    pub logged_at: Option<DateTime<Utc>>,
 }
 
 /// Which slice of the history to return.
@@ -524,7 +551,16 @@ type StoredWorkoutDetail = (
 
 /// One row of `workout_sets`, with the `numeric` columns already cast to
 /// `float8` by the query.
-type StoredSet = (i16, String, f64, i16, Option<f64>, Option<i16>, String);
+type StoredSet = (
+    i16,
+    String,
+    f64,
+    i16,
+    Option<f64>,
+    Option<i16>,
+    String,
+    Option<DateTime<Utc>>,
+);
 
 /// Everything the athlete has logged, newest first.
 ///
@@ -682,7 +718,7 @@ pub async fn show(
     // `unique (workout_id, "position")` is both the ordering and the index.
     let sets: Vec<StoredSet> = sqlx::query_as(
         "select \"position\", exercise, prescribed_weight::float8, prescribed_reps,
-                actual_weight::float8, actual_reps, status
+                actual_weight::float8, actual_reps, status, logged_at
          from workout_sets
          where workout_id = $1
          order by \"position\"",
@@ -695,6 +731,24 @@ pub async fn show(
         .into_iter()
         .map(logged_set)
         .collect::<ApiResult<Vec<_>>>()?;
+
+    // Computed from the views rather than from the rows, so the labels the
+    // breakdown names an exercise by are the same strings the set list beside it
+    // shows — resolved once, in `logged_set`, from the compiled registry.
+    let timed: Vec<(u16, TimedSet)> = sets
+        .iter()
+        .map(|set| {
+            (
+                set.position,
+                TimedSet {
+                    exercise: set.exercise.clone(),
+                    label: set.label.clone(),
+                    logged_at: set.logged_at,
+                },
+            )
+        })
+        .collect();
+    let timing = timing::compute(started_at, ended_at, &timed);
 
     Ok(Json(WorkoutDetail {
         workout: summary((
@@ -710,6 +764,7 @@ pub async fn show(
         ))?,
         notes,
         sets,
+        timing,
     }))
 }
 
@@ -745,7 +800,16 @@ fn summary(
 }
 
 fn logged_set(
-    (position, exercise, prescribed_weight, prescribed_reps, actual_weight, actual_reps, status): StoredSet,
+    (
+        position,
+        exercise,
+        prescribed_weight,
+        prescribed_reps,
+        actual_weight,
+        actual_reps,
+        status,
+        logged_at,
+    ): StoredSet,
 ) -> ApiResult<LoggedSetView> {
     let label = exercise::find(&exercise)
         .map(|found| found.label.to_owned())
@@ -760,6 +824,7 @@ fn logged_set(
         actual_weight,
         actual_reps: actual_reps.map(|reps| u32::try_from(reps).unwrap_or_default()),
         status: SetStatus::parse(&status)?,
+        logged_at,
     })
 }
 
@@ -825,6 +890,7 @@ async fn insert_sets(
     let mut actual_weights: Vec<Option<f64>> = Vec::with_capacity(sets.len());
     let mut actual_reps: Vec<Option<i16>> = Vec::with_capacity(sets.len());
     let mut statuses: Vec<String> = Vec::with_capacity(sets.len());
+    let mut logged_ats: Vec<Option<DateTime<Utc>>> = Vec::with_capacity(sets.len());
 
     for set in sets {
         exercises.push(set.exercise.trim().to_owned());
@@ -840,12 +906,13 @@ async fn insert_sets(
                 .transpose()?,
         );
         statuses.push(set.status.as_str().to_owned());
+        logged_ats.push(set.logged_at);
     }
 
     sqlx::query(
         "insert into workout_sets
              (workout_id, exercise, \"position\", prescribed_weight, prescribed_reps,
-              actual_weight, actual_reps, status)
+              actual_weight, actual_reps, status, logged_at)
          select $1,
                 logged.exercise,
                 logged.slot,
@@ -853,11 +920,12 @@ async fn insert_sets(
                 logged.prescribed_reps,
                 logged.actual_weight::numeric,
                 logged.actual_reps,
-                logged.status
+                logged.status,
+                logged.logged_at
          from unnest($2::text[], $3::int2[], $4::float8[], $5::int2[],
-                     $6::float8[], $7::int2[], $8::text[])
+                     $6::float8[], $7::int2[], $8::text[], $9::timestamptz[])
               as logged(exercise, slot, prescribed_weight, prescribed_reps,
-                        actual_weight, actual_reps, status)",
+                        actual_weight, actual_reps, status, logged_at)",
     )
     .bind(workout_id)
     .bind(&exercises)
@@ -867,6 +935,7 @@ async fn insert_sets(
     .bind(&actual_weights)
     .bind(&actual_reps)
     .bind(&statuses)
+    .bind(&logged_ats)
     .execute(&mut **tx)
     .await?;
 

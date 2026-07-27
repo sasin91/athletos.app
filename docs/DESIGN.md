@@ -477,6 +477,56 @@ If a timer is wanted in v2's native app, the answer is an **intent call to the
 OS stopwatch** rather than an in-app timer. That also avoids wake locks,
 notification permissions, and background-tab behaviour in the PWA.
 
+### Where the hour went
+
+> **Added after the app was live.** Duration answers "did this fit in an hour".
+> It does not answer "what made it not fit", and that is the question worth
+> acting on.
+
+Each set carries a **`logged_at`**, stamped on the phone when the athlete taps
+Log or Skip. The gaps between consecutive stamps aggregate into a per-exercise
+breakdown on the session's history page.
+
+**One tap per set, and therefore one blended number.** The gap between two taps
+contains the pause after the previous set, the loading, and the performance of
+this one. Separating them needs a second tap at the start of each set — which
+is a rest timer with a different name, and the section directly above this one
+says why there is not going to be one. So the vocabulary is **interval**, never
+*rest*, and the screen says so in plain words before showing any figure. The
+number is honest at the granularity it is reported: "Back Squat cost 24
+minutes" is true, and it is the question actually being asked.
+
+**The lead-in is not a lift.** The first interval runs from the commit, so it
+is walking in, changing and warming up. Folded into whatever was performed
+first it would make the main lift look enormous, so it is reported separately,
+as is the **tail** after the last set. Both are dimmed and bracket the
+exercises rather than sorting among them by size: an athlete cannot train away
+"getting started", and ranking it above their squat would read as an accusation
+about the wrong thing.
+
+**The phone's clock is not trusted.** It can be corrected by NTP or changed by
+hand mid-session, and a genuine three-minute gap is indistinguishable from one
+straddling a three-minute correction. Intervals that are negative or over
+twenty minutes are **discarded rather than clamped**, and the count of what was
+dropped is returned and shown. Clamping would fold a bad measurement in at an
+invented value with no way to see it had happened; dropping it makes the totals
+smaller than the wall clock, which the athlete *will* notice — so the screen
+says why. Same instinct as taking a median rather than a mean above.
+
+`logged_at` is nullable and stays nullable. Every session recorded before the
+column existed has no timing and never will; a `not null default now()` would
+have stamped the migration's own clock onto sessions logged weeks earlier. The
+response omits `timing` entirely rather than sending an empty one, so a client
+cannot render a breakdown of nothing.
+
+> **This makes the pace projection above look crude, and deliberately has not
+> changed it.** Pace is still whole-session duration over sets performed,
+> medianed across five sessions. Per-set intervals could give it a real
+> distribution and per-exercise medians — a day of heavy triples and a day of
+> accessory volume stop being averaged into one number that describes neither.
+> That is a change to a settled rule and belongs in its own decision, once
+> there is enough stamped history to check it against.
+
 ---
 
 ## D-11 · Clients

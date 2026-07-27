@@ -258,14 +258,14 @@
 										class:btn-primary={set.position === current}
 										class:btn-outline={set.position !== current}
 										type="button"
-										onclick={() => apply((s) => logSet(s, set.position))}
+										onclick={() => apply((s) => logSet(s, set.position, new Date().toISOString()))}
 									>
 										Log
 									</button>
 									<button
 										class="btn"
 										type="button"
-										onclick={() => apply((s) => skipSet(s, set.position))}
+										onclick={() => apply((s) => skipSet(s, set.position, new Date().toISOString()))}
 									>
 										Skip
 									</button>

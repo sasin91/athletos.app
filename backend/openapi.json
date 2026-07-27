@@ -1113,6 +1113,37 @@
           }
         }
       },
+      "ExerciseSpend": {
+        "type": "object",
+        "description": "One exercise's share of the session.",
+        "required": [
+          "exercise",
+          "label",
+          "seconds",
+          "counted_sets"
+        ],
+        "properties": {
+          "counted_sets": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many of this exercise's sets contributed an interval. Less than the\nnumber of sets performed when stamps were missing or discarded, which is\nwhat stops `seconds` being read as authoritative when it is not.",
+            "minimum": 0
+          },
+          "exercise": {
+            "type": "string",
+            "example": "back-squat"
+          },
+          "label": {
+            "type": "string",
+            "example": "Back Squat"
+          },
+          "seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Summed intervals for every set of this exercise that had a believable\none. Excludes the lead-in even for the first exercise."
+          }
+        }
+      },
       "ExerciseSummary": {
         "type": "object",
         "description": "One exercise, as a client renders it in a list.",
@@ -1294,6 +1325,14 @@
             "description": "Resolved from the compiled registry, for the same reason the session\npayload carries it: a browser cannot look a key up in a Rust `static`.\nCues are not repeated here — a history row is read, not performed.",
             "example": "Squat"
           },
+          "logged_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When this set was logged or skipped, as the phone recorded it (D-10).\nNull for anything logged before timing existed."
+          },
           "position": {
             "type": "integer",
             "format": "int32",
@@ -1338,6 +1377,31 @@
               "null"
             ],
             "description": "The refresh token to kill, ending the session on this device. Optional\nso a client that only holds an access token can still revoke it."
+          }
+        }
+      },
+      "LongestInterval": {
+        "type": "object",
+        "description": "The longest single gap in the session.",
+        "required": [
+          "seconds",
+          "position",
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "example": "Back Squat"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The set the interval ended at — the one that was logged late, not the\none before it.",
+            "minimum": 0
+          },
+          "seconds": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -1813,6 +1877,63 @@
           }
         }
       },
+      "SessionTiming": {
+        "type": "object",
+        "description": "Where one session's time went.",
+        "required": [
+          "exercises",
+          "discarded_intervals",
+          "unstamped_sets"
+        ],
+        "properties": {
+          "discarded_intervals": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Intervals thrown away as impossible — negative, or over the ceiling.\n\nReported rather than hidden. When this is not zero the totals below add\nup to less than the wall clock, and the screen has to be able to say why\ninstead of leaving the athlete to notice the arithmetic does not work.",
+            "minimum": 0
+          },
+          "exercises": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExerciseSpend"
+            },
+            "description": "Per exercise, in the order the exercises were first performed.\n\nOrder matters and is not alphabetical: an athlete reading this is\nwalking back through their own session, and the main lift they opened\nwith belongs at the top."
+          },
+          "lead_in_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Commit to the first set logged: walking in, changing, warming up.\n\n`None` when no set carries a stamp, which is also when the whole\nstructure is absent — see [`compute`]."
+          },
+          "longest_interval": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LongestInterval",
+                "description": "The single longest interval, and which set closed it.\n\nWorth surfacing on its own because it is usually the answer. An hour\nthat ran to eighty minutes is rarely uniformly slower; it is one gap\nwhere something else happened."
+              }
+            ]
+          },
+          "tail_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The last set logged to the end of the session. `None` while the session\nis still open, since there is nothing to measure to."
+          },
+          "unstamped_sets": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many sets carried no stamp at all.\n\nNot the same as `discarded_intervals`: this is work that was never\nmeasured, that one is a measurement that could not be believed.",
+            "minimum": 0
+          }
+        }
+      },
       "SetStatus": {
         "type": "string",
         "enum": [
@@ -1850,6 +1971,14 @@
           },
           "exercise": {
             "type": "string"
+          },
+          "logged_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the athlete tapped Log or Skip for this set, from the phone's clock\nat that moment (D-10).\n\nOptional, and additively so (D-12): a client that does not send it still\nsubmits a valid workout, it simply has no timing to show afterwards.\nStamped on the device rather than here because the logger runs offline\nand a submission can arrive hours late — a server clock would be\nmeasuring when the queue flushed, not when the work happened.\n\nNot validated against `started_at` and `ended_at`. A stamp outside them\nis a phone whose clock moved, which is a fact about the measurement\nrather than a malformed request, and refusing the submission would cost\nthe athlete a whole session's log over it. `timing` discards the\nintervals it cannot believe instead."
           },
           "position": {
             "type": "integer",
@@ -1927,6 +2056,17 @@
               "$ref": "#/components/schemas/LoggedSetView"
             },
             "description": "Every set as it was logged, in position order — including the ones never\ndone. Both the prescribed and the actual numbers, because drift is the\nthing this screen exists to show (D-07, D-13)."
+          },
+          "timing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SessionTiming",
+                "description": "Where the hour went, when the sets carry stamps to work it out from.\n\nAbsent rather than empty for a session logged before timing existed, so\na client cannot render a breakdown of nothing (D-10)."
+              }
+            ]
           },
           "workout": {
             "$ref": "#/components/schemas/WorkoutSummary"

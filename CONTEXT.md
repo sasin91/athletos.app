@@ -113,6 +113,27 @@ _Avoid_: Abandoned (means giving up an Enrolment), quit, incomplete
 The athlete's own median seconds per set, measured across recent sessions, used
 to project when a session will finish.
 
+**Interval**:
+The time from one Set being logged to the next being logged. Blended by
+construction: it contains the pause after the previous set, the loading and
+setup, and the performance of this one. There is one tap per set, so those
+parts cannot be told apart, and naming it anything narrower would be a claim
+the measurement does not support.
+_Avoid_: Rest, rest period, break, downtime
+
+**Lead-in**:
+Commit to the first Set logged. Walking in, changing, warming up. Held apart
+from the first exercise's total because it belongs to the session, not to the
+lift that happened to be first.
+_Avoid_: Warm-up (means warm-up sets, which are prescribed work)
+
+**Tail**:
+The last Set logged to the end of the session. The counterpart to Lead-in.
+
+**Time spent**:
+Intervals aggregated by exercise, plus the Lead-in and the Tail — where an
+hour actually went. Answers "which lift is eating my session".
+
 ## Not in this language
 
 **Streak, badge, goal, reminder, rest timer** — deliberately absent. The

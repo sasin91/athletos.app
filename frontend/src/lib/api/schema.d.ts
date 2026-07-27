@@ -548,6 +548,26 @@ export interface components {
         ExerciseCatalogue: {
             exercises: components["schemas"]["ExerciseSummary"][];
         };
+        /** @description One exercise's share of the session. */
+        ExerciseSpend: {
+            /**
+             * Format: int32
+             * @description How many of this exercise's sets contributed an interval. Less than the
+             *     number of sets performed when stamps were missing or discarded, which is
+             *     what stops `seconds` being read as authoritative when it is not.
+             */
+            counted_sets: number;
+            /** @example back-squat */
+            exercise: string;
+            /** @example Back Squat */
+            label: string;
+            /**
+             * Format: int64
+             * @description Summed intervals for every set of this exercise that had a believable
+             *     one. Excludes the lead-in even for the first exercise.
+             */
+            seconds: number;
+        };
         /** @description One exercise, as a client renders it in a list. */
         ExerciseSummary: {
             /**
@@ -649,6 +669,12 @@ export interface components {
              * @example Squat
              */
             label: string;
+            /**
+             * Format: date-time
+             * @description When this set was logged or skipped, as the phone recorded it (D-10).
+             *     Null for anything logged before timing existed.
+             */
+            logged_at?: string | null;
             /** Format: int32 */
             position: number;
             /** Format: int32 */
@@ -668,6 +694,19 @@ export interface components {
              *     so a client that only holds an access token can still revoke it.
              */
             refresh_token?: string | null;
+        };
+        /** @description The longest single gap in the session. */
+        LongestInterval: {
+            /** @example Back Squat */
+            label: string;
+            /**
+             * Format: int32
+             * @description The set the interval ended at — the one that was logged late, not the
+             *     one before it.
+             */
+            position: number;
+            /** Format: int64 */
+            seconds: number;
         };
         /**
          * @description One athlete's maxes, keyed by exercise.
@@ -1020,6 +1059,49 @@ export interface components {
             /** @example Military Press */
             label: string;
         };
+        /** @description Where one session's time went. */
+        SessionTiming: {
+            /**
+             * Format: int32
+             * @description Intervals thrown away as impossible — negative, or over the ceiling.
+             *
+             *     Reported rather than hidden. When this is not zero the totals below add
+             *     up to less than the wall clock, and the screen has to be able to say why
+             *     instead of leaving the athlete to notice the arithmetic does not work.
+             */
+            discarded_intervals: number;
+            /**
+             * @description Per exercise, in the order the exercises were first performed.
+             *
+             *     Order matters and is not alphabetical: an athlete reading this is
+             *     walking back through their own session, and the main lift they opened
+             *     with belongs at the top.
+             */
+            exercises: components["schemas"]["ExerciseSpend"][];
+            /**
+             * Format: int64
+             * @description Commit to the first set logged: walking in, changing, warming up.
+             *
+             *     `None` when no set carries a stamp, which is also when the whole
+             *     structure is absent — see [`compute`].
+             */
+            lead_in_seconds?: number | null;
+            longest_interval?: null | components["schemas"]["LongestInterval"];
+            /**
+             * Format: int64
+             * @description The last set logged to the end of the session. `None` while the session
+             *     is still open, since there is nothing to measure to.
+             */
+            tail_seconds?: number | null;
+            /**
+             * Format: int32
+             * @description How many sets carried no stamp at all.
+             *
+             *     Not the same as `discarded_intervals`: this is work that was never
+             *     measured, that one is a measurement that could not be believed.
+             */
+            unstamped_sets: number;
+        };
         /** @enum {string} */
         SetStatus: "done" | "skipped" | "pending";
         /**
@@ -1040,6 +1122,24 @@ export interface components {
              */
             actual_weight?: number | null;
             exercise: string;
+            /**
+             * Format: date-time
+             * @description When the athlete tapped Log or Skip for this set, from the phone's clock
+             *     at that moment (D-10).
+             *
+             *     Optional, and additively so (D-12): a client that does not send it still
+             *     submits a valid workout, it simply has no timing to show afterwards.
+             *     Stamped on the device rather than here because the logger runs offline
+             *     and a submission can arrive hours late — a server clock would be
+             *     measuring when the queue flushed, not when the work happened.
+             *
+             *     Not validated against `started_at` and `ended_at`. A stamp outside them
+             *     is a phone whose clock moved, which is a fact about the measurement
+             *     rather than a malformed request, and refusing the submission would cost
+             *     the athlete a whole session's log over it. `timing` discards the
+             *     intervals it cannot believe instead.
+             */
+            logged_at?: string | null;
             /**
              * Format: int32
              * @description From `prescribed_sets[].position` in the session payload. Unique within
@@ -1090,6 +1190,7 @@ export interface components {
              *     thing this screen exists to show (D-07, D-13).
              */
             sets: components["schemas"]["LoggedSetView"][];
+            timing?: null | components["schemas"]["SessionTiming"];
             workout: components["schemas"]["WorkoutSummary"];
         };
         /** @description A page of history, newest first. */

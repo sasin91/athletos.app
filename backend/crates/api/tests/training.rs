@@ -2001,3 +2001,130 @@ async fn the_history_endpoints_require_a_token(pool: PgPool) {
         .await
         .assert_status_unauthorized();
 }
+
+/// D-10: where the hour went, computed from the per-set stamps the phone sends.
+///
+/// The interesting part of this test is not that the arithmetic works — that is
+/// covered by the unit tests in `timing`, which need no database. It is that the
+/// stamps survive the round trip: they are sent by a client, written by an
+/// `unnest` insert that has no test of its own, read back by the detail query,
+/// and aggregated. Every one of those is a place a column can be silently
+/// dropped.
+#[sqlx::test]
+async fn a_logged_session_reports_where_its_time_went(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, "timing@example.com").await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "five-three-one").await;
+
+    let session = next_session(&server, &token, enrollment).await;
+    let prescribed = session["prescribed_sets"].as_array().unwrap().clone();
+    assert!(
+        prescribed.len() >= 3,
+        "the assertions below need at least three sets to have two intervals"
+    );
+
+    let started: chrono::DateTime<chrono::Utc> = "2026-08-01T09:00:00Z".parse().unwrap();
+
+    // Lead-in of five minutes, then three minutes between every set.
+    let stamp_of = |index: usize| started + chrono::Duration::seconds(300 + 180 * index as i64);
+
+    let sets: Vec<serde_json::Value> = prescribed
+        .iter()
+        .enumerate()
+        .map(|(index, set)| {
+            json!({
+                "position": set["position"],
+                "exercise": set["exercise"],
+                "prescribed_weight": set["prescribed_weight"],
+                "prescribed_reps": set["prescribed_reps"],
+                "actual_weight": set["prescribed_weight"],
+                "actual_reps": set["prescribed_reps"],
+                "status": "done",
+                "logged_at": stamp_of(index).to_rfc3339(),
+            })
+        })
+        .collect();
+
+    let workout_id = Uuid::now_v7();
+    let ended = stamp_of(prescribed.len() - 1) + chrono::Duration::seconds(90);
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&json!({
+            "id": workout_id,
+            "enrollment_id": enrollment,
+            "started_at": started.to_rfc3339(),
+            "ended_at": ended.to_rfc3339(),
+            "outcome": "completed",
+            "sets": sets,
+        }))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let detail = server
+        .get(&format!("/v1/workouts/{workout_id}"))
+        .authorization_bearer(&token)
+        .await
+        .json::<serde_json::Value>();
+
+    let timing = &detail["timing"];
+    assert!(!timing.is_null(), "every set carried a stamp");
+
+    // The lead-in is the session's, not the first exercise's.
+    assert_eq!(timing["lead_in_seconds"], 300);
+    assert_eq!(timing["tail_seconds"], 90);
+    assert_eq!(timing["discarded_intervals"], 0);
+    assert_eq!(timing["unstamped_sets"], 0);
+
+    // Every interval is a flat three minutes, so the totals must add up to
+    // three minutes per set *after the first* — the first closed the lead-in.
+    let counted: i64 = timing["exercises"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|spend| spend["seconds"].as_i64().unwrap())
+        .sum();
+    assert_eq!(counted, 180 * (prescribed.len() as i64 - 1));
+
+    assert_eq!(timing["longest_interval"]["seconds"], 180);
+
+    // And the stamps come back on the sets themselves, not only in aggregate.
+    assert_eq!(
+        detail["sets"][0]["logged_at"]
+            .as_str()
+            .map(|s| s.parse::<chrono::DateTime<chrono::Utc>>().unwrap()),
+        Some(stamp_of(0))
+    );
+}
+
+/// A client that does not send stamps still submits a valid workout (D-12).
+///
+/// This is the compatibility guarantee the column was made nullable for: the
+/// field is additive, so the previous version of the app — and every workout
+/// already in the database — keeps working and simply has no breakdown.
+#[sqlx::test]
+async fn a_session_submitted_without_stamps_has_no_timing_rather_than_an_empty_one(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, "untimed@example.com").await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "five-three-one").await;
+
+    let workout_id = log_a_session(&server, &token, enrollment).await;
+
+    let detail = server
+        .get(&format!("/v1/workouts/{workout_id}"))
+        .authorization_bearer(&token)
+        .await
+        .json::<serde_json::Value>();
+
+    // Absent, not present-and-zeroed. A breakdown of nothing is not renderable
+    // and the client must be able to tell the difference.
+    assert!(
+        detail.get("timing").is_none() || detail["timing"].is_null(),
+        "expected no timing, got {}",
+        detail["timing"]
+    );
+    assert!(detail["sets"][0]["logged_at"].is_null());
+}

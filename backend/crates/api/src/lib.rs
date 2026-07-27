@@ -11,6 +11,7 @@ pub mod openapi;
 pub mod pace;
 pub mod routes;
 pub mod state;
+pub mod timing;
 
 use axum::routing::{get, post};
 use axum::Router;

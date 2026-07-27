@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import TimeSpent from '$lib/TimeSpent.svelte';
 	import { formatDate, formatMinutes } from '$lib/time';
 	import type { PageData } from './$types';
 
@@ -56,4 +57,14 @@
 	{/each}
 </ol>
 
-<a class="btn mt-4 w-full" href={resolve('/history')}>Back</a>
+<!--
+	Absent for every session logged before per-set stamps existed, which is why
+	the server omits the field rather than sending an empty one — there is
+	nothing to draw and a breakdown of nothing would be a lie about a real
+	session (D-10).
+-->
+{#if data.detail.timing}
+	<TimeSpent timing={data.detail.timing} />
+{/if}
+
+<a class="btn mt-6 w-full" href={resolve('/history')}>Back</a>

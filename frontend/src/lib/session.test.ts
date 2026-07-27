@@ -124,9 +124,12 @@ describe('commitSession', () => {
 	});
 });
 
+/** A fixed stamp, so the timing assertions are about the rule and not the clock. */
+const AT = '2026-07-26T08:05:00.000Z';
+
 describe('logging', () => {
 	it('logs a set as written without touching the prescription', () => {
-		const session = logSet(commitSession(peeked, options), 0);
+		const session = logSet(commitSession(peeked, options), 0, AT);
 
 		expect(session.sets[0].status).toBe('done');
 		expect(session.sets[0].actualWeight).toBe(97.5);
@@ -135,7 +138,7 @@ describe('logging', () => {
 	});
 
 	it('lets the athlete go heavier, and keeps both numbers', () => {
-		const session = logSet(editSet(commitSession(peeked, options), 0, { weight: 110 }), 0);
+		const session = logSet(editSet(commitSession(peeked, options), 0, { weight: 110 }), 0, AT);
 
 		expect(session.sets[0].prescribedWeight).toBe(97.5);
 		expect(session.sets[0].actualWeight).toBe(110);
@@ -143,25 +146,50 @@ describe('logging', () => {
 	});
 
 	it('does not count a skipped set as remaining', () => {
-		const session = skipSet(commitSession(peeked, options), 2);
+		const session = skipSet(commitSession(peeked, options), 2, AT);
 
 		expect(setsRemaining(session)).toBe(2);
 		expect(setsDone(session)).toBe(0);
 	});
 
 	it('undoes back to the prescription', () => {
-		const edited = logSet(editSet(commitSession(peeked, options), 1, { reps: 8 }), 1);
+		const edited = logSet(editSet(commitSession(peeked, options), 1, { reps: 8 }), 1, AT);
 		const session = resetSet(edited, 1);
 
 		expect(session.sets[1].status).toBe('pending');
 		expect(session.sets[1].actualReps).toBe(5);
 	});
 
+	it('stamps a log with the moment it was tapped', () => {
+		const session = logSet(commitSession(peeked, options), 0, AT);
+
+		expect(session.sets[0].loggedAt).toBe(AT);
+		// Untouched sets carry nothing. A default of "now" here would put every
+		// unperformed set into the breakdown at the moment of commit.
+		expect(session.sets[1].loggedAt).toBeNull();
+	});
+
+	it('stamps a skip too, because the gap it spans belongs to the next lift', () => {
+		const session = skipSet(commitSession(peeked, options), 1, AT);
+
+		expect(session.sets[1].status).toBe('skipped');
+		expect(session.sets[1].loggedAt).toBe(AT);
+	});
+
+	it('clears the stamp on undo', () => {
+		const logged = logSet(commitSession(peeked, options), 0, AT);
+		const session = resetSet(logged, 0);
+
+		// A stamp surviving the undo would report an interval for work the
+		// athlete has just said they did not do.
+		expect(session.sets[0].loggedAt).toBeNull();
+	});
+
 	it('points at the first set nobody has answered', () => {
-		const session = logSet(commitSession(peeked, options), 0);
+		const session = logSet(commitSession(peeked, options), 0, AT);
 
 		expect(nextSetPosition(session)).toBe(1);
-		expect(nextSetPosition(logSet(skipSet(session, 1), 2))).toBeNull();
+		expect(nextSetPosition(logSet(skipSet(session, 1, AT), 2, AT))).toBeNull();
 	});
 });
 
@@ -172,7 +200,7 @@ describe('toSubmission', () => {
 		let session = commitSession(peeked, options);
 		expect(isComplete(session)).toBe(false);
 
-		session = logSet(logSet(logSet(session, 0), 1), 2);
+		session = logSet(logSet(logSet(session, 0, AT), 1, AT), 2, AT);
 		expect(isComplete(session)).toBe(true);
 
 		expect(toSubmission(session, ending).outcome).toBe('completed');
@@ -180,13 +208,13 @@ describe('toSubmission', () => {
 	});
 
 	it('a session where everything was skipped is not a completed session', () => {
-		const session = skipSet(skipSet(skipSet(commitSession(peeked, options), 0), 1), 2);
+		const session = skipSet(skipSet(skipSet(commitSession(peeked, options), 0, AT), 1, AT), 2, AT);
 
 		expect(isComplete(session)).toBe(false);
 	});
 
 	it('carries pending and skipped sets, because work not done is the data', () => {
-		const session = skipSet(logSet(commitSession(peeked, options), 0), 1);
+		const session = skipSet(logSet(commitSession(peeked, options), 0, AT), 1, AT);
 
 		const body = toSubmission(session, {
 			endedAt: '2026-07-26T08:30:00.000Z',
@@ -196,10 +224,13 @@ describe('toSubmission', () => {
 		expect(body.outcome).toBe('cut_short');
 		expect(body.cut_reason).toBe('out_of_time');
 		expect(body.sets.map((set) => set.status)).toEqual(['done', 'skipped', 'pending']);
+		// The stamps travel with the sets, including on the skip. The pending
+		// set has none, and null is what the server reads as "not measured".
+		expect(body.sets.map((set) => set.logged_at)).toEqual([AT, AT, null]);
 	});
 
 	it('sends actual numbers only for the sets that were done', () => {
-		const session = skipSet(logSet(commitSession(peeked, options), 0), 1);
+		const session = skipSet(logSet(commitSession(peeked, options), 0, AT), 1, AT);
 
 		const body = toSubmission(session, {
 			endedAt: '2026-07-26T08:30:00.000Z',

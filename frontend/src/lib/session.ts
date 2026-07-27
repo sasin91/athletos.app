@@ -43,6 +43,17 @@ export type LocalSet = {
 	actualWeight: number;
 	actualReps: number;
 	status: SetStatus;
+	/**
+	 * When the athlete tapped Log or Skip, RFC 3339, from this phone (D-10).
+	 *
+	 * `null` while the set is pending, and again after an undo — a stamp left
+	 * behind by a log that was taken back would put an interval in the breakdown
+	 * for work that was not done at that time.
+	 *
+	 * Stamped here rather than on the server because the logger runs with no
+	 * network and the submit can land hours later (D-09).
+	 */
+	loggedAt: string | null;
 };
 
 /** A committed session, and everything the logger needs to run offline. */
@@ -103,7 +114,8 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
 			platesPerSide: set.plates_per_side,
 			actualWeight: set.prescribed_weight,
 			actualReps: set.prescribed_reps,
-			status: 'pending'
+			status: 'pending',
+			loggedAt: null
 		})),
 		cues: Object.fromEntries(next.blocks.map((block) => [block.exercise, block.cues]))
 	};
@@ -140,13 +152,27 @@ export function editSet(
  * warning produces either dishonest logs or an abandoned app, and honesty must
  * never cost more than dishonesty (D-07).
  */
-export function logSet(session: LocalSession, position: number): LocalSession {
-	return replace(session, position, (set) => ({ ...set, status: 'done' }));
+/**
+ * Marks a set done, and records when (D-10).
+ *
+ * `at` is passed in rather than read from the clock in here, so that this stays
+ * a pure function of its arguments and the timing rules can be tested without
+ * faking a global. Every caller passes `new Date().toISOString()`.
+ */
+export function logSet(session: LocalSession, position: number, at: string): LocalSession {
+	return replace(session, position, (set) => ({ ...set, status: 'done', loggedAt: at }));
 }
 
-/** Marks a set as deliberately not done — work that was prescribed and skipped. */
-export function skipSet(session: LocalSession, position: number): LocalSession {
-	return replace(session, position, (set) => ({ ...set, status: 'skipped' }));
+/**
+ * Marks a set as deliberately not done — work that was prescribed and skipped.
+ *
+ * Stamped like a log, and for a reason that is easy to miss: a skip is a tap at
+ * a moment in time, and the interval that spans it belongs to the exercise that
+ * follows. Leaving a skip unstamped would silently attribute that whole gap to
+ * whichever set came next.
+ */
+export function skipSet(session: LocalSession, position: number, at: string): LocalSession {
+	return replace(session, position, (set) => ({ ...set, status: 'skipped', loggedAt: at }));
 }
 
 /** Undoes a log or a skip, back to the prescription as written. */
@@ -155,7 +181,10 @@ export function resetSet(session: LocalSession, position: number): LocalSession 
 		...set,
 		status: 'pending',
 		actualWeight: set.prescribedWeight,
-		actualReps: set.prescribedReps
+		actualReps: set.prescribedReps,
+		// Cleared with the status. A stamp surviving an undo would report an
+		// interval for a set the athlete decided they had not done.
+		loggedAt: null
 	}));
 }
 
@@ -216,7 +245,8 @@ export function toSubmission(session: LocalSession, ending: Ending): WorkoutSubm
 			prescribed_reps: set.prescribedReps,
 			actual_weight: set.status === 'done' ? set.actualWeight : null,
 			actual_reps: set.status === 'done' ? set.actualReps : null,
-			status: set.status
+			status: set.status,
+			logged_at: set.loggedAt
 		}))
 	};
 }
