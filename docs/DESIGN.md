@@ -786,6 +786,34 @@ on 1 June. The whole FreeBSD ecosystem is migrating to `vmactions`.
 Artifacts attach to a GitHub Release, so any past version is redeployable
 without rebuilding it.
 
+> **Amended after measuring it.** The FreeBSD job took 13m, and the reason was
+> that Rust compiled the whole dependency graph twice — once at opt-level 0 for
+> clippy and the tests, once at opt-level 3 for the binary. It now uses one
+> profile throughout: clippy, the tests and the shipped binary are all
+> `--release`, so the dependencies are built once and shared.
+>
+> That changes what this job proves, which is why it is recorded here rather
+> than left in the workflow. `--release` turns off `debug_assertions` and
+> integer overflow checks, and this codebase does arithmetic on weights. **The
+> debug-mode suite is not gone, it has moved to ci.yml** — Linux, cached, on
+> every push and every pull request — and a tag is only ever cut from a commit
+> that has already been through it.
+>
+> The claim above is therefore narrower than it was: the FreeBSD job proves the
+> code *runs correctly on FreeBSD*, not that it is free of overflow. In exchange
+> it now exercises the exact artifact it ships rather than a differently
+> compiled build of the same source, which is the stronger half of the Tier 2
+> mitigation.
+>
+> Two smaller cuts in the same pass. The web tree builds on Linux in parallel:
+> its production closure is `openapi-fetch` and `openapi-typescript-helpers`,
+> both pure JavaScript, so nothing platform-specific reaches the tarball — the
+> per-platform native binaries in that tree (`@tailwindcss/oxide`,
+> `lightningcss`, rolldown, rollup) are all build-time and do not survive
+> `--omit=dev`. And `target/` is deleted before `copyback`, because rsyncing
+> gigabytes of intermediate object files out of a QEMU guest to be thrown away
+> cost 1m16s of every release.
+
 ### Provisioning
 
 Terraform with **HCP's free remote backend** — versioned, locked state rather

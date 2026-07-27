@@ -1,15 +1,15 @@
 name: Release
 
-# Build on FreeBSD, run on FreeBSD.
+# Build on FreeBSD, run on FreeBSD — where it matters.
 #
 # ci.yml stays Linux-native and runs on every pull request, because that is
 # where the fast feedback belongs. This workflow is the other half: it runs the
-# *entire* test suite on the operating system the code will actually be served
-# from, and only then builds the binary that gets shipped.
+# test suite on the operating system the code will actually be served from, and
+# only then builds the binary that gets shipped.
 #
 # That is not ceremony. Rust is Tier 2 on FreeBSD — the toolchain is built by
 # upstream but not tested by them — so "it compiles" is a materially weaker
-# statement there than on Linux. Running 131 tests against a real Postgres on
+# statement there than on Linux. Running the suite against a real Postgres on
 # the target platform is the mitigation, and it is cheap: one VM, one job.
 #
 # No musl, no cross-compilation, no glibc anywhere. Those problems belong to a
@@ -19,6 +19,13 @@ name: Release
 # Cirrus CI, which is the usual answer to "FreeBSD in CI", is shutting down.
 # vmactions/freebsd-vm runs a FreeBSD guest inside the GitHub-hosted Linux
 # runner instead, which keeps everything in one place.
+#
+# Three jobs rather than one. The Rust binary is the only thing that needs a
+# FreeBSD toolchain; the web tree is JavaScript and its production dependency
+# closure is two pure-JS packages with no `os` or `cpu` constraints, so
+# building it inside the VM bought nothing and cost node, npm and corepack in
+# the package install. It now builds on Linux, in parallel. `publish` waits for
+# both and is the only place that talks to the Releases API.
 
 on:
   push:
@@ -33,7 +40,7 @@ permissions:
   contents: write
 
 jobs:
-  freebsd:
+  api:
     name: Test and build on FreeBSD
     runs-on: ubuntu-latest
 
@@ -46,15 +53,20 @@ jobs:
           release: '15.1'
           usesh: true
           # The workspace is shared into the guest and copied back out, which
-          # is how the artifacts built in here reach the release step below.
+          # is how the artifact built in here reaches the host.
           copyback: true
           # `rust` from packages rather than rustup. There is no rustup in the
           # guest, so rust-toolchain.toml is ignored — which is correct here:
           # the pinned channel is a floor for contributors, and the package is
           # a recent stable well above it. `cargo --version` is printed below
           # so a version regression is visible in the log rather than implied.
+          #
+          # No `git`: Cargo.lock has no `git+` sources and cargo has used the
+          # sparse HTTP registry since 1.70, so nothing here shells out to it.
+          # It was pulling in perl and ten p5-* modules — a quarter of the
+          # package count — to be installed and never called.
           prepare: |
-            pkg install -y rust node24 npm-node24 postgresql17-server postgresql17-client git
+            pkg install -y rust postgresql17-server postgresql17-client
 
           run: |
             set -eux
@@ -63,8 +75,6 @@ jobs:
             uname -a
             cargo --version
             rustc --version
-            node --version
-            npm --version
             echo "::endgroup::"
 
             echo "::group::Postgres"
@@ -84,66 +94,151 @@ jobs:
             export AUTH_HIBP_ENABLED=false
             export CARGO_TERM_COLOR=always
 
-            echo "::group::Backend — format, clippy, tests"
             cd backend
+
+            echo "::group::Backend — format and clippy"
             cargo fmt --all --check
-            cargo clippy --workspace --all-targets -- -D warnings
+            # `--release`, and that matters more than it looks. Everything
+            # below is a release build; a debug clippy would compile the whole
+            # dependency graph at opt-level 0 and the release test build would
+            # then compile all of it again. One profile throughout means the
+            # dependencies are built exactly once and clippy, the tests and the
+            # shipped binary all share them.
+            cargo clippy --release --workspace --all-targets -- -D warnings
+            echo "::endgroup::"
+
+            echo "::group::Backend — tests"
+            # Release-mode tests here, debug-mode tests in ci.yml.
+            #
+            # The cost is real and worth stating: `--release` turns off
+            # `debug_assertions` and integer overflow checks, and this codebase
+            # does arithmetic on weights. Those checks are not lost, they are
+            # relocated — ci.yml runs the same suite in debug, cached, on every
+            # push and every pull request, and a tag is only ever cut from a
+            # commit that has been through it.
+            #
+            # What this job gains is that it now exercises the artifact it is
+            # about to ship rather than a differently-compiled build of the
+            # same source, and that the release compile happens once rather
+            # than alongside a debug one.
+            #
             # The engine is pure. Run it on its own first so a failure reads as
             # "the training logic is wrong" rather than being buried.
-            cargo test -p athletos-training
-            cargo test --workspace
+            cargo test --release -p athletos-training
+            cargo test --release --workspace
             echo "::endgroup::"
 
             echo "::group::Backend — release binary"
+            # Nearly free: every dependency and every workspace crate above was
+            # compiled into this same profile, so this is a link and little more.
             cargo build --release --bin api
             cd ..
             echo "::endgroup::"
 
-            echo "::group::Frontend — check, lint, unit tests, build"
-            cd frontend
-            npm ci
-            npm run check
-            npm run lint
-            npm run test:unit
-            npm run build
-            echo "::endgroup::"
-
-            echo "::group::Frontend — production tree"
-            # The box has node and no npm, by design: running a package install
-            # on a production host at deploy time is a step that can
-            # half-succeed. So the install happens here and ships as an
-            # artifact. `--omit=dev` after the build, because the build needs
-            # the dev dependencies and the box does not.
-            npm ci --omit=dev
-            cd ..
-            echo "::endgroup::"
-
-            echo "::group::Artifacts"
-            rm -rf dist && mkdir -p dist/web
+            echo "::group::Artifact"
+            rm -rf dist && mkdir -p dist
             cp backend/target/release/api dist/athletos-api-freebsd-amd64
             strip dist/athletos-api-freebsd-amd64 || true
-            cp -R frontend/build dist/web/build
-            cp -R frontend/node_modules dist/web/node_modules
-            cp frontend/package.json dist/web/package.json
-            tar -czf dist/athletos-web.tar.gz -C dist/web .
-            rm -rf dist/web
-            cd dist
-            sha256 -r athletos-api-freebsd-amd64 athletos-web.tar.gz \
-              | awk '{ print $1 "  " $2 }' > SHA256SUMS
-            ls -l
-            cat SHA256SUMS
+            ls -l dist
+            echo "::endgroup::"
+
+            # `copyback` rsyncs the whole shared workspace back to the host over
+            # ssh-over-QEMU, and `target/` is gigabytes of intermediate object
+            # files that nothing downstream reads. The binary has already been
+            # copied into dist/. Dropping this took the copy-out from 1m16s to
+            # seconds.
+            echo "::group::Drop what does not need to leave the VM"
+            rm -rf backend/target
             echo "::endgroup::"
 
       - name: Sanity-check what came back out of the VM
         run: |
           set -eux
           test -s dist/athletos-api-freebsd-amd64
-          test -s dist/athletos-web.tar.gz
-          test -s dist/SHA256SUMS
           # If this says anything but FreeBSD, the build did not happen where it
           # was supposed to and the box will refuse to execute it.
           file dist/athletos-api-freebsd-amd64
           file dist/athletos-api-freebsd-amd64 | grep -q FreeBSD
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api
+          path: dist/athletos-api-freebsd-amd64
+          if-no-files-found: error
+          retention-days: 1
+
+  web:
+    name: Build the web tree
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run build
+
+      # The box has node and no npm, by design: running a package install on a
+      # production host at deploy time is a step that can half-succeed. So the
+      # install happens here and ships as an artifact. `--omit=dev` after the
+      # build, because the build needs the dev dependencies and the box does not.
+      #
+      # This is also what makes building on Linux safe. The dev tree does carry
+      # platform-gated native binaries — @tailwindcss/oxide, lightningcss,
+      # rolldown and rollup each ship a per-platform package — but every one of
+      # them is build-time. What survives `--omit=dev` is `openapi-fetch` and
+      # `openapi-typescript-helpers`: pure JavaScript, no `os` or `cpu` field,
+      # no install scripts. Nothing platform-specific reaches the tarball.
+      - name: Production tree
+        run: npm ci --omit=dev
+
+      - name: Pack
+        run: |
+          set -eux
+          mkdir -p ../dist/web
+          cp -R build ../dist/web/build
+          cp -R node_modules ../dist/web/node_modules
+          cp package.json ../dist/web/package.json
+          tar -czf ../dist/athletos-web.tar.gz -C ../dist/web .
+          rm -rf ../dist/web
+          ls -l ../dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/athletos-web.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish the release
+    needs: [api, web]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Attach the artifacts to the release
         env:
@@ -151,17 +246,28 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -eux
+          cd dist
+          ls -l
+
+          # Computed here rather than in the VM, over the exact bytes that are
+          # about to be uploaded. `sha256sum` writes "hash  name", which is the
+          # same shape FreeBSD's `sha256 -r` produced and what deploy.sh's awk
+          # reads out of $2 on the box.
+          sha256sum athletos-api-freebsd-amd64 athletos-web.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
           # Artifacts go on a Release rather than being copied straight to the
           # box, so that any previous version can be redeployed without being
           # rebuilt — which is what makes `athletos-rollback` work offline and
           # a year later.
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "$TAG" --generate-notes
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" --generate-notes
           fi
-          gh release upload "$TAG" --clobber \
-            dist/athletos-api-freebsd-amd64 \
-            dist/athletos-web.tar.gz \
-            dist/SHA256SUMS
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            athletos-api-freebsd-amd64 \
+            athletos-web.tar.gz \
+            SHA256SUMS
 
   # Roll it out.
   #
@@ -174,7 +280,7 @@ jobs:
   # `workflow_call` is a direct invocation, so there is no event to be
   # suppressed and no personal access token to store and rotate.
   deploy:
-    needs: freebsd
+    needs: publish
     uses: ./.github/workflows/deploy.yml
     with:
       tag: ${{ github.event.inputs.tag || github.ref_name }}
