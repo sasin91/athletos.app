@@ -363,15 +363,35 @@ front of the rack.
 > looking at a loaded one — and that boundary is precisely the drop the whole
 > feature exists to explain, week 1 running the main lift to 85% of the
 > training max and Boring But Big then asking for five sets of ten at 50%. Off
-> a 140 kg training max that is 117.5 kg down to 70: `25, 20, 2.5, 1.25` a side
-> down to a single 25, so the screen says *take off 1.25, 2.5, 20* and the
-> heaviest plate never moves.
+> a 140 kg training max, the whole squat day, chained:
 >
-> The other direction of the same honesty: a genuinely large drop is reported
-> as large. 147.5 → 87.5 plans as *take off 1.25, 2.5, 15, 20 · add 5, 2.5,
-> 1.25*, which is four plates off and three on, because that is what the bar
-> requires. Nothing here exists to make a change look smaller than it is; it
-> exists so that a change which is not large stops being displayed as one.
+> | Set | Per side | Instruction | Leaves on the bar |
+> |---|---|---|---|
+> | 65% → 90 kg | 35 | add `25, 10` | `25, 10` |
+> | 75% → 105 kg | 42.5 | add `5, 2.5` | `25, 10, 5, 2.5` |
+> | 85% → 117.5 kg | 48.75 | add `2.5, 2.5, 1.25` | `25, 10, 5, 2.5, 2.5, 2.5, 1.25` |
+> | 50% → 70 kg | 25 | take off `1.25, 2.5, 2.5, 2.5, 5, 10` | `25` |
+>
+> The drop is **six plates off and nothing on**, and the four remaining Boring
+> But Big sets are no-ops the screen reports as such. Six is what that drop
+> costs, and saying so is the point.
+>
+> Read the third row against the paragraph above it. 48.75 a side is *greedily*
+> `25, 20, 2.5, 1.25` — four plates — and the bar at the top of the ramp is
+> carrying seven. That is this rule's bill arriving, and it arrives all at once:
+> three consecutive preferences for adding over restacking left three 2.5s and a
+> 1.25 on a bar that a fresh load would never have put there, and every one of
+> them comes off at the boundary. The plate-hungry answers described above are
+> not a hypothetical the tie-break might produce — this is a single ordinary
+> squat day producing them. What is bought with it is that no set on the way up
+> ever asks the athlete to strip the bar, which is where the drift was coming
+> from. The 25 never moves all day.
+>
+> The same honesty where the chain has not distorted the bar: a large drop is
+> still large. 147.5 → 87.5 from a bar loaded to the canonical
+> `25, 20, 15, 2.5, 1.25` plans as *take off 1.25, 2.5, 15, 20 · add 5, 2.5,
+> 1.25*. Nothing here exists to make a change look smaller than it is; it exists
+> so that a change which is not large stops being displayed as one.
 >
 > **A plan is not shown once the bar has been disturbed.** It is computed from
 > the prescription and therefore assumes the previous set was loaded as
