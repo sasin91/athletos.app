@@ -816,6 +816,75 @@ async fn the_plate_change_chains_within_an_exercise_and_resets_between_them(pool
     }
 }
 
+/// A dumbbell set and a bodyweight set carry no plate change, while the
+/// barbell sets around them do (D-04).
+///
+/// The chaining test above only ever exercises `wendler-531-bbb`, which is
+/// four barbell lifts, so `!change.is_null()` there passes for every set
+/// without ever proving the `None` branch exists. That let a real bug ship:
+/// `plateChangeFor` on the client returns `null` for a `None` plate change,
+/// and the current-set card's fallback drew an empty plate diagram under it —
+/// "empty bar · 20 kg, for the prescribed 12 kg" on a Smolov Jr dumbbell set.
+/// `smolov-jr` day 1 carries both: `lateral-raise` is a dumbbell exercise and
+/// `hanging-leg-raise` is bodyweight, alongside barbell squat and deadlift
+/// work, so one session proves both halves at once.
+#[sqlx::test]
+async fn non_barbell_sets_carry_no_plate_change_while_barbell_sets_do(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "smolov-jr").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut saw_dumbbell = false;
+    let mut saw_bodyweight = false;
+    let mut saw_barbell = false;
+
+    for set in session["prescribed_sets"]
+        .as_array()
+        .expect("the session carries its prescribed sets")
+    {
+        let exercise = set["exercise"].as_str().expect("a set names its exercise");
+        let has_plate_change = !set["plate_change"].is_null();
+
+        match exercise {
+            "lateral-raise" => {
+                assert!(
+                    !has_plate_change,
+                    "set {} is a dumbbell set and should carry no plate change",
+                    set["position"]
+                );
+                saw_dumbbell = true;
+            }
+            "hanging-leg-raise" => {
+                assert!(
+                    !has_plate_change,
+                    "set {} is a bodyweight set and should carry no plate change",
+                    set["position"]
+                );
+                saw_bodyweight = true;
+            }
+            "squat" | "deadlift" => {
+                assert!(
+                    has_plate_change,
+                    "set {} is a barbell set and should carry a plan",
+                    set["position"]
+                );
+                saw_barbell = true;
+            }
+            _ => {}
+        }
+    }
+
+    assert!(saw_dumbbell, "day 1 should prescribe the lateral raise");
+    assert!(
+        saw_bodyweight,
+        "day 1 should prescribe the hanging leg raise"
+    );
+    assert!(saw_barbell, "day 1 should prescribe barbell work");
+}
+
 // --- the pace projection (D-10) -------------------------------------------
 
 /// Logs the enrolment's current session with a chosen wall clock and a chosen
