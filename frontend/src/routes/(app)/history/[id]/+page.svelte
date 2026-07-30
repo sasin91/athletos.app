@@ -39,7 +39,7 @@
 
 <ol class="space-y-1">
 	{#each data.detail.sets as set (set.position)}
-		<li class="flex items-baseline justify-between border p-2 text-sm">
+		<li class="flex flex-wrap items-baseline justify-between border p-2 text-sm">
 			<span class="font-medium">{set.label}</span>
 			<span class:font-bold={drifted(set)}>
 				{#if set.status === 'done'}
@@ -53,6 +53,9 @@
 					{set.status} — asked {set.prescribed_weight} kg × {set.prescribed_reps}
 				{/if}
 			</span>
+			{#if set.note}
+				<p class="mt-1 w-full text-sm opacity-60">{set.note}</p>
+			{/if}
 		</li>
 	{/each}
 </ol>

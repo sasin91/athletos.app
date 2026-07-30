@@ -7,6 +7,7 @@ import {
 	isComplete,
 	logSet,
 	nextSetPosition,
+	noteSet,
 	plateChangeFor,
 	resetSet,
 	setsDone,
@@ -377,5 +378,37 @@ describe('plateChangeFor', () => {
 		const session = fixture();
 		session.sets[0].plateChange = null;
 		expect(plateChangeFor(session, 0)).toBeNull();
+	});
+});
+
+describe('noteSet', () => {
+	it('records what the athlete wrote', () => {
+		const session = noteSet(fixture(), 0, 'left shoulder felt off');
+		expect(session.sets[0].note).toBe('left shoulder felt off');
+	});
+
+	it('clears back to null rather than storing blank', () => {
+		let session = noteSet(fixture(), 0, 'left shoulder felt off');
+		session = noteSet(session, 0, '   ');
+		expect(session.sets[0].note).toBeNull();
+	});
+
+	// Undoing a log takes back the numbers, not the sentence the athlete wrote
+	// about their shoulder.
+	it('survives an undo', () => {
+		let session = noteSet(fixture(), 0, 'left shoulder felt off');
+		session = logSet(session, 0, '2026-07-30T10:06:00.000Z');
+		session = resetSet(session, 0);
+
+		expect(session.sets[0].note).toBe('left shoulder felt off');
+		expect(session.sets[0].status).toBe('pending');
+	});
+
+	it('travels with the submission', () => {
+		const session = noteSet(fixture(), 0, 'left shoulder felt off');
+		const body = toSubmission(session, { endedAt: '2026-07-30T11:00:00.000Z', cutReason: null });
+
+		expect(body.sets[0].note).toBe('left shoulder felt off');
+		expect(body.sets[1].note).toBeNull();
 	});
 });

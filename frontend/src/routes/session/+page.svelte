@@ -11,6 +11,7 @@
 		isComplete,
 		logSet,
 		nextSetPosition,
+		noteSet,
 		plateChangeFor,
 		resetSet,
 		setsDone,
@@ -36,6 +37,11 @@
 	let session = $state<LocalSession | null>(null);
 	let phase = $state<Phase>('loading');
 	let now = $state(Date.now());
+
+	// Which set's note field is open. One at a time: the athlete is writing
+	// about the set in front of them, and a screen of open textareas is a
+	// screen where Log is harder to find.
+	let noting = $state<number | null>(null);
 
 	$effect(() => {
 		void loadActiveSession().then((stored) => {
@@ -299,6 +305,46 @@
 									<span>reps</span>
 								</label>
 							</div>
+
+							<!--
+								Invisible until wanted. Logging a set as prescribed stays one
+								tap — honesty must never cost more than dishonesty (D-07), and
+								a field that is always on screen is a field that asks to be
+								filled in.
+							-->
+							{#if noting === set.position}
+								<textarea
+									class="textarea-bordered textarea w-full"
+									rows="2"
+									maxlength="500"
+									placeholder="What happened on this set?"
+									value={set.note ?? ''}
+									oninput={(event) =>
+										apply((s) => noteSet(s, set.position, event.currentTarget.value))}></textarea>
+								<button
+									class="btn self-start btn-ghost btn-sm"
+									type="button"
+									onclick={() => (noting = null)}
+								>
+									Done
+								</button>
+							{:else if set.note}
+								<button
+									class="text-left text-sm opacity-70"
+									type="button"
+									onclick={() => (noting = set.position)}
+								>
+									{set.note}
+								</button>
+							{:else}
+								<button
+									class="self-start text-sm opacity-50"
+									type="button"
+									onclick={() => (noting = set.position)}
+								>
+									Add note
+								</button>
+							{/if}
 
 							<div class="flex gap-2">
 								{#if set.status === 'pending'}

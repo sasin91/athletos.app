@@ -65,6 +65,13 @@ export type LocalSet = {
 	 * network and the submit can land hours later (D-09).
 	 */
 	loggedAt: string | null;
+	/**
+	 * What the athlete wrote about this set, or `null`.
+	 *
+	 * Where "left shoulder felt off" goes. Attached to the set rather than the
+	 * session because attached to the session it is a fact about nothing.
+	 */
+	note: string | null;
 };
 
 /** A committed session, and everything the logger needs to run offline. */
@@ -127,7 +134,8 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
 			actualWeight: set.prescribed_weight,
 			actualReps: set.prescribed_reps,
 			status: 'pending',
-			loggedAt: null
+			loggedAt: null,
+			note: null
 		})),
 		cues: Object.fromEntries(next.blocks.map((block) => [block.exercise, block.cues]))
 	};
@@ -154,6 +162,20 @@ export function editSet(
 		...set,
 		actualWeight: values.weight ?? set.actualWeight,
 		actualReps: values.reps ?? set.actualReps
+	}));
+}
+
+/**
+ * Records a note on a set, or clears it.
+ *
+ * Blank normalises to `null` rather than being stored: a note typed and then
+ * cleared is not a note, and the API would reject the empty string anyway.
+ */
+export function noteSet(session: LocalSession, position: number, note: string): LocalSession {
+	const trimmed = note.trim();
+	return replace(session, position, (set) => ({
+		...set,
+		note: trimmed.length > 0 ? trimmed : null
 	}));
 }
 
@@ -187,7 +209,12 @@ export function skipSet(session: LocalSession, position: number, at: string): Lo
 	return replace(session, position, (set) => ({ ...set, status: 'skipped', loggedAt: at }));
 }
 
-/** Undoes a log or a skip, back to the prescription as written. */
+/**
+ * Undoes a log or a skip, back to the prescription as written.
+ *
+ * The note is deliberately left alone. Undoing a log takes back the numbers,
+ * not the sentence the athlete wrote about their shoulder.
+ */
 export function resetSet(session: LocalSession, position: number): LocalSession {
 	return replace(session, position, (set) => ({
 		...set,
@@ -258,7 +285,8 @@ export function toSubmission(session: LocalSession, ending: Ending): WorkoutSubm
 			actual_weight: set.status === 'done' ? set.actualWeight : null,
 			actual_reps: set.status === 'done' ? set.actualReps : null,
 			status: set.status,
-			logged_at: set.loggedAt
+			logged_at: set.loggedAt,
+			note: set.note
 		}))
 	};
 }
