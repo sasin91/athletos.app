@@ -228,49 +228,65 @@
 								</div>
 
 								{@const change = plateChangeFor(session, set.position)}
-								<div class="mt-1 mb-1">
-									{#if change}
-										<!--
-											What to do to the bar, not what the bar should end up
-											as. The greedy breakdown of two adjacent weights can
-											share almost nothing, so read as instructions it says
-											strip two plates to add one — and the temptation is to
-											put a convenient pair on instead and lift more than was
-											asked for (D-04).
-										-->
-										{#if change.remove.length > 0}
-											<p class="text-sm">
-												<span class="eyebrow">take off</span>
-												<span class="tabular">{change.remove.join(', ')}</span>
-											</p>
-										{/if}
-										{#if change.add.length > 0}
-											<p class="text-sm">
-												<span class="eyebrow">add</span>
-												<span class="tabular">{change.add.join(', ')}</span>
-											</p>
-										{/if}
-										{#if change.remove.length === 0 && change.add.length === 0 && change.plates_per_side.length > 0}
-											<!-- Same weight as the last set. Saying nothing here
-											     would read as a screen that failed to load. -->
-											<p class="eyebrow">bar is already loaded</p>
-										{/if}
+								<!--
+									Guarded on the pair, not on `change` alone (Finding 1 of the
+									branch review). `plateChangeFor` is `null` for two different
+									reasons that must not render the same way: a stale plan
+									(handled below, `set.platesPerSide` still has plates to
+									fall back to) and non-barbell loading, where
+									`platesPerSide` is empty too. Without this guard the
+									`{:else}` branch drew `<Plates plates={[]} />` for a
+									dumbbell or bodyweight set, which prints "empty bar · 20 kg"
+									— a false statement about a load that has no bar. A barbell
+									set sitting at exactly the empty bar still renders that same
+									line correctly, because it carries a `plate_change` with an
+									empty `plates_per_side` rather than no change at all.
+								-->
+								{#if change || set.platesPerSide.length > 0}
+									<div class="mt-1 mb-1">
+										{#if change}
+											<!--
+												What to do to the bar, not what the bar should end up
+												as. The greedy breakdown of two adjacent weights can
+												share almost nothing, so read as instructions it says
+												strip two plates to add one — and the temptation is to
+												put a convenient pair on instead and lift more than was
+												asked for (D-04).
+											-->
+											{#if change.remove.length > 0}
+												<p class="text-sm">
+													<span class="eyebrow">take off</span>
+													<span class="tabular">{change.remove.join(', ')}</span> per side
+												</p>
+											{/if}
+											{#if change.add.length > 0}
+												<p class="text-sm">
+													<span class="eyebrow">add</span>
+													<span class="tabular">{change.add.join(', ')}</span> per side
+												</p>
+											{/if}
+											{#if change.remove.length === 0 && change.add.length === 0 && change.plates_per_side.length > 0}
+												<!-- Same weight as the last set. Saying nothing here
+												     would read as a screen that failed to load. -->
+												<p class="eyebrow">bar is already loaded</p>
+											{/if}
 
-										<Plates plates={change.plates_per_side} />
-									{:else}
-										<!--
-											The plan assumed a bar that is not the one in front of
-											them, so it is not shown as an instruction. The
-											breakdown of the prescribed weight still is, dimmed and
-											labelled, because it is true about the prescription even
-											when it is not true about the bar.
-										-->
-										<div class="opacity-60">
-											<Plates plates={set.platesPerSide} />
-											<p class="text-xs">for the prescribed {set.prescribedWeight} kg</p>
-										</div>
-									{/if}
-								</div>
+											<Plates plates={change.plates_per_side} />
+										{:else}
+											<!--
+												The plan assumed a bar that is not the one in front of
+												them, so it is not shown as an instruction. The
+												breakdown of the prescribed weight still is, dimmed and
+												labelled, because it is true about the prescription even
+												when it is not true about the bar.
+											-->
+											<div class="opacity-60">
+												<Plates plates={set.platesPerSide} />
+												<p class="text-xs">for the prescribed {set.prescribedWeight} kg</p>
+											</div>
+										{/if}
+									</div>
+								{/if}
 
 								<!--
 									One cue per line. Joined with a separator they read as a
@@ -344,46 +360,56 @@
 							</div>
 
 							<!--
-								Invisible until wanted. Logging a set as prescribed stays one
-								tap — honesty must never cost more than dishonesty (D-07), and
-								a field that is always on screen is a field that asks to be
-								filled in.
+								Placed under the current set only, and reopened for a set that
+								carries a note even after it is no longer current — the
+								athlete gets the affordance where they are and can still read
+								or edit what they wrote on an earlier set. Without the second
+								condition this sat on every card regardless of status
+								(Finding 4 of the branch review): on a Smolov Jr day roughly
+								twenty-five extra "Add note" buttons for sets nobody is
+								looking at. Invisible otherwise so logging a set as prescribed
+								stays one tap — honesty must never cost more than dishonesty
+								(D-07), and a field that is always on screen is a field that
+								asks to be filled in.
 							-->
-							{#if noting === set.position}
-								<label class="flex w-full flex-col">
-									<span class="sr-only">Note for this set</span>
-									<textarea
-										class="textarea-bordered textarea w-full"
-										rows="2"
-										maxlength="500"
-										placeholder="What happened on this set?"
-										value={set.note ?? ''}
-										oninput={(event) =>
-											apply((s) => noteSet(s, set.position, event.currentTarget.value))}></textarea>
-								</label>
-								<button
-									class="btn self-start btn-ghost btn-sm"
-									type="button"
-									onclick={() => (noting = null)}
-								>
-									Done
-								</button>
-							{:else if set.note}
-								<button
-									class="text-left text-sm opacity-70"
-									type="button"
-									onclick={() => (noting = set.position)}
-								>
-									{set.note}
-								</button>
-							{:else}
-								<button
-									class="self-start text-sm opacity-50"
-									type="button"
-									onclick={() => (noting = set.position)}
-								>
-									Add note
-								</button>
+							{#if set.position === current || set.note}
+								{#if noting === set.position}
+									<label class="flex w-full flex-col">
+										<span class="sr-only">Note for this set</span>
+										<textarea
+											class="textarea-bordered textarea w-full"
+											rows="2"
+											maxlength="500"
+											placeholder="What happened on this set?"
+											value={set.note ?? ''}
+											oninput={(event) =>
+												apply((s) => noteSet(s, set.position, event.currentTarget.value))}
+										></textarea>
+									</label>
+									<button
+										class="btn self-start btn-ghost btn-sm"
+										type="button"
+										onclick={() => (noting = null)}
+									>
+										Done
+									</button>
+								{:else if set.note}
+									<button
+										class="text-left text-sm opacity-70"
+										type="button"
+										onclick={() => (noting = set.position)}
+									>
+										{set.note}
+									</button>
+								{:else}
+									<button
+										class="self-start text-sm opacity-50"
+										type="button"
+										onclick={() => (noting = set.position)}
+									>
+										Add note
+									</button>
+								{/if}
 							{/if}
 
 							<div class="flex gap-2">

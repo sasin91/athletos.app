@@ -88,9 +88,25 @@
 	--color-base-100: #fdf6e3; /* base3 */
 	--color-base-200: #eee8d5; /* base2 */
 	--color-base-300: #d9d2bf;
-	--color-base-content: #586e75; /* base01 */
 
-	--color-primary: #586e75;
+	/*
+	 * base02, not base01. A straight Solarized port reaches for base01 here —
+	 * it is the ordinary body-text colour and it is what --color-primary still
+	 * uses below — but this chassis dims text far harder than an ordinary
+	 * document ever does: opacity-50/60/70 and the 45%-mixed `eyebrow`
+	 * utility were tuned against the dark theme's near-white content colour,
+	 * which has enough headroom to survive being cut to less than half. base01
+	 * does not: composited at 45% it lands around 1.9:1, which is the words
+	 * "TAKE OFF" and "ADD" — the two tokens that decide whether plates come
+	 * off the bar or go on — sitting below legibility in daylight. base02 is
+	 * darker than the surface needs for full-strength text, but that unused
+	 * headroom is exactly what the dimming utilities spend, the same way the
+	 * dark theme's own near-black-on-near-white spends its headroom the other
+	 * way. See D-04's palette note for the numbers this was checked against.
+	 */
+	--color-base-content: #073642; /* base02 */
+
+	--color-primary: #586e75; /* base01 */
 	--color-primary-content: #fdf6e3;
 
 	--color-secondary: #eee8d5;
