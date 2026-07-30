@@ -439,9 +439,26 @@ front of the rack.
 > the lightness relationship that is the only thing telling a white plate from
 > a chrome one. Two plates that cannot be told apart are a worse failure than
 > one that is quiet, and this is a diagram where the *difference* between
-> adjacent shapes carries the meaning. **It is unverified in the sense that
-> matters: nobody has looked at the light theme in a browser.** The numbers
-> here are computed, not seen.
+> adjacent shapes carries the meaning. ~~It is unverified in the sense that
+> matters: nobody has looked at the light theme in a browser.~~ **Looked at,
+> and it reads.** Jonas ran it after v0.1.8 and passed it without
+> qualification, which settles the one question the arithmetic could not: the
+> quiet plate is quiet, not invisible, and the trade above was the right way
+> round.
+>
+> The dimmed *text* needed a second pass and got one before that verdict. The
+> chassis dims heavily — `opacity-50`, `opacity-60`, and an `eyebrow` mixed to
+> 45% — and those utilities were tuned against near-white on near-black. Ported
+> onto Solarized's base01 they put the words *take off* and *add* at 1.85:1,
+> which is the label that decides whether plates go on or come off. The light
+> theme therefore takes **base02 `#073642`** as its content colour where a
+> faithful port would reach for base01: base01 is a body colour with no
+> headroom left for a chassis that composites it this hard. That lifts the same
+> four steps to 2.55, 2.89, 3.77 and 5.00:1. Two of them are still under 3:1
+> and are recorded here rather than smoothed over, because the fix that would
+> close them is to stop dimming those particular strings rather than to darken
+> the palette further, and that is a change to the chassis and not to this
+> theme.
 
 ### Units
 
@@ -1196,8 +1213,11 @@ healthy**. A snapshot succeeds whether or not the data inside it is fine.
   The suite has since grown to **131 backend and 48 frontend tests**, still
   green.
 
-  The **offline round-trip** is still unverified: it needs a browser, a phone
-  in airplane mode, and a human. No database fixes that.
+  ~~The **offline round-trip** is still unverified: it needs a browser, a phone
+  in airplane mode, and a human. No database fixes that.~~ **Closed.** Jonas
+  ran it in airplane mode and reports it works. It was the last thing on this
+  list that no amount of local machinery could settle, and it took exactly what
+  was predicted: a phone, a plane switch, and a human willing to train with one.
 
 - **Nothing FreeBSD-specific has ever run.** The design in D-16 to D-18 was
   written and reviewed on a Windows machine with a Linux container for
@@ -1207,9 +1227,17 @@ healthy**. A snapshot succeeds whether or not the data inside it is fine.
   is where that changes, and the ZFS layout is the part no amount of local
   rehearsal can cover.
 
-- **CI has still never run.** There is no git remote, so the `postgres:17`
+- ~~**CI has still never run.** There is no git remote, so the `postgres:17`
   service job, the `oasdiff` gate and the `vmactions` FreeBSD build are all
-  theoretical. Creating the repository is the cheapest unblocking act available.
+  theoretical.~~ **Closed, and it was stale for longer than it should have
+  been.** The remote exists, CI runs on every push, and the release path has
+  shipped as far as v0.1.8. All three of the jobs called theoretical above have
+  now run in anger: the `postgres:17` service job runs the suite green, the
+  FreeBSD VM tests and builds the binary that the jails actually serve, and the
+  `oasdiff` gate has passed judgement on two real additive changes — the
+  `plate_change` on `PrescribedSet` and the `note` on a set. That last one is
+  the one worth noting, because a machine now checks D-12 rather than a
+  reviewer remembering it.
 
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.
