@@ -231,15 +231,32 @@ exact:
 5. Cost is `(previous.len() - k) + add.len()`.
 6. Choose **minimum cost, tie-broken on fewest removed**.
 
-The tie-break is the whole point and is pointed the way the athlete asked for.
-For 85 → 100 the three cheapest candidates all cost three plates handled;
-fewest-removed picks the one that takes nothing off, and the screen says *add
-2.5, 2.5, 2.5 per side*.
+Because the retained plates are always a prefix, there are exactly
+`previous.len() + 1` candidates. The search is exhaustive, not heuristic.
 
-Minimising cost first, rather than removals first, is what stops the planner
-from answering a 40 kg-per-side target with six small plates when a one-plate
-swap exists. Both rules agree on the case that prompted this; the pair of them
-also behaves on the cases that did not.
+The whole of 85 → 100, which is the case that prompted this:
+
+| Keep | On the bar | Remainder | Add (`<=` smallest kept) | Off | On | Handled |
+|---|---|---|---|---|---|---|
+| `25, 5, 2.5` | 32.5 | 7.5 | `2.5, 2.5, 2.5` | 0 | 3 | **3** |
+| `25, 5` | 30 | 10 | `5, 5` | 1 | 2 | **3** |
+| `25` | 25 | 15 | `15` | 2 | 1 | **3** |
+| — | 0 | 40 | `25, 15` | 3 | 2 | 5 |
+
+Three-way tie, and the tie-break decides what is read at the rack. **Fewest
+removed wins**, so the screen says *add 2.5, 2.5, 2.5 per side* and the bar
+ends on a six-plate stack. Chosen deliberately over the tidier *take off 2.5
+and 5, add 15*: taking weight off is the friction that was reported, and a
+fussier stack is the price. The cost is real and is accepted — that answer
+needs six 2.5 kg plates to exist.
+
+**Cost is the primary rule and removals only break ties**, because
+fewest-removals alone degenerates. A bar at 72.5 kg is `25, 1.25` per side;
+targeting 100 with removals as the primary rule keeps both plates, which caps
+everything added at 1.25 and asks for **eleven 1.25 kg plates a side**. Keeping
+only the 25 costs one off and one on. Minimising plates handled rejects the
+first outright, and the removals rule then does its job in the one place it
+should.
 
 `remove` is `previous[k..]` **reversed**, because that is the order a human
 takes them off.
@@ -260,7 +277,11 @@ alone:
 3. Cost never exceeds a full restack: `previous.len() + break_down(target).len()`.
 4. An unchanged target from the same arrangement plans as a no-op.
 5. From an empty bar, `plates_per_side == break_down(target)`.
-6. The two named cases above, exactly.
+6. No candidate ever adds more than four plates a side, which is the assertion
+   that catches a regression to removals-first: `25, 1.25` → 40/side must not
+   answer with eleven 1.25s.
+7. The named cases, exactly: 85 → 100 removes nothing and adds three 2.5s;
+   147.5 → 87.5 is the documented drop; 72.5 → 100 keeps only the 25.
 
 ### Carrying it to the screen
 
@@ -287,10 +308,27 @@ The logger and the peek set list draw `plate_change.plates_per_side` when it is
 present, so the diagram and the instructions above it agree. Non-barbell
 loading has no plates and shows nothing, as now.
 
-When the athlete has **edited** the weight, the change no longer describes the
-bar they are building. The block dims and is labelled *for the prescribed
-100 kg*. The client does not recompute — it has no plate arithmetic and is not
-getting any (D-11).
+### When the plan has gone stale
+
+A plan is computed from the prescription and therefore assumes the previous set
+was loaded as written. Two ways that stops being true, and one rule covering
+both:
+
+- the athlete **edits this set's** weight, so the target is not the one planned
+  for;
+- the athlete went heavier on an **earlier set of the same exercise**, so the
+  bar is not where the server thinks it is — and every subsequent plan in that
+  exercise is stale, not just the next one.
+
+So the plate change renders only when this set's weight is unedited **and** the
+previous set of the same exercise was answered at its prescribed weight.
+Otherwise the block falls back to the absolute breakdown already on the screen
+today — *bar + 25, 15 per side* — dimmed, labelled *for the prescribed 100 kg*.
+
+Both conditions are equality checks between two numbers the client already
+holds. It does not recompute a plan: it has no plate arithmetic and is not
+getting any (D-11). A stale plan is worse than no plan, because it is
+instructions for a bar that is not in front of you.
 
 ---
 
