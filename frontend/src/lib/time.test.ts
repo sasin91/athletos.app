@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatElapsed, formatMinutes } from './time';
+import { formatElapsed, formatMinutes, INTERVAL_CEILING_SECONDS, intervalBetween } from './time';
 
 describe('formatElapsed', () => {
 	it('counts minutes and seconds under an hour', () => {
@@ -34,5 +34,32 @@ describe('formatMinutes', () => {
 	it('has nothing to say about a session that never ended', () => {
 		expect(formatMinutes(null)).toBeNull();
 		expect(formatMinutes(undefined)).toBeNull();
+	});
+});
+
+describe('intervalBetween', () => {
+	it('is the gap in seconds', () => {
+		expect(intervalBetween('2026-07-30T10:00:00.000Z', '2026-07-30T10:03:10.000Z')).toBe(190);
+	});
+
+	// The phone's clock is not trusted (D-10). It can be corrected by NTP or
+	// changed by hand mid-session, and a genuine three-minute gap is
+	// indistinguishable from one straddling a three-minute correction.
+	it('does not believe a negative gap', () => {
+		expect(intervalBetween('2026-07-30T10:03:00.000Z', '2026-07-30T10:00:00.000Z')).toBeNull();
+	});
+
+	it('does not believe a gap over the ceiling', () => {
+		const later = new Date(Date.parse('2026-07-30T10:00:00.000Z') + 1_201_000).toISOString();
+		expect(intervalBetween('2026-07-30T10:00:00.000Z', later)).toBeNull();
+	});
+
+	it('believes a gap exactly at the ceiling', () => {
+		const later = new Date(Date.parse('2026-07-30T10:00:00.000Z') + 1_200_000).toISOString();
+		expect(intervalBetween('2026-07-30T10:00:00.000Z', later)).toBe(INTERVAL_CEILING_SECONDS);
+	});
+
+	it('is null for an unparseable stamp', () => {
+		expect(intervalBetween('not a time', '2026-07-30T10:00:00.000Z')).toBeNull();
 	});
 });

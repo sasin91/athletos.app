@@ -14,6 +14,7 @@
  */
 
 import type { components } from './api/schema';
+import { intervalBetween } from './time';
 
 type Schemas = components['schemas'];
 
@@ -21,6 +22,7 @@ export type NextSession = Schemas['NextSession'];
 export type CutReason = Schemas['CutReason'];
 export type SetStatus = Schemas['SetStatus'];
 export type WorkoutSubmission = Schemas['WorkoutSubmission'];
+export type PlateChange = Schemas['PlateChangeView'];
 
 /**
  * One set, prescribed and actual side by side (D-07).
@@ -40,6 +42,15 @@ export type LocalSet = {
 	amrap: boolean;
 	/** Plates for one side of the bar, from the server. Empty if not a barbell. */
 	platesPerSide: number[];
+	/**
+	 * What comes off the bar and what goes on to reach this set, planned by the
+	 * server against the previous set of the same exercise (D-04).
+	 *
+	 * `null` for anything not loaded with plates. Cached at commit like
+	 * everything else here: the logger runs with no network and cannot ask for
+	 * a plan later.
+	 */
+	plateChange: PlateChange | null;
 	actualWeight: number;
 	actualReps: number;
 	status: SetStatus;
@@ -54,6 +65,13 @@ export type LocalSet = {
 	 * network and the submit can land hours later (D-09).
 	 */
 	loggedAt: string | null;
+	/**
+	 * What the athlete wrote about this set, or `null`.
+	 *
+	 * Where "left shoulder felt off" goes. Attached to the set rather than the
+	 * session because attached to the session it is a fact about nothing.
+	 */
+	note: string | null;
 };
 
 /** A committed session, and everything the logger needs to run offline. */
@@ -112,10 +130,12 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
 			prescribedReps: set.prescribed_reps,
 			amrap: set.amrap,
 			platesPerSide: set.plates_per_side,
+			plateChange: set.plate_change ?? null,
 			actualWeight: set.prescribed_weight,
 			actualReps: set.prescribed_reps,
 			status: 'pending',
-			loggedAt: null
+			loggedAt: null,
+			note: null
 		})),
 		cues: Object.fromEntries(next.blocks.map((block) => [block.exercise, block.cues]))
 	};
@@ -142,6 +162,20 @@ export function editSet(
 		...set,
 		actualWeight: values.weight ?? set.actualWeight,
 		actualReps: values.reps ?? set.actualReps
+	}));
+}
+
+/**
+ * Records a note on a set, or clears it.
+ *
+ * Blank normalises to `null` rather than being stored: a note typed and then
+ * cleared is not a note, and the API would reject the empty string anyway.
+ */
+export function noteSet(session: LocalSession, position: number, note: string): LocalSession {
+	const trimmed = note.trim();
+	return replace(session, position, (set) => ({
+		...set,
+		note: trimmed.length > 0 ? trimmed : null
 	}));
 }
 
@@ -175,7 +209,12 @@ export function skipSet(session: LocalSession, position: number, at: string): Lo
 	return replace(session, position, (set) => ({ ...set, status: 'skipped', loggedAt: at }));
 }
 
-/** Undoes a log or a skip, back to the prescription as written. */
+/**
+ * Undoes a log or a skip, back to the prescription as written.
+ *
+ * The note is deliberately left alone. Undoing a log takes back the numbers,
+ * not the sentence the athlete wrote about their shoulder.
+ */
 export function resetSet(session: LocalSession, position: number): LocalSession {
 	return replace(session, position, (set) => ({
 		...set,
@@ -246,8 +285,110 @@ export function toSubmission(session: LocalSession, ending: Ending): WorkoutSubm
 			actual_weight: set.status === 'done' ? set.actualWeight : null,
 			actual_reps: set.status === 'done' ? set.actualReps : null,
 			status: set.status,
-			logged_at: set.loggedAt
+			logged_at: set.loggedAt,
+			note: set.note
 		}))
+	};
+}
+
+/**
+ * The interval that ended when this set was answered (D-10).
+ *
+ * Measured from the previous **answered** set — logged or skipped, since both
+ * are a tap at a moment in time — or from the commit for the first one, which
+ * makes that figure the lead-in exactly as `timing.rs` treats it.
+ *
+ * `null` when the set has not been answered, or when the gap is one the
+ * product does not believe. Deliberately blended and deliberately not called
+ * rest: there is one tap per set, so the number contains the pause after the
+ * previous set, the loading, and the performance of this one.
+ */
+export function intervalBefore(session: LocalSession, position: number): number | null {
+	const set = session.sets.find((candidate) => candidate.position === position);
+	if (!set?.loggedAt) return null;
+
+	const previous = session.sets
+		.filter((candidate) => candidate.position < position && candidate.loggedAt !== null)
+		.sort((a, b) => a.position - b.position)
+		.at(-1);
+
+	return intervalBetween(previous?.loggedAt ?? session.startedAt, set.loggedAt);
+}
+
+/**
+ * The plate change to show for a set, or `null` when the plan has gone stale.
+ *
+ * A plan is computed from the prescription and therefore assumes the bar was
+ * loaded as written. Three ways that stops being true, and this is all of
+ * them:
+ *
+ *  * the athlete has **edited this set's** weight, so the plan is for a number
+ *    they are not loading;
+ *  * an **earlier set of the same exercise** was logged at a different weight,
+ *    so the bar is not where the server assumed — and every plan after it in
+ *    that exercise is stale, not only the next one;
+ *  * an earlier set of the same exercise was **skipped**, so the bar was never
+ *    loaded to that weight at all.
+ *
+ * A different exercise cannot stale this one: the plan resets to an empty bar
+ * between exercises, server-side.
+ *
+ * All of it is equality between two numbers this module already holds. Nothing
+ * here recomputes a plan — the client has no plate arithmetic and is not
+ * getting any (D-11). Instructions for a bar that is not in front of you are
+ * worse than no instructions.
+ */
+export function plateChangeFor(session: LocalSession, position: number): PlateChange | null {
+	const set = session.sets.find((candidate) => candidate.position === position);
+	if (!set?.plateChange) return null;
+
+	if (set.actualWeight !== set.prescribedWeight) return null;
+
+	const disturbed = session.sets.some(
+		(candidate) =>
+			candidate.exercise === set.exercise &&
+			candidate.position < position &&
+			(candidate.status === 'skipped' ||
+				(candidate.status === 'done' && candidate.actualWeight !== candidate.prescribedWeight))
+	);
+
+	return disturbed ? null : set.plateChange;
+}
+
+/**
+ * What the finish screen says, counted from the session that was just sent.
+ *
+ * Counting only. There is deliberately **no drift total and no timing
+ * breakdown** here: the history page already marks drift per row and does not
+ * total it, on the grounds that a total computed in a client is one the next
+ * client has to compute again (D-07, D-11) — and D-13 puts drift beside the
+ * e1RM trend on purpose, because progress is never shown without its cost. A
+ * drift number invented here would be the first place in the product it
+ * appears alone. The timing aggregation belongs to `timing.rs` for the same
+ * reason, and both are one tap away.
+ */
+export type SessionSummary = {
+	durationSeconds: number;
+	done: number;
+	skipped: number;
+	pending: number;
+	total: number;
+	cutReason: CutReason | null;
+};
+
+export function summarise(session: LocalSession, ending: Ending): SessionSummary {
+	const count = (status: SetStatus) => session.sets.filter((set) => set.status === status).length;
+
+	return {
+		durationSeconds: Math.max(
+			0,
+			Math.round((Date.parse(ending.endedAt) - Date.parse(session.startedAt)) / 1000)
+		),
+		done: count('done'),
+		skipped: count('skipped'),
+		pending: count('pending'),
+		total: session.sets.length,
+		cutReason: ending.cutReason
 	};
 }
 

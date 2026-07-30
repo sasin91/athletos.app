@@ -281,6 +281,168 @@ front of the rack.
 > plates, not four. A worked example that the implementation contradicts is
 > worse than no example.
 
+> **Amended after the first session was logged in a gym.** The sentence above
+> is still true of a bar loaded from empty and of every block-level view, and
+> it is no longer what the logger shows between sets of one exercise. There it
+> shows **what comes off and what goes on**.
+>
+> The report that forced it: 85 kg is `25, 5, 2.5` a side and 100 kg is
+> greedily `25, 15`, so two consecutive prescriptions share almost nothing.
+> Read as instructions — which is the only way they can be read while standing
+> at a rack — the screen says *strip two plates to add one*, and the athlete
+> does the obvious thing instead: puts a convenient pair on and lifts more than
+> was asked for. That is the drift the product exists to govern (D-01, D-07),
+> manufactured by the display rather than by the athlete. The weight was never
+> the problem. The problem is that there is more than one way to build 40 kg a
+> side and the screen always showed the same one — `25, 5, 2.5` plus three 2.5s
+> is also 40, and it takes nothing off.
+>
+> **Why a prefix.** A bar is a stack. Plates load largest-first from the middle
+> outward, so only the outermost can come off, and nothing larger than the
+> smallest plate still on there can go on — a 15 cannot be slid in under a 5.
+> The plates that may be kept are therefore exactly a *prefix* of what is
+> loaded. That is a physical fact rather than a simplification, and it is what
+> keeps the planner small: a bar holding `n` plates has `n + 1` candidates, one
+> per prefix, each completed by the same greedy walk capped at the ceiling its
+> last kept plate imposes. The search is exhaustive and the answer exact — no
+> heuristic, no tuning. A planner that ignores the stack discipline is not
+> merely worse; it emits instructions that cannot be carried out.
+>
+> **The rule is fewest plates handled, tie-broken on fewest removed.** 85 → 100
+> is the case that shows why the tie-break is the decision and not a detail:
+>
+> | Keep | Add | Off | On | Handled |
+> |---|---|---|---|---|
+> | `25, 5, 2.5` | `2.5, 2.5, 2.5` | 0 | 3 | **3** |
+> | `25, 5` | `5, 5` | 1 | 2 | **3** |
+> | `25` | `15` | 2 | 1 | **3** |
+> | — | `25, 15` | 3 | 2 | 5 |
+>
+> Three candidates cost the same and exactly one of them takes nothing off, so
+> the screen says *add 2.5, 2.5, 2.5* and the bar ends on a six-plate stack.
+> Chosen deliberately over the tidier *off 2.5 and 5, on 15*: taking weight off
+> is the friction that was reported, and a fussier stack is what avoiding it
+> costs.
+>
+> **Cost leads and removals only break ties**, because fewest-removals as the
+> primary rule degenerates. A bar at `25, 1.25` targeting 40 a side keeps both
+> plates under that rule — nothing was taken off, after all — which caps
+> everything added at 1.25 and asks for eleven of them. Minimising plates
+> handled rejects that outright, and the removals rule then does its work in
+> the one place it should.
+>
+> **The consequence is that some answers are plate-hungry, and the model
+> assumes an unlimited supply.** `PLATES` is a table of sizes with no counts
+> against them. A bar holding a single 15 reaching 90 a side is answered with
+> five more 15s: five plates handled, tied with stripping it for
+> `25, 25, 25, 15`, and the tie-break takes the one that removes nothing —
+> exactly as asked, and requiring six 15 kg plates a side, twelve in the room.
+> A gym that owns four cannot follow it. This is recorded rather than fixed:
+> the answer is
+> optimal against a model of the room that is not quite the room, and closing
+> the gap means an inventory the athlete has to enter and keep true, which is a
+> settings form standing between them and a number they already know. The
+> tripwire in the test suite is a bound on how many of one plate a plan may
+> ask for, which catches a regression to removals-first without pretending to
+> be a claim about supply.
+>
+> **The arrangement is deliberately not always the greedy one**, and that is
+> the one thing a reader of the wire could trip over. `plates_per_side` on
+> `PrescribedSet` is untouched and still carries the canonical greedy
+> breakdown; the plan arrives beside it as a new optional `plate_change`,
+> additive under D-12, carrying a `plates_per_side` of its own — the stack this
+> plan actually leaves. Two lists that sum to the same weight and disagree
+> about how, which is the whole of what this amendment says.
+>
+> **The chain resets on exercise identity, not per block.** Across exercises
+> the previous stack is not on the bar being walked to, and possibly not even
+> the same bar, so the plan starts from empty. A block boundary is not that:
+> 5/3/1 BBB prescribes its main lift and its Boring But Big backoff as two
+> separate `Block`s sharing one exercise key, and the second is still the bar
+> the first one left. Resetting there would announce an empty bar to an athlete
+> looking at a loaded one — and that boundary is precisely the drop the whole
+> feature exists to explain, week 1 running the main lift to 85% of the
+> training max and Boring But Big then asking for five sets of ten at 50%. Off
+> a 140 kg training max, the whole squat day, chained:
+>
+> | Set | Per side | Instruction | Leaves on the bar |
+> |---|---|---|---|
+> | 65% → 90 kg | 35 | add `25, 10` | `25, 10` |
+> | 75% → 105 kg | 42.5 | add `5, 2.5` | `25, 10, 5, 2.5` |
+> | 85% → 117.5 kg | 48.75 | add `2.5, 2.5, 1.25` | `25, 10, 5, 2.5, 2.5, 2.5, 1.25` |
+> | 50% → 70 kg | 25 | take off `1.25, 2.5, 2.5, 2.5, 5, 10` | `25` |
+>
+> The drop is **six plates off and nothing on**, and the four remaining Boring
+> But Big sets are no-ops the screen reports as such. Six is what that drop
+> costs, and saying so is the point.
+>
+> Read the third row against the paragraph above it. 48.75 a side is *greedily*
+> `25, 20, 2.5, 1.25` — four plates — and the bar at the top of the ramp is
+> carrying seven. That is this rule's bill arriving, and it arrives all at once:
+> three consecutive preferences for adding over restacking left three 2.5s and a
+> 1.25 on a bar that a fresh load would never have put there, and every one of
+> them comes off at the boundary. The plate-hungry answers described above are
+> not a hypothetical the tie-break might produce — this is a single ordinary
+> squat day producing them. What is bought with it is that no set on the way up
+> ever asks the athlete to strip the bar, which is where the drift was coming
+> from. The 25 never moves all day.
+>
+> The same honesty holds away from a chained day, too: a large drop is still
+> large. From a bar loaded to `25, 20, 15, 2.5, 1.25` a side — not the greedy
+> breakdown of 63.75, just an arrangement the bar happens to be in — 147.5 →
+> 87.5 plans as *take off 1.25, 2.5, 15, 20 · add 5, 2.5, 1.25*. Nothing here
+> exists to make a change look smaller than it is; it exists so that a change
+> which is not large stops being displayed as one.
+>
+> Corrected while implementing: this passage called that starting arrangement
+> "canonical", which greedy largest-first does not produce for 63.75 a side —
+> that walk gives `25, 25, 10, 2.5, 1.25`. The arithmetic and the plates were
+> always right, since they are exactly what the engine's own
+> `the_big_drop_is_reported_honestly` test asserts; only the word "canonical"
+> overclaimed how the bar got there. A worked example that overclaims is the
+> same failure this section was already amended once to remove.
+>
+> **A plan is not shown once the bar has been disturbed.** It is computed from
+> the prescription and therefore assumes the previous set was loaded as
+> written. If this set's weight was edited, or any earlier set of the same
+> exercise was skipped or answered at a weight other than its own
+> prescription, the client shows the absolute breakdown instead — dimmed, and
+> labelled with the weight it is true about. The check is equality between
+> numbers the client already holds; it does not recompute a plan, because it
+> has no plate arithmetic and is not getting any (D-11). A stale plan is worse
+> than no plan: it is instructions for a bar that is not in front of you.
+>
+> **`break_down` stayed best-effort.** The greedy walk is now shared between it
+> and a ceiling-capped variant, and the difference between the two is what a
+> leftover means: the capped one refuses a candidate it cannot build exactly,
+> and `break_down` returns what it placed regardless. So `plan` degrades to
+> `break_down` for a target no candidate could build — a weight that is not a
+> multiple of 1.25, which `round_down` never produces and only a caller that
+> skipped it could supply. The stack it hands back then falls short of the
+> target, which is the honest failure for someone loading a bar; refusing or
+> panicking on a number a future program produced is not.
+>
+> **The palette is part of this decision**, because a breakdown that cannot be
+> read at a glance is not doing the job the breakdown exists for. The light
+> theme re-tokenises the two pale plates: `#e8eaed` is invisible on Solarized's
+> `#fdf6e3` and the `#9aa5ab` chrome is close to it, so both darken. The
+> outline that separates two adjacent plates became a token in the same pass,
+> because it has to move with them and in the opposite direction: black is the
+> right edge on a dark surface and the heaviest line on the screen on a pale
+> one. The five saturated IWF colours are untouched — they were chosen to be
+> read across a gym floor and the surface behind them does not change that.
+>
+> The re-tokenised 5 kg plate computes to **1.92:1** against the light
+> background, under the 3:1 usually asked of a graphical object, and it was
+> left there knowingly. The chrome already sits at 3.29:1, so darkening the
+> white plate to 3:1 lands the two within 1.1:1 of each other and collapses
+> the lightness relationship that is the only thing telling a white plate from
+> a chrome one. Two plates that cannot be told apart are a worse failure than
+> one that is quiet, and this is a diagram where the *difference* between
+> adjacent shapes carries the meaning. **It is unverified in the sense that
+> matters: nobody has looked at the light theme in a browser.** The numbers
+> here are computed, not seen.
+
 ### Units
 
 kg only. Stored as bare numbers with kg semantics; no unit is written into any
@@ -406,6 +568,46 @@ Drift now has two axes: **weight** (D-07) and **work not done**.
 A session open longer than 3 hours auto-closes and is flagged, rather than
 silently recording a fourteen-hour workout.
 
+### The finish screen
+
+> **Added after the app was live.** The lifecycle above ends at the submit,
+> and the athlete does not. There was a screen there already; it said three
+> lines and offered a button, which is a receipt rather than an ending.
+
+It is built entirely from the session the phone already holds, so it is the
+same screen whether or not there is a signal:
+
+- **wall-clock duration**, `started_at` → `ended_at`, which is the D-01
+  question;
+- **sets done, skipped and not reached**, out of the total;
+- the **outcome**, and the reason when the session was cut short (D-08's one
+  question, read back rather than asked again).
+
+Then a **readiness indicator for the permanent record**, which is the part
+that makes handing off safe. Accepted or duplicate: *recorded*, with a link to
+the history page. Queued: *saved on this device and not sent yet*, that it goes
+up the next time the app opens with a connection, and that sending twice is
+harmless (D-09) — and where the link would be, a disabled control reading *the
+full breakdown needs a connection*, rather than nothing at all. An athlete who
+finished a session underground should be told where the breakdown will be, not
+left wondering whether it exists. Rejected: the existing message, and no link.
+Offering a link into a record that is not there is the one failure this screen
+can produce on its own.
+
+**No drift total and no timing breakdown**, and both are tempting exactly
+here. Both are refused for the same reason and it is D-13's: progress is never
+shown without its cost, and drift is put beside the e1RM trend on purpose. A
+drift number invented on the finish screen would be the first place in the
+product where it appears alone, at the moment the athlete is least able to
+read it against anything. The arithmetic argues the same way from the other
+end — a total computed in a client is one the next client has to compute again
+(D-07, D-11), and the timing aggregation is `timing.rs`'s. Both are one tap
+away, on a page built to hold them.
+
+**It does not redirect on its own.** A screen that leaves while it is being
+read is a screen that was not shown. The athlete is standing in a gym having
+just finished lifting; the dashboard is one tap away and will still be there.
+
 ---
 
 ## D-09 · Offline from day one
@@ -526,6 +728,48 @@ cannot render a breakdown of nothing.
 > accessory volume stop being averaged into one number that describes neither.
 > That is a change to a settled rule and belongs in its own decision, once
 > there is enough stamped history to check it against.
+
+> **Amended after taking it to the gym.** The stamp is shown in the logger as
+> well as on the history page. Each answered set carries the clock time of the
+> tap and the interval that ended at it — `Logged 102.5 kg × 5    14:32 ·
+> +3:10` — measured from the previous **answered** set, logged or skipped,
+> since both are a tap at a moment in time, or from the commit for the first
+> one, which makes that figure the lead-in exactly as `timing.rs` treats it.
+> The breakdown afterwards is still where the hour is accounted for; this is
+> only the same data, visible while it is being produced.
+>
+> **It appears only on sets already answered, and nothing on that screen counts
+> up toward the set being rested for.** That is the constraint the rest-timer
+> paragraph above imposes, and it is the whole of what separates this from the
+> feature that was tried in the predecessor and removed for adding stress. A
+> stamp on the pending set would have nowhere to measure from but *now*, and a
+> number measuring from now toward a set not yet performed is a rest timer
+> whatever it is labelled. So each per-set figure is written once, when the tap
+> lands, and never rewritten. The header's elapsed clock does move, and always
+> has: it is the session's own wall clock against the hour (D-01), attached to
+> nothing the athlete is about to lift. That is the distinction, and it is not
+> presentational — a timer is a thing an athlete is *behind*, a stamp is a
+> thing they did.
+>
+> **The ceiling is duplicated, knowingly.** `$lib/time.ts` holds
+> `INTERVAL_CEILING_SECONDS` as its own copy of `timing.rs`'s
+> `INTERVAL_CEILING`, and the client discards a negative or over-ceiling gap
+> the same way, leaving the stamp with no interval beside it rather than a
+> figure it would not stand behind. Without it a session with one bad stamp
+> shows a number in the gym
+> that the history page then declines to count, which is the worst of both:
+> the athlete sees the figure *and* sees it disappear. `timing.rs` remains the
+> authority — it does the aggregation, it owns the discard-rather-than-clamp
+> reasoning, and if the two ever have to differ it is the one that is right.
+> Serving the number from the API was the obvious alternative and is worse: it
+> makes a screen that must work with no network (D-09) depend on a value it
+> cannot fetch, so the offline path would be the one without the rule. What
+> guards the copy is a unit test written against the literal twenty minutes
+> rather than against the constant, so editing the constant alone fails the
+> suite. That is honestly only half a guard: nothing compares the two
+> languages, and a change made in `timing.rs` will pass everything. The pair
+> is small enough and cited from both sides well enough for that to be
+> acceptable; a generated constant is the fix if it ever stops being.
 
 ---
 

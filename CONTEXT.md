@@ -99,6 +99,18 @@ _Avoid_: Start (ambiguous with beginning a program), begin
 One performed unit of work, carrying both what was prescribed and what was
 actually done. Distinct from a Lift, which is only the prescription.
 
+**Note**:
+A sentence the athlete attached to one Set. Optional, and never asked for.
+Distinct from the session-level notes field, which nothing writes to.
+_Avoid_: Comment, log entry, remark
+
+**Plate change**:
+What comes off the bar and what goes on, per side, to get from the arrangement
+currently loaded to the next prescribed weight. Retains a prefix of what is on
+there, because plates load largest-first and only the outermost can come off.
+Shown only when the bar is where the prescription assumed.
+_Avoid_: Delta, diff, adjustment, swap
+
 **Drift**:
 The gap between what was prescribed and what was done — heavier, lighter, or
 not done at all. The signal the product exists to surface.

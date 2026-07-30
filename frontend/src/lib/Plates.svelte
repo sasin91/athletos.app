@@ -66,8 +66,9 @@
 		<div class="flex items-center gap-[3px]">
 			{#each plates as plate, i (i)}
 				<div
-					class="w-[18px] rounded-[3px] border border-black/30"
-					style="height: {heightOf(plate)}px; background: {colourOf(plate)}"
+					class="w-[18px] rounded-[3px] border"
+					style="height: {heightOf(plate)}px; background: {colourOf(plate)};
+					       border-color: var(--color-plate-edge)"
 				></div>
 			{/each}
 

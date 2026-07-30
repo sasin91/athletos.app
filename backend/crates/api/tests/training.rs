@@ -740,6 +740,151 @@ async fn the_session_carries_loadable_weights_and_their_plates(pool: PgPool) {
     assert_eq!(session["progress"]["total"], 12);
 }
 
+/// Plates as loading instructions: chained within an exercise, reset between
+/// them (D-04).
+///
+/// Asserted on the chaining rather than on which plates come out. The
+/// arrangement is the training crate's business and is swept exhaustively
+/// there; what this endpoint owns is *which bar* each set is planned against,
+/// and that is the thing a handler gets wrong.
+#[sqlx::test]
+async fn the_plate_change_chains_within_an_exercise_and_resets_between_them(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let plates = |value: &serde_json::Value| -> Vec<f64> {
+        value
+            .as_array()
+            .expect("a plate list")
+            .iter()
+            .map(|plate| plate.as_f64().expect("a plate is a number"))
+            .collect()
+    };
+
+    let mut previous_exercise = String::new();
+    let mut on_bar: Vec<f64> = Vec::new();
+
+    for set in session["prescribed_sets"]
+        .as_array()
+        .expect("the session carries its prescribed sets")
+    {
+        let change = &set["plate_change"];
+        assert!(
+            !change.is_null(),
+            "set {} is a barbell set and should carry a plan",
+            set["position"]
+        );
+
+        let remove = plates(&change["remove"]);
+        let add = plates(&change["add"]);
+        let resulting = plates(&change["plates_per_side"]);
+
+        let exercise = set["exercise"].as_str().expect("a set names its exercise");
+
+        // The bar starts empty for each exercise, so the first set of one has
+        // nothing to take off.
+        if exercise != previous_exercise {
+            assert!(
+                remove.is_empty(),
+                "set {} opens {exercise} and should plan from an empty bar",
+                set["position"]
+            );
+            on_bar.clear();
+        }
+
+        // The instructions apply to the bar as the previous set left it.
+        let kept = on_bar.len() - remove.len();
+        let mut applied = on_bar[..kept].to_vec();
+        applied.extend(add.iter().copied());
+        assert_eq!(applied, resulting, "set {}", set["position"]);
+
+        // And they build the weight that was prescribed.
+        let prescribed = set["prescribed_weight"].as_f64().expect("a weight");
+        let from_plates = resulting.iter().sum::<f64>() * 2.0 + 20.0;
+        assert!(
+            (from_plates - prescribed).abs() < 1e-9,
+            "set {} builds {from_plates} kg, not {prescribed}",
+            set["position"]
+        );
+
+        previous_exercise = exercise.to_owned();
+        on_bar = resulting;
+    }
+}
+
+/// A dumbbell set and a bodyweight set carry no plate change, while the
+/// barbell sets around them do (D-04).
+///
+/// The chaining test above only ever exercises `wendler-531-bbb`, which is
+/// four barbell lifts, so `!change.is_null()` there passes for every set
+/// without ever proving the `None` branch exists. That let a real bug ship:
+/// `plateChangeFor` on the client returns `null` for a `None` plate change,
+/// and the current-set card's fallback drew an empty plate diagram under it —
+/// "empty bar · 20 kg, for the prescribed 12 kg" on a Smolov Jr dumbbell set.
+/// `smolov-jr` day 1 carries both: `lateral-raise` is a dumbbell exercise and
+/// `hanging-leg-raise` is bodyweight, alongside barbell squat and deadlift
+/// work, so one session proves both halves at once.
+#[sqlx::test]
+async fn non_barbell_sets_carry_no_plate_change_while_barbell_sets_do(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "smolov-jr").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut saw_dumbbell = false;
+    let mut saw_bodyweight = false;
+    let mut saw_barbell = false;
+
+    for set in session["prescribed_sets"]
+        .as_array()
+        .expect("the session carries its prescribed sets")
+    {
+        let exercise = set["exercise"].as_str().expect("a set names its exercise");
+        let has_plate_change = !set["plate_change"].is_null();
+
+        match exercise {
+            "lateral-raise" => {
+                assert!(
+                    !has_plate_change,
+                    "set {} is a dumbbell set and should carry no plate change",
+                    set["position"]
+                );
+                saw_dumbbell = true;
+            }
+            "hanging-leg-raise" => {
+                assert!(
+                    !has_plate_change,
+                    "set {} is a bodyweight set and should carry no plate change",
+                    set["position"]
+                );
+                saw_bodyweight = true;
+            }
+            "squat" | "deadlift" => {
+                assert!(
+                    has_plate_change,
+                    "set {} is a barbell set and should carry a plan",
+                    set["position"]
+                );
+                saw_barbell = true;
+            }
+            _ => {}
+        }
+    }
+
+    assert!(saw_dumbbell, "day 1 should prescribe the lateral raise");
+    assert!(
+        saw_bodyweight,
+        "day 1 should prescribe the hanging leg raise"
+    );
+    assert!(saw_barbell, "day 1 should prescribe barbell work");
+}
+
 // --- the pace projection (D-10) -------------------------------------------
 
 /// Logs the enrolment's current session with a chosen wall clock and a chosen
@@ -2127,4 +2272,64 @@ async fn a_session_submitted_without_stamps_has_no_timing_rather_than_an_empty_o
         detail["timing"]
     );
     assert!(detail["sets"][0]["logged_at"].is_null());
+}
+
+// --- a note on a set --------------------------------------------------------
+
+/// A note rides along with its set and comes back on the history detail.
+#[sqlx::test]
+async fn a_set_carries_an_optional_note(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let id = Uuid::now_v7();
+    let mut body = logged_as_prescribed(id, enrollment, &session);
+    body["sets"][0]["note"] = json!("left shoulder felt off");
+    // Blank is not a note. It normalises to null rather than being refused —
+    // a note typed and then cleared is not an error.
+    body["sets"][1]["note"] = json!("   ");
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let detail = server
+        .get(&format!("/v1/workouts/{id}"))
+        .authorization_bearer(&token)
+        .await
+        .json::<serde_json::Value>();
+
+    assert_eq!(detail["sets"][0]["note"], json!("left shoulder felt off"));
+    assert_eq!(detail["sets"][1]["note"], json!(null));
+    assert_eq!(detail["sets"][2]["note"], json!(null));
+}
+
+/// Over the cap is a 422 naming the position, like every other set-level
+/// complaint on this endpoint. Not a truncation: silently storing something
+/// other than what was written is worse than refusing it.
+#[sqlx::test]
+async fn a_note_over_the_cap_is_refused(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["sets"][0]["note"] = json!("x".repeat(501));
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
 }

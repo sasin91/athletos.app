@@ -1,21 +1,26 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Plates from '$lib/Plates.svelte';
+	import ThemeToggle from '$lib/ThemeToggle.svelte';
 	import { formatClock, formatElapsed } from '$lib/time';
 	import { projectedFinish } from '$lib/pace';
 	import {
 		CUT_REASONS,
 		editSet,
+		intervalBefore,
 		isComplete,
 		logSet,
 		nextSetPosition,
+		noteSet,
+		plateChangeFor,
 		resetSet,
 		setsDone,
 		setsRemaining,
 		skipSet,
+		summarise,
 		toSubmission
 	} from '$lib/session';
-	import type { CutReason, LocalSession } from '$lib/session';
+	import type { CutReason, LocalSession, SessionSummary } from '$lib/session';
 	import { clearActiveSession, loadActiveSession, saveActiveSession } from '$lib/storage';
 	import { submitSession } from '$lib/submit';
 
@@ -33,6 +38,11 @@
 	let session = $state<LocalSession | null>(null);
 	let phase = $state<Phase>('loading');
 	let now = $state(Date.now());
+
+	// Which set's note field is open. One at a time: the athlete is writing
+	// about the set in front of them, and a screen of open textareas is a
+	// screen where Log is harder to find.
+	let noting = $state<number | null>(null);
 
 	$effect(() => {
 		void loadActiveSession().then((stored) => {
@@ -65,10 +75,21 @@
 
 	const current = $derived(session ? nextSetPosition(session) : null);
 
+	// Kept across the submit so the finish screen has something to show. The
+	// session itself is cleared before the send is even attempted — it belongs
+	// to the queue from that moment, and leaving it here would offer a "resume"
+	// button for a workout already on its way.
+	let summary = $state<SessionSummary | null>(null);
+	let recordId = $state<string | null>(null);
+
 	async function finishSession(cutReason: CutReason | null) {
 		if (!session) return;
 
-		const body = toSubmission(session, { endedAt: new Date().toISOString(), cutReason });
+		const ending = { endedAt: new Date().toISOString(), cutReason };
+		const body = toSubmission(session, ending);
+
+		summary = summarise(session, ending);
+		recordId = session.id;
 
 		// Cleared before the send is even attempted: the session is now the
 		// queue's problem, and leaving it here would offer the athlete a
@@ -106,29 +127,54 @@
 			<p>Nothing is in progress on this device.</p>
 			<a class="btn w-full btn-primary" href={resolve('/')}>Back to training</a>
 		</main>
-	{:else if phase === 'sent'}
-		<main class="space-y-3 p-4">
-			<h1 class="text-xl font-bold">Logged</h1>
-			<p>The session is recorded and the program has moved on.</p>
-			<a class="btn w-full btn-primary" href={resolve('/')}>Back to training</a>
-		</main>
-	{:else if phase === 'queued'}
-		<main class="space-y-3 p-4">
-			<h1 class="text-xl font-bold">Saved on this device</h1>
-			<p>
-				The session could not be sent yet. It is queued and will be sent the next time the app opens
-				with a connection — sending it twice is harmless.
-			</p>
-			<a class="btn w-full btn-primary" href={resolve('/')}>Back to training</a>
-		</main>
-	{:else if phase === 'refused'}
-		<main class="space-y-3 p-4">
-			<h1 class="text-xl font-bold">The server would not take it</h1>
-			<p>
-				The session is still stored on this device and will not be retried on its own. Nothing you
-				did was lost.
-			</p>
-			<a class="btn w-full btn-primary" href={resolve('/')}>Back to training</a>
+	{:else if summary && (phase === 'sent' || phase === 'queued' || phase === 'refused')}
+		<main class="space-y-4 p-4">
+			<h1 class="text-xl font-bold">
+				{summary.cutReason ? 'Session cut short' : 'Session complete'}
+			</h1>
+
+			<div class="flex items-baseline gap-4">
+				<span class="font-mono text-4xl tabular-nums">
+					{formatElapsed(summary.durationSeconds * 1000)}
+				</span>
+				<span class="text-lg">{summary.done}/{summary.total} sets</span>
+			</div>
+
+			{#if summary.skipped > 0 || summary.pending > 0}
+				<p class="text-sm opacity-70">
+					{#if summary.skipped > 0}{summary.skipped} skipped{/if}
+					{#if summary.skipped > 0 && summary.pending > 0}
+						·
+					{/if}
+					{#if summary.pending > 0}{summary.pending} not reached{/if}
+				</p>
+			{/if}
+
+			<!--
+				Whether the permanent record exists yet. The full picture — drift
+				against the prescription, and where the hour went — is computed in
+				Rust and lives on the history page, so this says plainly whether that
+				page has anything to show rather than linking into a 404 (D-11).
+			-->
+			{#if phase === 'sent'}
+				<p class="text-sm opacity-70">Recorded. The program has moved on.</p>
+				<a class="btn w-full" href={resolve(`/history/${recordId}`)}> See where the hour went </a>
+			{:else if phase === 'queued'}
+				<p class="text-sm opacity-70">
+					Saved on this device and not sent yet. It goes up the next time the app opens with a
+					connection, and sending it twice is harmless.
+				</p>
+				<button class="btn w-full" type="button" disabled>
+					The full breakdown needs a connection
+				</button>
+			{:else}
+				<p class="alert text-sm alert-error" role="alert">
+					The server would not take it. The session is still stored on this device and will not be
+					retried on its own — nothing you did was lost.
+				</p>
+			{/if}
+
+			<a class="btn w-full btn-lg btn-primary" href={resolve('/')}>Back to training</a>
 		</main>
 	{:else if session}
 		<!--
@@ -142,6 +188,12 @@
 			{#if finish !== null}
 				<span class="ml-auto text-sm opacity-70">~{formatClock(new Date(finish))}</span>
 			{/if}
+			<!--
+				The logger has no nav of its own, and daylight at a rack is exactly
+				when the switch is wanted. It is not a mid-set action, so the top of
+				the screen is fine for it — unlike Log, which stays under a thumb.
+			-->
+			<span class="self-center" class:ml-auto={finish === null}><ThemeToggle /></span>
 		</header>
 
 		<main class="grow p-3">
@@ -175,9 +227,66 @@
 									</span>
 								</div>
 
-								<div class="mt-1 mb-1">
-									<Plates plates={set.platesPerSide} />
-								</div>
+								{@const change = plateChangeFor(session, set.position)}
+								<!--
+									Guarded on the pair, not on `change` alone (Finding 1 of the
+									branch review). `plateChangeFor` is `null` for two different
+									reasons that must not render the same way: a stale plan
+									(handled below, `set.platesPerSide` still has plates to
+									fall back to) and non-barbell loading, where
+									`platesPerSide` is empty too. Without this guard the
+									`{:else}` branch drew `<Plates plates={[]} />` for a
+									dumbbell or bodyweight set, which prints "empty bar · 20 kg"
+									— a false statement about a load that has no bar. A barbell
+									set sitting at exactly the empty bar still renders that same
+									line correctly, because it carries a `plate_change` with an
+									empty `plates_per_side` rather than no change at all.
+								-->
+								{#if change || set.platesPerSide.length > 0}
+									<div class="mt-1 mb-1">
+										{#if change}
+											<!--
+												What to do to the bar, not what the bar should end up
+												as. The greedy breakdown of two adjacent weights can
+												share almost nothing, so read as instructions it says
+												strip two plates to add one — and the temptation is to
+												put a convenient pair on instead and lift more than was
+												asked for (D-04).
+											-->
+											{#if change.remove.length > 0}
+												<p class="text-sm">
+													<span class="eyebrow">take off</span>
+													<span class="tabular">{change.remove.join(', ')}</span> per side
+												</p>
+											{/if}
+											{#if change.add.length > 0}
+												<p class="text-sm">
+													<span class="eyebrow">add</span>
+													<span class="tabular">{change.add.join(', ')}</span> per side
+												</p>
+											{/if}
+											{#if change.remove.length === 0 && change.add.length === 0 && change.plates_per_side.length > 0}
+												<!-- Same weight as the last set. Saying nothing here
+												     would read as a screen that failed to load. -->
+												<p class="eyebrow">bar is already loaded</p>
+											{/if}
+
+											<Plates plates={change.plates_per_side} />
+										{:else}
+											<!--
+												The plan assumed a bar that is not the one in front of
+												them, so it is not shown as an instruction. The
+												breakdown of the prescribed weight still is, dimmed and
+												labelled, because it is true about the prescription even
+												when it is not true about the bar.
+											-->
+											<div class="opacity-60">
+												<Plates plates={set.platesPerSide} />
+												<p class="text-xs">for the prescribed {set.prescribedWeight} kg</p>
+											</div>
+										{/if}
+									</div>
+								{/if}
 
 								<!--
 									One cue per line. Joined with a separator they read as a
@@ -250,6 +359,59 @@
 								</label>
 							</div>
 
+							<!--
+								Placed under the current set only, and reopened for a set that
+								carries a note even after it is no longer current — the
+								athlete gets the affordance where they are and can still read
+								or edit what they wrote on an earlier set. Without the second
+								condition this sat on every card regardless of status
+								(Finding 4 of the branch review): on a Smolov Jr day roughly
+								twenty-five extra "Add note" buttons for sets nobody is
+								looking at. Invisible otherwise so logging a set as prescribed
+								stays one tap — honesty must never cost more than dishonesty
+								(D-07), and a field that is always on screen is a field that
+								asks to be filled in.
+							-->
+							{#if set.position === current || set.note}
+								{#if noting === set.position}
+									<label class="flex w-full flex-col">
+										<span class="sr-only">Note for this set</span>
+										<textarea
+											class="textarea-bordered textarea w-full"
+											rows="2"
+											maxlength="500"
+											placeholder="What happened on this set?"
+											value={set.note ?? ''}
+											oninput={(event) =>
+												apply((s) => noteSet(s, set.position, event.currentTarget.value))}
+										></textarea>
+									</label>
+									<button
+										class="btn self-start btn-ghost btn-sm"
+										type="button"
+										onclick={() => (noting = null)}
+									>
+										Done
+									</button>
+								{:else if set.note}
+									<button
+										class="text-left text-sm opacity-70"
+										type="button"
+										onclick={() => (noting = set.position)}
+									>
+										{set.note}
+									</button>
+								{:else}
+									<button
+										class="self-start text-sm opacity-50"
+										type="button"
+										onclick={() => (noting = set.position)}
+									>
+										Add note
+									</button>
+								{/if}
+							{/if}
+
 							<div class="flex gap-2">
 								{#if set.status === 'pending'}
 									<button
@@ -270,11 +432,28 @@
 										Skip
 									</button>
 								{:else}
-									<span class="grow self-center text-sm">
-										{set.status === 'done'
-											? `Logged ${set.actualWeight} kg × ${set.actualReps}`
-											: 'Skipped'}
-									</span>
+									{@const interval = intervalBefore(session, set.position)}
+									<div class="flex grow items-baseline gap-2 self-center">
+										<span class="text-sm">
+											{set.status === 'done'
+												? `Logged ${set.actualWeight} kg × ${set.actualReps}`
+												: 'Skipped'}
+										</span>
+										<!--
+											When, and how long the gap before it was. Both describe work
+											already done and both stop changing the moment they appear —
+											which is the line between this and a rest timer. Nothing on
+											this screen counts up toward the set being rested for (D-10).
+										-->
+										{#if set.loggedAt}
+											<span class="ml-auto text-xs tabular opacity-50">
+												{formatClock(new Date(set.loggedAt))}
+												{#if interval !== null}
+													· +{formatElapsed(interval * 1000)}
+												{/if}
+											</span>
+										{/if}
+									</div>
 									<button
 										class="btn btn-ghost"
 										type="button"

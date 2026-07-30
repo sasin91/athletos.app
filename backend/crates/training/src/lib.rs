@@ -60,7 +60,7 @@ pub mod testing;
 
 pub use error::{ProgramError, Result};
 pub use exercise::Exercise;
-pub use loading::{Load, Loading, BARBELL_RESOLUTION, BAR_WEIGHT, PLATES};
+pub use loading::{plan, Load, Loading, PlateChange, BARBELL_RESOLUTION, BAR_WEIGHT, PLATES};
 pub use maxes::Maxes;
 pub use meta::{Equipment, Experience, Length, ProgramMeta, RecoveryDemand};
 pub use program::{Catalogued, Prescriptive, Program, Progress, Readout, State};

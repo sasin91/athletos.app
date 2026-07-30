@@ -67,6 +67,92 @@
 	--noise: 0;
 }
 
+/*
+ * The same room in daylight.
+ *
+ * Solarized's light ramp, because the request was for Solarized specifically
+ * and its base3/base01 pairing is the part that earns its reputation — a warm
+ * surface that does not glare, and body text that is not maximum contrast.
+ *
+ * Chassis is unchanged: same radii, same borders, same flat depth. This is a
+ * change of surface, not a second design. `base-300` is a darker beige rather
+ * than Solarized's base1 (#93a1a1), which is a cool grey and reads as a
+ * different family when it is a border on base3.
+ */
+@plugin 'daisyui/theme' {
+	name: 'solarized';
+	default: false;
+	prefersdark: false;
+	color-scheme: light;
+
+	--color-base-100: #fdf6e3; /* base3 */
+	--color-base-200: #eee8d5; /* base2 */
+	--color-base-300: #d9d2bf;
+
+	/*
+	 * base02, not base01. A straight Solarized port reaches for base01 here —
+	 * it is the ordinary body-text colour and it is what --color-primary still
+	 * uses below — but this chassis dims text far harder than an ordinary
+	 * document ever does: opacity-50/60/70 and the 45%-mixed `eyebrow`
+	 * utility were tuned against the dark theme's near-white content colour,
+	 * which has enough headroom to survive being cut to less than half. base01
+	 * does not: composited at 45% it lands around 1.9:1, which is the words
+	 * "TAKE OFF" and "ADD" — the two tokens that decide whether plates come
+	 * off the bar or go on — sitting below legibility in daylight. base02 is
+	 * darker than the surface needs for full-strength text, but that unused
+	 * headroom is exactly what the dimming utilities spend, the same way the
+	 * dark theme's own near-black-on-near-white spends its headroom the other
+	 * way. See D-04's palette note for the numbers this was checked against.
+	 */
+	--color-base-content: #073642; /* base02 */
+
+	--color-primary: #586e75; /* base01 */
+	--color-primary-content: #fdf6e3;
+
+	--color-secondary: #eee8d5;
+	--color-secondary-content: #586e75;
+	--color-accent: #657b83; /* base00 */
+	--color-accent-content: #fdf6e3;
+	--color-neutral: #eee8d5;
+	--color-neutral-content: #586e75;
+
+	/* Drift keeps its meaning across both themes: over is orange and never
+	   red, because going heavier is a choice and not an error (D-07). */
+	--color-info: #268bd2;
+	--color-info-content: #fdf6e3;
+	--color-success: #859900;
+	--color-success-content: #fdf6e3;
+	--color-warning: #cb4b16;
+	--color-warning-content: #fdf6e3;
+	--color-error: #dc322f;
+	--color-error-content: #fdf6e3;
+
+	--radius-selector: 1rem;
+	--radius-field: 0.75rem;
+	--radius-box: 1rem;
+
+	--size-selector: 0.28125rem;
+	--size-field: 0.28125rem;
+	--border: 1px;
+	--depth: 0;
+	--noise: 0;
+
+	/*
+	 * The plates are re-tokenised, and this is a requirement rather than
+	 * polish. The 5 kg plate is #e8eaed and the 1.25 is #9aa5ab; on #fdf6e3
+	 * the first is invisible and the second is close to it. The plate stack is
+	 * the one place this product spends colour and the one thing that has to
+	 * be read at a glance while loading a bar, so the two pale plates darken
+	 * enough to hold against base3 while staying recognisably white plate and
+	 * chrome. The five saturated IWF colours are unchanged — they were chosen
+	 * to be read across a gym floor and they still are.
+	 */
+	--color-plate-5: #b9b4a3;
+	--color-plate-1-25: #7d8a90;
+	--color-plate-edge: #586e75;
+	--color-bar: #93a1a1;
+}
+
 @theme {
 	--font-sans: 'Barlow', ui-sans-serif, system-ui, sans-serif;
 	--font-display: 'Archivo', ui-sans-serif, system-ui, sans-serif;
@@ -87,6 +173,11 @@
 	--color-plate-2-5: #c62828;
 	--color-plate-1-25: #9aa5ab;
 	--color-bar: #7c8388;
+
+	/* The outline that separates two adjacent plates of similar colour. Dark
+	   on a dark surface; overridden in the light theme, where black would be
+	   the heaviest line on the screen. */
+	--color-plate-edge: rgb(0 0 0 / 0.3);
 }
 
 /*

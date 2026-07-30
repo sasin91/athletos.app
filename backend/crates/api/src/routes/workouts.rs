@@ -69,6 +69,11 @@ const MAX_SETS: usize = 500;
 
 const MAX_NOTES_LENGTH: usize = 4_000;
 
+/// Long enough for "left shoulder felt off, dropped the last rep", short
+/// enough that this does not become a training diary. Enforced here and in the
+/// schema — the constraint is what is still true after the next client.
+const NOTE_LIMIT: usize = 500;
+
 /// Reps beyond this are not a set, they are a typo.
 const MAX_REPS: u32 = 1_000;
 
@@ -204,6 +209,19 @@ pub struct SubmittedSet {
     /// intervals it cannot believe instead.
     #[serde(default)]
     pub logged_at: Option<DateTime<Utc>>,
+
+    /// What the athlete wrote about this set, if anything (D-07).
+    ///
+    /// Optional and additively so (D-12). Blank and whitespace-only strings
+    /// normalise to `None` rather than being refused — a note that was typed
+    /// and then cleared is not an error, and the athlete is holding a phone
+    /// with chalk on their hands.
+    ///
+    /// Over 500 characters is a 422 naming the position. Truncating would
+    /// store something other than what was written, which is worse than
+    /// refusing it.
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 /// What the server recorded, and where the program stands afterwards.
@@ -306,6 +324,9 @@ pub struct LoggedSetView {
     /// When this set was logged or skipped, as the phone recorded it (D-10).
     /// Null for anything logged before timing existed.
     pub logged_at: Option<DateTime<Utc>>,
+    /// What the athlete wrote about this set. Null for every set logged
+    /// before notes existed, and for every set they had nothing to say about.
+    pub note: Option<String>,
 }
 
 /// Which slice of the history to return.
@@ -560,6 +581,7 @@ type StoredSet = (
     Option<i16>,
     String,
     Option<DateTime<Utc>>,
+    Option<String>,
 );
 
 /// Everything the athlete has logged, newest first.
@@ -718,7 +740,7 @@ pub async fn show(
     // `unique (workout_id, "position")` is both the ordering and the index.
     let sets: Vec<StoredSet> = sqlx::query_as(
         "select \"position\", exercise, prescribed_weight::float8, prescribed_reps,
-                actual_weight::float8, actual_reps, status, logged_at
+                actual_weight::float8, actual_reps, status, logged_at, note
          from workout_sets
          where workout_id = $1
          order by \"position\"",
@@ -809,6 +831,7 @@ fn logged_set(
         actual_reps,
         status,
         logged_at,
+        note,
     ): StoredSet,
 ) -> ApiResult<LoggedSetView> {
     let label = exercise::find(&exercise)
@@ -825,6 +848,7 @@ fn logged_set(
         actual_reps: actual_reps.map(|reps| u32::try_from(reps).unwrap_or_default()),
         status: SetStatus::parse(&status)?,
         logged_at,
+        note,
     })
 }
 
@@ -891,6 +915,7 @@ async fn insert_sets(
     let mut actual_reps: Vec<Option<i16>> = Vec::with_capacity(sets.len());
     let mut statuses: Vec<String> = Vec::with_capacity(sets.len());
     let mut logged_ats: Vec<Option<DateTime<Utc>>> = Vec::with_capacity(sets.len());
+    let mut notes: Vec<Option<String>> = Vec::with_capacity(sets.len());
 
     for set in sets {
         exercises.push(set.exercise.trim().to_owned());
@@ -907,12 +932,22 @@ async fn insert_sets(
         );
         statuses.push(set.status.as_str().to_owned());
         logged_ats.push(set.logged_at);
+        // Normalised here rather than refused in `validate`: the check
+        // constraint forbids a blank note, and a note the athlete typed and
+        // then cleared should cost them nothing.
+        notes.push(
+            set.note
+                .as_deref()
+                .map(str::trim)
+                .filter(|note| !note.is_empty())
+                .map(str::to_owned),
+        );
     }
 
     sqlx::query(
         "insert into workout_sets
              (workout_id, exercise, \"position\", prescribed_weight, prescribed_reps,
-              actual_weight, actual_reps, status, logged_at)
+              actual_weight, actual_reps, status, logged_at, note)
          select $1,
                 logged.exercise,
                 logged.slot,
@@ -921,11 +956,13 @@ async fn insert_sets(
                 logged.actual_weight::numeric,
                 logged.actual_reps,
                 logged.status,
-                logged.logged_at
+                logged.logged_at,
+                logged.note
          from unnest($2::text[], $3::int2[], $4::float8[], $5::int2[],
-                     $6::float8[], $7::int2[], $8::text[], $9::timestamptz[])
+                     $6::float8[], $7::int2[], $8::text[], $9::timestamptz[],
+                     $10::text[])
               as logged(exercise, slot, prescribed_weight, prescribed_reps,
-                        actual_weight, actual_reps, status, logged_at)",
+                        actual_weight, actual_reps, status, logged_at, note)",
     )
     .bind(workout_id)
     .bind(&exercises)
@@ -936,6 +973,7 @@ async fn insert_sets(
     .bind(&actual_reps)
     .bind(&statuses)
     .bind(&logged_ats)
+    .bind(&notes)
     .execute(&mut **tx)
     .await?;
 
@@ -1037,6 +1075,20 @@ fn validate(body: &WorkoutSubmission) -> ApiResult<()> {
         {
             return Err(ApiError::Validation(format!(
                 "the set at position {} is marked done but records no weight or reps",
+                set.position
+            )));
+        }
+
+        // Normalised before it is measured, so 500 characters of text with a
+        // trailing newline is a note and not a rejection.
+        if set
+            .note
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|note| note.chars().count() > NOTE_LIMIT)
+        {
+            return Err(ApiError::Validation(format!(
+                "the note on position {} is longer than {NOTE_LIMIT} characters",
                 set.position
             )));
         }

@@ -675,6 +675,11 @@ export interface components {
              *     Null for anything logged before timing existed.
              */
             logged_at?: string | null;
+            /**
+             * @description What the athlete wrote about this set. Null for every set logged
+             *     before notes existed, and for every set they had nothing to say about.
+             */
+            note?: string | null;
             /** Format: int32 */
             position: number;
             /** Format: int32 */
@@ -828,6 +833,41 @@ export interface components {
              */
             sample_size: number;
         };
+        /**
+         * @description What comes off the bar and what goes on, to get to this set's weight
+         *     (D-04).
+         *
+         *     Mirrored from [`athletos_training::PlateChange`] because the training crate
+         *     depends on `serde`, `serde_json` and `thiserror` and nothing else (D-15),
+         *     so it cannot carry a `ToSchema` of its own.
+         */
+        PlateChangeView: {
+            /**
+             * @description Per side, largest first — the order they go on.
+             * @example [
+             *       15
+             *     ]
+             */
+            add: number[];
+            /**
+             * @description What this leaves on the bar, largest first. Sums to
+             *     `prescribed_weight`, and is deliberately not always the greedy
+             *     breakdown that `plates_per_side` carries.
+             * @example [
+             *       25,
+             *       15
+             *     ]
+             */
+            plates_per_side: number[];
+            /**
+             * @description Per side, outermost first — the order they actually come off.
+             * @example [
+             *       1.25,
+             *       2.5
+             *     ]
+             */
+            remove: number[];
+        };
         /** @description One prescribed set, ready to be logged. */
         PrescribedSet: {
             amrap: boolean;
@@ -837,6 +877,7 @@ export interface components {
              * @example Squat
              */
             label: string;
+            plate_change?: null | components["schemas"]["PlateChangeView"];
             /**
              * @description The same breakdown [`LiftView::plates_per_side`] carries, repeated here.
              *
@@ -1140,6 +1181,19 @@ export interface components {
              *     intervals it cannot believe instead.
              */
             logged_at?: string | null;
+            /**
+             * @description What the athlete wrote about this set, if anything (D-07).
+             *
+             *     Optional and additively so (D-12). Blank and whitespace-only strings
+             *     normalise to `None` rather than being refused — a note that was typed
+             *     and then cleared is not an error, and the athlete is holding a phone
+             *     with chalk on their hands.
+             *
+             *     Over 500 characters is a 422 naming the position. Truncating would
+             *     store something other than what was written, which is worse than
+             *     refusing it.
+             */
+            note?: string | null;
             /**
              * Format: int32
              * @description From `prescribed_sets[].position` in the session payload. Unique within

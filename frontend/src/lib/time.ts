@@ -51,3 +51,37 @@ export function formatDate(instant: string): string {
 		month: 'short'
 	});
 }
+
+/**
+ * Intervals longer than this are not believed (D-10).
+ *
+ * The phone's clock can be corrected by NTP or changed by hand mid-session,
+ * and a genuine three-minute gap is indistinguishable from one straddling a
+ * three-minute correction. Such intervals are **discarded rather than
+ * clamped** — clamping folds a bad measurement in at an invented value with no
+ * way to see it happened.
+ *
+ * The authority is `backend/crates/api/src/timing.rs`, which holds the same
+ * number as `INTERVAL_CEILING` and does the aggregation for the history page.
+ * It is duplicated here knowingly, because the logger draws intervals with no
+ * network and cannot fetch it, and it is tested so it cannot drift silently.
+ */
+export const INTERVAL_CEILING_SECONDS = 20 * 60;
+
+/**
+ * The gap between two stamps in whole seconds, or `null` for one this product
+ * does not believe.
+ *
+ * `null` rather than a number the caller has to know to distrust: a figure on
+ * the screen is a claim, and the alternative to a claim is silence.
+ */
+export function intervalBetween(earlier: string, later: string): number | null {
+	const from = Date.parse(earlier);
+	const to = Date.parse(later);
+	if (Number.isNaN(from) || Number.isNaN(to)) return null;
+
+	const seconds = Math.round((to - from) / 1000);
+	if (seconds < 0 || seconds > INTERVAL_CEILING_SECONDS) return null;
+
+	return seconds;
+}

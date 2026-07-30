@@ -1333,6 +1333,13 @@
             "format": "date-time",
             "description": "When this set was logged or skipped, as the phone recorded it (D-10).\nNull for anything logged before timing existed."
           },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the athlete wrote about this set. Null for every set logged\nbefore notes existed, and for every set they had nothing to say about."
+          },
           "position": {
             "type": "integer",
             "format": "int32",
@@ -1530,6 +1537,52 @@
           }
         }
       },
+      "PlateChangeView": {
+        "type": "object",
+        "description": "What comes off the bar and what goes on, to get to this set's weight\n(D-04).\n\nMirrored from [`athletos_training::PlateChange`] because the training crate\ndepends on `serde`, `serde_json` and `thiserror` and nothing else (D-15),\nso it cannot carry a `ToSchema` of its own.",
+        "required": [
+          "remove",
+          "add",
+          "plates_per_side"
+        ],
+        "properties": {
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "Per side, largest first — the order they go on.",
+            "example": [
+              15.0
+            ]
+          },
+          "plates_per_side": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "What this leaves on the bar, largest first. Sums to\n`prescribed_weight`, and is deliberately not always the greedy\nbreakdown that `plates_per_side` carries.",
+            "example": [
+              25.0,
+              15.0
+            ]
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "Per side, outermost first — the order they actually come off.",
+            "example": [
+              1.25,
+              2.5
+            ]
+          }
+        }
+      },
       "PrescribedSet": {
         "type": "object",
         "description": "One prescribed set, ready to be logged.",
@@ -1553,6 +1606,17 @@
             "type": "string",
             "description": "The exercise's display name, resolved from the compiled registry.",
             "example": "Squat"
+          },
+          "plate_change": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlateChangeView",
+                "description": "The change from the bar as the previous set of this exercise left it\n(D-04).\n\n`None` for anything not loaded with plates. Additive (D-12):\n`plates_per_side` above is untouched and stays the canonical greedy\nbreakdown, so `LiftView` and any client already reading it are\nunaffected.\n\nChained within an exercise and **reset to an empty bar between them** —\nacross exercises the previous stack is not on the bar being walked to,\nand possibly not even the same bar."
+              }
+            ]
           },
           "plates_per_side": {
             "type": "array",
@@ -1979,6 +2043,13 @@
             ],
             "format": "date-time",
             "description": "When the athlete tapped Log or Skip for this set, from the phone's clock\nat that moment (D-10).\n\nOptional, and additively so (D-12): a client that does not send it still\nsubmits a valid workout, it simply has no timing to show afterwards.\nStamped on the device rather than here because the logger runs offline\nand a submission can arrive hours late — a server clock would be\nmeasuring when the queue flushed, not when the work happened.\n\nNot validated against `started_at` and `ended_at`. A stamp outside them\nis a phone whose clock moved, which is a fact about the measurement\nrather than a malformed request, and refusing the submission would cost\nthe athlete a whole session's log over it. `timing` discards the\nintervals it cannot believe instead."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the athlete wrote about this set, if anything (D-07).\n\nOptional and additively so (D-12). Blank and whitespace-only strings\nnormalise to `None` rather than being refused — a note that was typed\nand then cleared is not an error, and the athlete is holding a phone\nwith chalk on their hands.\n\nOver 500 characters is a 422 naming the position. Truncating would\nstore something other than what was written, which is worse than\nrefusing it."
           },
           "position": {
             "type": "integer",

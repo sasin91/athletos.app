@@ -5,9 +5,31 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
-		<meta name="theme-color" content="#1d232a" />
+		<meta name="theme-color" content="#121211" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/icon.svg" />
+		<script>
+			// The only inline script in the app, and it earns its place: /session
+			// is prerendered (D-11), so a cookie read in hooks.server.ts would run
+			// at build time and bake one theme into the one screen that is used in
+			// a gym. localStorage works identically on prerendered and
+			// server-rendered pages, and running here means the athlete never sees
+			// the other theme flash.
+			(function () {
+				var SURFACES = { athletos: '#121211', solarized: '#fdf6e3' };
+				var theme = 'athletos';
+				try {
+					theme =
+						localStorage.getItem('athletos:theme') ||
+						(matchMedia('(prefers-color-scheme: light)').matches ? 'solarized' : 'athletos');
+				} catch (error) {
+					// Private mode, or storage disabled. The default is a working app.
+				}
+				if (!SURFACES[theme]) theme = 'athletos';
+				document.documentElement.dataset.theme = theme;
+				document.querySelector('meta[name="theme-color"]').content = SURFACES[theme];
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
