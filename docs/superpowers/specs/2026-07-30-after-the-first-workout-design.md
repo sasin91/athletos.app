@@ -304,9 +304,14 @@ the previous stack is not on the bar you are walking to — possibly not even th
 same bar. Within an exercise it is, which is where the 5/3/1 drop lives and
 where the complaint came from.
 
-The logger and the peek set list draw `plate_change.plates_per_side` when it is
-present, so the diagram and the instructions above it agree. Non-barbell
-loading has no plates and shows nothing, as now.
+The logger draws `plate_change.plates_per_side` when it is present, so the
+diagram and the instructions above it agree. Non-barbell loading has no plates
+and shows nothing, as now.
+
+The peek screen is deliberately untouched. It walks `blocks[].lifts[]`, which
+is aggregated — `5 × 10 @ 87.5 kg` — and has no per-set sequence to chain a bar
+through. A plate change is an instruction for the set in front of you, and it
+belongs only where sets are performed one at a time.
 
 ### When the plan has gone stale
 
@@ -316,12 +321,15 @@ both:
 
 - the athlete **edits this set's** weight, so the target is not the one planned
   for;
-- the athlete went heavier on an **earlier set of the same exercise**, so the
-  bar is not where the server thinks it is — and every subsequent plan in that
-  exercise is stale, not just the next one.
+- the athlete went heavier or lighter on an **earlier set of the same
+  exercise**, so the bar is not where the server thinks it is — and every
+  subsequent plan in that exercise is stale, not just the next one;
+- an earlier set of the same exercise was **skipped**, so the bar was never
+  loaded to that weight at all and the chain has a hole in it.
 
-So the plate change renders only when this set's weight is unedited **and** the
-previous set of the same exercise was answered at its prescribed weight.
+So the plate change renders only when this set's weight is unedited **and** no
+earlier set of the same exercise was skipped or answered at a weight other than
+its own prescription.
 Otherwise the block falls back to the absolute breakdown already on the screen
 today — *bar + 25, 15 per side* — dimmed, labelled *for the prescribed 100 kg*.
 
