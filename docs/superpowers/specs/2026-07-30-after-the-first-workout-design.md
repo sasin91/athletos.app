@@ -261,10 +261,18 @@ should.
 `remove` is `previous[k..]` **reversed**, because that is the order a human
 takes them off.
 
-The big drop is reported honestly. 147.5 → 87.5 (the 5/3/1 top single into
-Boring But Big) plans as *take off 1.25, 2.5, 15, 20 · add 5, 2.5, 1.25*. That
-drop genuinely is work, and a planner that pretended otherwise would be lying
-about the bar.
+The big drop is reported honestly. From a bar loaded to `25, 20, 15, 2.5, 1.25`
+a side, dropping to 87.5 kg plans as *take off 1.25, 2.5, 15, 20 · add 5, 2.5,
+1.25*. That drop genuinely is work, and a planner that pretended otherwise
+would be lying about the bar.
+
+> Corrected while implementing. This example first read "147.5 → 87.5 (the
+> 5/3/1 top single into Boring But Big)", which is not a pair 5/3/1 can
+> produce: 87.5 is 59% of 147.5, and the program's own ratio is 50% of the
+> training max against 85% of it. The plates are right — they are what the
+> engine's test asserts — and the label on them was invented. See D-04 for the
+> real chained squat day, which is a worse drop than this one and took a
+> re-implementation of the algorithm to get right.
 
 ### Tests
 
@@ -303,6 +311,12 @@ retyped. `plates_per_side` stays exactly as it is, canonical and greedy, so
 the previous stack is not on the bar you are walking to — possibly not even the
 same bar. Within an exercise it is, which is where the 5/3/1 drop lives and
 where the complaint came from.
+
+> Sharpened while implementing. "Exercise" here is not "block". 5/3/1 emits its
+> main lift and its Boring But Big backoff as two `Block`s sharing one exercise
+> key, so resetting per block clears the bar precisely at the drop this feature
+> exists to explain — which is what the first implementation did, and what its
+> own test caught.
 
 The logger draws `plate_change.plates_per_side` when it is present, so the
 diagram and the instructions above it agree. Non-barbell loading has no plates
