@@ -184,10 +184,13 @@ Add to the `mod tests` block at the bottom of `backend/crates/training/src/loadi
     /// targets with a fistful of the smallest plate — a bar at `25, 1.25`
     /// reaching 40 a side by adding eleven 1.25s.
     ///
-    /// Deliberately loose. This is a consequence of cost leading rather than a
-    /// structural property, and the assertion exists to catch the
-    /// degeneration, not to pin the exact answer: 85 → 100 legitimately adds
-    /// three of one plate.
+    /// Deliberately loose, and five is where the sweep says it has to sit.
+    /// This is a consequence of cost leading rather than a structural
+    /// property, so the bound is a tripwire and not a claim about the answer.
+    /// Two legitimate cases set it: 85 → 100 adds three of one plate, and a
+    /// bar holding a single 15 reaching 90 a side adds five more — tied at
+    /// five plates handled against stripping it for `25, 25, 25, 15`, and the
+    /// tie-break takes the one that removes nothing, exactly as asked.
     #[test]
     fn no_plan_asks_for_a_fistful_of_one_plate() {
         for from in loadable_per_side() {
@@ -198,7 +201,7 @@ Add to the `mod tests` block at the bottom of `backend/crates/training/src/loadi
                 for plate in PLATES {
                     let count = change.add.iter().filter(|added| **added == plate).count();
                     assert!(
-                        count <= 4,
+                        count <= 5,
                         "{from} -> {to} asks for {count} plates of {plate}: {:?}",
                         change.add
                     );
