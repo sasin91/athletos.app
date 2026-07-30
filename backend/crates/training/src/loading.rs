@@ -108,29 +108,20 @@ impl Loading {
     }
 }
 
-/// The plates for one side, greedy largest-first.
+/// The greedy walk shared by [`break_down`] and [`fill`]: plates placed
+/// largest-first and capped at `ceiling`, plus whatever was left over.
 ///
 /// Greedy is exact here rather than merely good: every plate divides every
-/// larger plate's contribution, so there is no weight the greedy walk can
-/// overshoot and no case where a smaller plate first would use fewer. It is
-/// also the order a human loads a bar, which matters more than optimality —
-/// the list is read off in sequence at the rack.
-fn break_down(per_side: f64) -> Vec<f64> {
-    fill(per_side, f64::INFINITY).unwrap_or_default()
-}
-
-/// The same greedy walk, capped at `ceiling`.
+/// larger plate's contribution, so there is no weight the walk can overshoot
+/// and no case where a smaller plate first would use fewer. It is also the
+/// order a human loads a bar, which matters more than optimality — the list
+/// is read off in sequence at the rack.
 ///
-/// The cap is what makes [`plan`] possible: a bar is a stack, so anything
-/// added on top of retained plates must be no larger than the smallest one
-/// still on there.
-///
-/// `None` when the remainder cannot be built exactly. That cannot happen for a
-/// loadable weight — every plate is a multiple of 1.25 and 1.25 is always
-/// under any ceiling that exists — but [`PLATES`] is a constant someone will
-/// edit one day, and a silently short stack is a lie told to somebody loading
-/// a bar.
-fn fill(remainder: f64, ceiling: f64) -> Option<Vec<f64>> {
+/// Splitting the leftover out, instead of folding it into a `bool` or an
+/// `Option` here, is what lets [`break_down`] and [`fill`] disagree honestly
+/// about what a nonzero remainder means: one candidate's rejection is the
+/// other's best-effort answer.
+fn walk(remainder: f64, ceiling: f64) -> (Vec<f64>, f64) {
     let mut left = remainder;
     let mut plates = Vec::new();
 
@@ -145,6 +136,34 @@ fn fill(remainder: f64, ceiling: f64) -> Option<Vec<f64>> {
         }
     }
 
+    (plates, left)
+}
+
+/// The plates for one side, greedy largest-first, best effort.
+///
+/// Best effort: for a weight that cannot be built exactly — not a multiple of
+/// 1.25 kg, or negative — this returns the closest the greedy walk gets
+/// without ever overshooting, not an error. [`Loading::round_down`] never
+/// produces such a weight, so this only matters for a caller that skips
+/// rounding, which today is only [`plan`]'s own fallback for a target it
+/// cannot plan exactly.
+fn break_down(per_side: f64) -> Vec<f64> {
+    walk(per_side, f64::INFINITY).0
+}
+
+/// The same greedy walk, capped at `ceiling`.
+///
+/// The cap is what makes [`plan`] possible: a bar is a stack, so anything
+/// added on top of retained plates must be no larger than the smallest one
+/// still on there.
+///
+/// `None` when the remainder cannot be built exactly. That cannot happen for a
+/// loadable weight — every plate is a multiple of 1.25 and 1.25 is always
+/// under any ceiling that exists — but [`PLATES`] is a constant someone will
+/// edit one day, and a silently short stack is a lie told to somebody loading
+/// a bar.
+fn fill(remainder: f64, ceiling: f64) -> Option<Vec<f64>> {
+    let (plates, left) = walk(remainder, ceiling);
     (left.abs() < TOLERANCE).then_some(plates)
 }
 
@@ -156,8 +175,11 @@ pub struct PlateChange {
     pub remove: Vec<f64>,
     /// Largest first — the order they go on.
     pub add: Vec<f64>,
-    /// What this leaves on the bar, largest first. Sums to the target, and is
-    /// deliberately not always the greedy breakdown.
+    /// What this leaves on the bar, largest first. Sums to the target for any
+    /// loadable weight, and is deliberately not always the greedy breakdown
+    /// for one. For a target that cannot be built exactly it is
+    /// [`break_down`]'s best-effort walk instead, which may fall short — see
+    /// [`plan`]'s fallback.
     pub plates_per_side: Vec<f64>,
 }
 
@@ -220,10 +242,17 @@ pub fn plan(previous: &[f64], target_per_side: f64) -> PlateChange {
         }
     }
 
-    // Stripping the bar and starting again always plans, for any target that
-    // is loadable at all. The fallback is for a target that is not — it
-    // degrades to the breakdown the display showed before this existed rather
-    // than panicking on a number somebody's future program produced.
+    // Stripping the bar and starting again always plans exactly, for any
+    // target that is loadable. The fallback is for a target that is not —
+    // not a multiple of 1.25, or negative — which every candidate above
+    // rejects, `keep = 0` included: it walks the exact same remainder
+    // `break_down` would. So the fallback calls `break_down` for what it
+    // actually is: the best-effort greedy walk, which may fall short of
+    // `target_per_side` rather than reproducing that same rejection.
+    // `Loading::round_down` never produces a target `plan` cannot build
+    // exactly, so this only fires for a caller upstream of it that skipped
+    // rounding — an honest short stack beats panicking on a number somebody's
+    // future program produced.
     let (_, removed, add) = best.unwrap_or_else(|| {
         let add = break_down(target_per_side);
         (previous.len() + add.len(), previous.len(), add)
@@ -560,5 +589,25 @@ mod tests {
             holds(&on_bar, target, &change);
             on_bar = change.plates_per_side;
         }
+    }
+
+    /// No caller reaches `plan` with a target that is not a multiple of
+    /// 1.25 today — `Loading::round_down` sees to that — but `plan` is public
+    /// and takes a bare `f64`, so the degenerate case has to degrade honestly
+    /// rather than lie about what it built. It strips to the same best-effort
+    /// walk the display used before `plan` existed, which can fall short of
+    /// the target rather than reproduce the exact-match rejection every
+    /// candidate gave it.
+    #[test]
+    fn an_unloadable_target_degrades_to_the_best_effort_breakdown() {
+        let change = plan(&[25.0, 15.0], 10.3);
+
+        assert_eq!(change.remove, vec![15.0, 25.0]);
+        assert_eq!(change.add, break_down(10.3));
+        assert_eq!(change.plates_per_side, break_down(10.3));
+
+        // The honest part: it does not sum to the target it was asked for.
+        let sum: f64 = change.plates_per_side.iter().sum();
+        assert!((sum - 10.3).abs() > TOLERANCE, "{sum} should not be 10.3");
     }
 }
