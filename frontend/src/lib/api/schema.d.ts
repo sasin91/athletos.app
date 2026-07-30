@@ -675,6 +675,11 @@ export interface components {
              *     Null for anything logged before timing existed.
              */
             logged_at?: string | null;
+            /**
+             * @description What the athlete wrote about this set. Null for every set logged
+             *     before notes existed, and for every set they had nothing to say about.
+             */
+            note?: string | null;
             /** Format: int32 */
             position: number;
             /** Format: int32 */
@@ -1176,6 +1181,19 @@ export interface components {
              *     intervals it cannot believe instead.
              */
             logged_at?: string | null;
+            /**
+             * @description What the athlete wrote about this set, if anything (D-07).
+             *
+             *     Optional and additively so (D-12). Blank and whitespace-only strings
+             *     normalise to `None` rather than being refused — a note that was typed
+             *     and then cleared is not an error, and the athlete is holding a phone
+             *     with chalk on their hands.
+             *
+             *     Over 500 characters is a 422 naming the position. Truncating would
+             *     store something other than what was written, which is worse than
+             *     refusing it.
+             */
+            note?: string | null;
             /**
              * Format: int32
              * @description From `prescribed_sets[].position` in the session payload. Unique within

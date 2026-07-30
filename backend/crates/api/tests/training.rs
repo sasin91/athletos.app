@@ -2204,3 +2204,63 @@ async fn a_session_submitted_without_stamps_has_no_timing_rather_than_an_empty_o
     );
     assert!(detail["sets"][0]["logged_at"].is_null());
 }
+
+// --- a note on a set --------------------------------------------------------
+
+/// A note rides along with its set and comes back on the history detail.
+#[sqlx::test]
+async fn a_set_carries_an_optional_note(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let id = Uuid::now_v7();
+    let mut body = logged_as_prescribed(id, enrollment, &session);
+    body["sets"][0]["note"] = json!("left shoulder felt off");
+    // Blank is not a note. It normalises to null rather than being refused —
+    // a note typed and then cleared is not an error.
+    body["sets"][1]["note"] = json!("   ");
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let detail = server
+        .get(&format!("/v1/workouts/{id}"))
+        .authorization_bearer(&token)
+        .await
+        .json::<serde_json::Value>();
+
+    assert_eq!(detail["sets"][0]["note"], json!("left shoulder felt off"));
+    assert_eq!(detail["sets"][1]["note"], json!(null));
+    assert_eq!(detail["sets"][2]["note"], json!(null));
+}
+
+/// Over the cap is a 422 naming the position, like every other set-level
+/// complaint on this endpoint. Not a truncation: silently storing something
+/// other than what was written is worse than refusing it.
+#[sqlx::test]
+async fn a_note_over_the_cap_is_refused(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["sets"][0]["note"] = json!("x".repeat(501));
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
