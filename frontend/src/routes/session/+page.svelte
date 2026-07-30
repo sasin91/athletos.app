@@ -7,6 +7,7 @@
 	import {
 		CUT_REASONS,
 		editSet,
+		intervalBefore,
 		isComplete,
 		logSet,
 		nextSetPosition,
@@ -277,11 +278,28 @@
 										Skip
 									</button>
 								{:else}
-									<span class="grow self-center text-sm">
-										{set.status === 'done'
-											? `Logged ${set.actualWeight} kg × ${set.actualReps}`
-											: 'Skipped'}
-									</span>
+									{@const interval = intervalBefore(session, set.position)}
+									<div class="flex grow items-baseline gap-2 self-center">
+										<span class="text-sm">
+											{set.status === 'done'
+												? `Logged ${set.actualWeight} kg × ${set.actualReps}`
+												: 'Skipped'}
+										</span>
+										<!--
+											When, and how long the gap before it was. Both describe work
+											already done and both stop changing the moment they appear —
+											which is the line between this and a rest timer. Nothing on
+											this screen counts up toward the set being rested for (D-10).
+										-->
+										{#if set.loggedAt}
+											<span class="ml-auto text-xs tabular opacity-50">
+												{formatClock(new Date(set.loggedAt))}
+												{#if interval !== null}
+													· +{formatElapsed(interval * 1000)}
+												{/if}
+											</span>
+										{/if}
+									</div>
 									<button
 										class="btn btn-ghost"
 										type="button"

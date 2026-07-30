@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	commitSession,
 	editSet,
+	intervalBefore,
 	isComplete,
 	logSet,
 	nextSetPosition,
@@ -12,7 +13,7 @@ import {
 	skipSet,
 	toSubmission
 } from './session';
-import type { NextSession } from './session';
+import type { CommitOptions, LocalSession, NextSession } from './session';
 
 /** Two squat sets and one bodyweight set, as the API would send them. */
 const peeked: NextSession = {
@@ -80,6 +81,11 @@ const options = {
 	startedAt: '2026-07-26T08:00:00.000Z',
 	secondsPerSet: 90
 };
+
+/** The committed session other tests build inline, factored out for overrides. */
+function fixture(overrides: Partial<CommitOptions> = {}): LocalSession {
+	return commitSession(peeked, { ...options, ...overrides });
+}
 
 describe('commitSession', () => {
 	it('materialises every prescribed set as pending', () => {
@@ -267,5 +273,37 @@ describe('toSubmission', () => {
 		const body = toSubmission(commitSession(peeked, options), { ...ending, notes: '' });
 
 		expect(body.notes).toBeNull();
+	});
+});
+
+describe('intervalBefore', () => {
+	it('measures the first set from the commit, which is the lead-in', () => {
+		let session = fixture({ startedAt: '2026-07-30T10:00:00.000Z' });
+		session = logSet(session, 0, '2026-07-30T10:06:20.000Z');
+
+		expect(intervalBefore(session, 0)).toBe(380);
+	});
+
+	it('measures a later set from the previous one that was answered', () => {
+		let session = fixture({ startedAt: '2026-07-30T10:00:00.000Z' });
+		session = logSet(session, 0, '2026-07-30T10:06:00.000Z');
+		session = skipSet(session, 1, '2026-07-30T10:07:00.000Z');
+		session = logSet(session, 2, '2026-07-30T10:10:00.000Z');
+
+		// From the skip, not from the log before it: a skip is a tap at a moment
+		// in time and the gap that spans it belongs to what came after.
+		expect(intervalBefore(session, 2)).toBe(180);
+	});
+
+	it('is null for a set that has not been answered', () => {
+		const session = fixture({ startedAt: '2026-07-30T10:00:00.000Z' });
+		expect(intervalBefore(session, 0)).toBeNull();
+	});
+
+	it('is null when the gap is one the product does not believe', () => {
+		let session = fixture({ startedAt: '2026-07-30T10:00:00.000Z' });
+		session = logSet(session, 0, '2026-07-30T11:30:00.000Z');
+
+		expect(intervalBefore(session, 0)).toBeNull();
 	});
 });

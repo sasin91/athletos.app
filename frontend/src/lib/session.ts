@@ -14,6 +14,7 @@
  */
 
 import type { components } from './api/schema';
+import { intervalBetween } from './time';
 
 type Schemas = components['schemas'];
 
@@ -249,6 +250,30 @@ export function toSubmission(session: LocalSession, ending: Ending): WorkoutSubm
 			logged_at: set.loggedAt
 		}))
 	};
+}
+
+/**
+ * The interval that ended when this set was answered (D-10).
+ *
+ * Measured from the previous **answered** set — logged or skipped, since both
+ * are a tap at a moment in time — or from the commit for the first one, which
+ * makes that figure the lead-in exactly as `timing.rs` treats it.
+ *
+ * `null` when the set has not been answered, or when the gap is one the
+ * product does not believe. Deliberately blended and deliberately not called
+ * rest: there is one tap per set, so the number contains the pause after the
+ * previous set, the loading, and the performance of this one.
+ */
+export function intervalBefore(session: LocalSession, position: number): number | null {
+	const set = session.sets.find((candidate) => candidate.position === position);
+	if (!set?.loggedAt) return null;
+
+	const previous = session.sets
+		.filter((candidate) => candidate.position < position && candidate.loggedAt !== null)
+		.sort((a, b) => a.position - b.position)
+		.at(-1);
+
+	return intervalBetween(previous?.loggedAt ?? session.startedAt, set.loggedAt);
 }
 
 /** The four answers, in the order they are offered (D-08). */
