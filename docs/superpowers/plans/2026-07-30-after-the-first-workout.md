@@ -605,24 +605,36 @@ fn prescribed_sets_of(session: &Session) -> Vec<PrescribedSet> {
     let mut sets = Vec::new();
     let mut position = 0u16;
 
+    // The bar starts empty for every exercise (D-04), but carries across a
+    // block boundary that names the same exercise — 5/3/1 BBB prescribes its
+    // main lift and its backoff sets as two separate `Block`s sharing one
+    // `exercise` key, and the second is still the bar the first one left.
+    // That boundary is the 85%-to-50% drop this whole feature exists for, so
+    // resetting per block would clear the bar at precisely the moment the
+    // athlete needs telling what comes off.
+    let mut on_bar: Vec<f64> = Vec::new();
+    let mut current_exercise: Option<&str> = None;
+
     for block in &session.blocks {
         let known = exercise::find(&block.exercise);
         let label = known
             .map(|found| found.label.to_owned())
             .unwrap_or_else(|| block.exercise.clone());
+        // An unresolvable key is not a barbell as far as this is concerned:
+        // without the registry there is no loading model, and inventing one
+        // would put plate instructions on a dumbbell.
         let barbell = matches!(known.map(|found| found.loading), Some(Loading::Barbell));
 
-        // The bar starts empty for every exercise (D-04). An unresolvable key
-        // is not a barbell as far as this is concerned: without the registry
-        // there is no loading model, and inventing one would put plate
-        // instructions on a dumbbell.
-        let mut on_bar: Vec<f64> = Vec::new();
+        if current_exercise != Some(block.exercise.as_str()) {
+            on_bar.clear();
+            current_exercise = Some(block.exercise.as_str());
+        }
 
         for lift in &block.lifts {
             for _ in 0..lift.sets {
                 let plate_change = barbell.then(|| {
                     let target = (lift.load.weight - BAR_WEIGHT) / 2.0;
-                    let change = training::plan(&on_bar, target.max(0.0));
+                    let change = plan(&on_bar, target.max(0.0));
                     on_bar = change.plates_per_side.clone();
                     PlateChangeView::from(change)
                 });
@@ -646,7 +658,7 @@ fn prescribed_sets_of(session: &Session) -> Vec<PrescribedSet> {
 }
 ```
 
-Import what this needs at the top of the file: `athletos_training::{self as training, Loading, BAR_WEIGHT}` — match the file's existing import style for the training crate rather than introducing a second alias for it.
+Import what this needs at the top of the file — `plan`, `Loading` and `BAR_WEIGHT` from the training crate — matching the file's existing import style rather than introducing an alias for a crate it already imports from directly.
 
 - [ ] **Step 6: Run the test to verify it passes**
 
