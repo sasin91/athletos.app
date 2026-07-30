@@ -313,14 +313,17 @@
 								filled in.
 							-->
 							{#if noting === set.position}
-								<textarea
-									class="textarea-bordered textarea w-full"
-									rows="2"
-									maxlength="500"
-									placeholder="What happened on this set?"
-									value={set.note ?? ''}
-									oninput={(event) =>
-										apply((s) => noteSet(s, set.position, event.currentTarget.value))}></textarea>
+								<label class="flex w-full flex-col">
+									<span class="sr-only">Note for this set</span>
+									<textarea
+										class="textarea-bordered textarea w-full"
+										rows="2"
+										maxlength="500"
+										placeholder="What happened on this set?"
+										value={set.note ?? ''}
+										oninput={(event) =>
+											apply((s) => noteSet(s, set.position, event.currentTarget.value))}></textarea>
+								</label>
 								<button
 									class="btn self-start btn-ghost btn-sm"
 									type="button"
