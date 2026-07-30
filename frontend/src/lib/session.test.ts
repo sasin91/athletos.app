@@ -13,6 +13,7 @@ import {
 	setsDone,
 	setsRemaining,
 	skipSet,
+	summarise,
 	toSubmission
 } from './session';
 import type { CommitOptions, LocalSession, NextSession } from './session';
@@ -410,5 +411,26 @@ describe('noteSet', () => {
 
 		expect(body.sets[0].note).toBe('left shoulder felt off');
 		expect(body.sets[1].note).toBeNull();
+	});
+});
+
+describe('summarise', () => {
+	it('counts the session as it was left', () => {
+		let session = fixture({ startedAt: '2026-07-30T10:00:00.000Z' });
+		session = logSet(session, 0, '2026-07-30T10:06:00.000Z');
+		session = logSet(session, 1, '2026-07-30T10:10:00.000Z');
+		session = skipSet(session, 2, '2026-07-30T10:12:00.000Z');
+
+		const summary = summarise(session, {
+			endedAt: '2026-07-30T10:52:00.000Z',
+			cutReason: 'out_of_time'
+		});
+
+		expect(summary.durationSeconds).toBe(3120);
+		expect(summary.done).toBe(2);
+		expect(summary.skipped).toBe(1);
+		expect(summary.pending).toBe(session.sets.length - 3);
+		expect(summary.total).toBe(session.sets.length);
+		expect(summary.cutReason).toBe('out_of_time');
 	});
 });

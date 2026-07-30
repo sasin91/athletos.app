@@ -355,6 +355,43 @@ export function plateChangeFor(session: LocalSession, position: number): PlateCh
 	return disturbed ? null : set.plateChange;
 }
 
+/**
+ * What the finish screen says, counted from the session that was just sent.
+ *
+ * Counting only. There is deliberately **no drift total and no timing
+ * breakdown** here: the history page already marks drift per row and does not
+ * total it, on the grounds that a total computed in a client is one the next
+ * client has to compute again (D-07, D-11) — and D-13 puts drift beside the
+ * e1RM trend on purpose, because progress is never shown without its cost. A
+ * drift number invented here would be the first place in the product it
+ * appears alone. The timing aggregation belongs to `timing.rs` for the same
+ * reason, and both are one tap away.
+ */
+export type SessionSummary = {
+	durationSeconds: number;
+	done: number;
+	skipped: number;
+	pending: number;
+	total: number;
+	cutReason: CutReason | null;
+};
+
+export function summarise(session: LocalSession, ending: Ending): SessionSummary {
+	const count = (status: SetStatus) => session.sets.filter((set) => set.status === status).length;
+
+	return {
+		durationSeconds: Math.max(
+			0,
+			Math.round((Date.parse(ending.endedAt) - Date.parse(session.startedAt)) / 1000)
+		),
+		done: count('done'),
+		skipped: count('skipped'),
+		pending: count('pending'),
+		total: session.sets.length,
+		cutReason: ending.cutReason
+	};
+}
+
 /** The four answers, in the order they are offered (D-08). */
 export const CUT_REASONS: { value: CutReason; label: string }[] = [
 	{ value: 'out_of_time', label: 'Ran out of time' },

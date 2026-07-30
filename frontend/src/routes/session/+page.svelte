@@ -17,9 +17,10 @@
 		setsDone,
 		setsRemaining,
 		skipSet,
+		summarise,
 		toSubmission
 	} from '$lib/session';
-	import type { CutReason, LocalSession } from '$lib/session';
+	import type { CutReason, LocalSession, SessionSummary } from '$lib/session';
 	import { clearActiveSession, loadActiveSession, saveActiveSession } from '$lib/storage';
 	import { submitSession } from '$lib/submit';
 
@@ -74,10 +75,21 @@
 
 	const current = $derived(session ? nextSetPosition(session) : null);
 
+	// Kept across the submit so the finish screen has something to show. The
+	// session itself is cleared before the send is even attempted — it belongs
+	// to the queue from that moment, and leaving it here would offer a "resume"
+	// button for a workout already on its way.
+	let summary = $state<SessionSummary | null>(null);
+	let recordId = $state<string | null>(null);
+
 	async function finishSession(cutReason: CutReason | null) {
 		if (!session) return;
 
-		const body = toSubmission(session, { endedAt: new Date().toISOString(), cutReason });
+		const ending = { endedAt: new Date().toISOString(), cutReason };
+		const body = toSubmission(session, ending);
+
+		summary = summarise(session, ending);
+		recordId = session.id;
 
 		// Cleared before the send is even attempted: the session is now the
 		// queue's problem, and leaving it here would offer the athlete a
@@ -115,29 +127,54 @@
 			<p>Nothing is in progress on this device.</p>
 			<a class="btn w-full btn-primary" href={resolve('/')}>Back to training</a>
 		</main>
-	{:else if phase === 'sent'}
-		<main class="space-y-3 p-4">
-			<h1 class="text-xl font-bold">Logged</h1>
-			<p>The session is recorded and the program has moved on.</p>
-			<a class="btn w-full btn-primary" href={resolve('/')}>Back to training</a>
-		</main>
-	{:else if phase === 'queued'}
-		<main class="space-y-3 p-4">
-			<h1 class="text-xl font-bold">Saved on this device</h1>
-			<p>
-				The session could not be sent yet. It is queued and will be sent the next time the app opens
-				with a connection — sending it twice is harmless.
-			</p>
-			<a class="btn w-full btn-primary" href={resolve('/')}>Back to training</a>
-		</main>
-	{:else if phase === 'refused'}
-		<main class="space-y-3 p-4">
-			<h1 class="text-xl font-bold">The server would not take it</h1>
-			<p>
-				The session is still stored on this device and will not be retried on its own. Nothing you
-				did was lost.
-			</p>
-			<a class="btn w-full btn-primary" href={resolve('/')}>Back to training</a>
+	{:else if summary && (phase === 'sent' || phase === 'queued' || phase === 'refused')}
+		<main class="space-y-4 p-4">
+			<h1 class="text-xl font-bold">
+				{summary.cutReason ? 'Session cut short' : 'Session complete'}
+			</h1>
+
+			<div class="flex items-baseline gap-4">
+				<span class="font-mono text-4xl tabular-nums">
+					{formatElapsed(summary.durationSeconds * 1000)}
+				</span>
+				<span class="text-lg">{summary.done}/{summary.total} sets</span>
+			</div>
+
+			{#if summary.skipped > 0 || summary.pending > 0}
+				<p class="text-sm opacity-70">
+					{#if summary.skipped > 0}{summary.skipped} skipped{/if}
+					{#if summary.skipped > 0 && summary.pending > 0}
+						·
+					{/if}
+					{#if summary.pending > 0}{summary.pending} not reached{/if}
+				</p>
+			{/if}
+
+			<!--
+				Whether the permanent record exists yet. The full picture — drift
+				against the prescription, and where the hour went — is computed in
+				Rust and lives on the history page, so this says plainly whether that
+				page has anything to show rather than linking into a 404 (D-11).
+			-->
+			{#if phase === 'sent'}
+				<p class="text-sm opacity-70">Recorded. The program has moved on.</p>
+				<a class="btn w-full" href={resolve(`/history/${recordId}`)}> See where the hour went </a>
+			{:else if phase === 'queued'}
+				<p class="text-sm opacity-70">
+					Saved on this device and not sent yet. It goes up the next time the app opens with a
+					connection, and sending it twice is harmless.
+				</p>
+				<button class="btn w-full" type="button" disabled>
+					The full breakdown needs a connection
+				</button>
+			{:else}
+				<p class="alert text-sm alert-error" role="alert">
+					The server would not take it. The session is still stored on this device and will not be
+					retried on its own — nothing you did was lost.
+				</p>
+			{/if}
+
+			<a class="btn w-full btn-lg btn-primary" href={resolve('/')}>Back to training</a>
 		</main>
 	{:else if session}
 		<!--
