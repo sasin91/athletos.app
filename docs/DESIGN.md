@@ -387,11 +387,20 @@ front of the rack.
 > ever asks the athlete to strip the bar, which is where the drift was coming
 > from. The 25 never moves all day.
 >
-> The same honesty where the chain has not distorted the bar: a large drop is
-> still large. 147.5 → 87.5 from a bar loaded to the canonical
-> `25, 20, 15, 2.5, 1.25` plans as *take off 1.25, 2.5, 15, 20 · add 5, 2.5,
-> 1.25*. Nothing here exists to make a change look smaller than it is; it exists
-> so that a change which is not large stops being displayed as one.
+> The same honesty holds away from a chained day, too: a large drop is still
+> large. From a bar loaded to `25, 20, 15, 2.5, 1.25` a side — not the greedy
+> breakdown of 63.75, just an arrangement the bar happens to be in — 147.5 →
+> 87.5 plans as *take off 1.25, 2.5, 15, 20 · add 5, 2.5, 1.25*. Nothing here
+> exists to make a change look smaller than it is; it exists so that a change
+> which is not large stops being displayed as one.
+>
+> Corrected while implementing: this passage called that starting arrangement
+> "canonical", which greedy largest-first does not produce for 63.75 a side —
+> that walk gives `25, 25, 10, 2.5, 1.25`. The arithmetic and the plates were
+> always right, since they are exactly what the engine's own
+> `the_big_drop_is_reported_honestly` test asserts; only the word "canonical"
+> overclaimed how the bar got there. A worked example that overclaims is the
+> same failure this section was already amended once to remove.
 >
 > **A plan is not shown once the bar has been disturbed.** It is computed from
 > the prescription and therefore assumes the previous set was loaded as

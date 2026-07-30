@@ -490,8 +490,16 @@ mod tests {
         assert_eq!(change.plates_per_side, vec![25.0, 15.0]);
     }
 
-    /// The 5/3/1 top single into Boring But Big. This drop genuinely is four
-    /// plates off, and a planner that pretended otherwise would be lying.
+    /// A large drop from an arbitrary starting arrangement. This drop
+    /// genuinely is four plates off, and a planner that pretended otherwise
+    /// would be lying.
+    ///
+    /// Not a pair 5/3/1 itself produces — an earlier caption here called it
+    /// "the 5/3/1 top single into Boring But Big", but 87.5 is 59% of 147.5,
+    /// where the program's own ratio is 50% of the training max against 85%
+    /// of it. The assertions were always correct; only that label was
+    /// invented. See D-04 for the real chained squat day this feature was
+    /// built for.
     #[test]
     fn the_big_drop_is_reported_honestly() {
         // 147.5 kg -> 63.75 a side; 87.5 kg -> 33.75 a side.
