@@ -11,6 +11,7 @@
 		isComplete,
 		logSet,
 		nextSetPosition,
+		plateChangeFor,
 		resetSet,
 		setsDone,
 		setsRemaining,
@@ -183,8 +184,49 @@
 									</span>
 								</div>
 
+								{@const change = plateChangeFor(session, set.position)}
 								<div class="mt-1 mb-1">
-									<Plates plates={set.platesPerSide} />
+									{#if change}
+										<!--
+											What to do to the bar, not what the bar should end up
+											as. The greedy breakdown of two adjacent weights can
+											share almost nothing, so read as instructions it says
+											strip two plates to add one — and the temptation is to
+											put a convenient pair on instead and lift more than was
+											asked for (D-04).
+										-->
+										{#if change.remove.length > 0}
+											<p class="text-sm">
+												<span class="eyebrow">take off</span>
+												<span class="tabular">{change.remove.join(', ')}</span>
+											</p>
+										{/if}
+										{#if change.add.length > 0}
+											<p class="text-sm">
+												<span class="eyebrow">add</span>
+												<span class="tabular">{change.add.join(', ')}</span>
+											</p>
+										{/if}
+										{#if change.remove.length === 0 && change.add.length === 0 && change.plates_per_side.length > 0}
+											<!-- Same weight as the last set. Saying nothing here
+											     would read as a screen that failed to load. -->
+											<p class="eyebrow">bar is already loaded</p>
+										{/if}
+
+										<Plates plates={change.plates_per_side} />
+									{:else}
+										<!--
+											The plan assumed a bar that is not the one in front of
+											them, so it is not shown as an instruction. The
+											breakdown of the prescribed weight still is, dimmed and
+											labelled, because it is true about the prescription even
+											when it is not true about the bar.
+										-->
+										<div class="opacity-60">
+											<Plates plates={set.platesPerSide} />
+											<p class="text-xs">for the prescribed {set.prescribedWeight} kg</p>
+										</div>
+									{/if}
 								</div>
 
 								<!--

@@ -22,6 +22,7 @@ export type NextSession = Schemas['NextSession'];
 export type CutReason = Schemas['CutReason'];
 export type SetStatus = Schemas['SetStatus'];
 export type WorkoutSubmission = Schemas['WorkoutSubmission'];
+export type PlateChange = Schemas['PlateChangeView'];
 
 /**
  * One set, prescribed and actual side by side (D-07).
@@ -41,6 +42,15 @@ export type LocalSet = {
 	amrap: boolean;
 	/** Plates for one side of the bar, from the server. Empty if not a barbell. */
 	platesPerSide: number[];
+	/**
+	 * What comes off the bar and what goes on to reach this set, planned by the
+	 * server against the previous set of the same exercise (D-04).
+	 *
+	 * `null` for anything not loaded with plates. Cached at commit like
+	 * everything else here: the logger runs with no network and cannot ask for
+	 * a plan later.
+	 */
+	plateChange: PlateChange | null;
 	actualWeight: number;
 	actualReps: number;
 	status: SetStatus;
@@ -113,6 +123,7 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
 			prescribedReps: set.prescribed_reps,
 			amrap: set.amrap,
 			platesPerSide: set.plates_per_side,
+			plateChange: set.plate_change ?? null,
 			actualWeight: set.prescribed_weight,
 			actualReps: set.prescribed_reps,
 			status: 'pending',
@@ -274,6 +285,46 @@ export function intervalBefore(session: LocalSession, position: number): number 
 		.at(-1);
 
 	return intervalBetween(previous?.loggedAt ?? session.startedAt, set.loggedAt);
+}
+
+/**
+ * The plate change to show for a set, or `null` when the plan has gone stale.
+ *
+ * A plan is computed from the prescription and therefore assumes the bar was
+ * loaded as written. Three ways that stops being true, and this is all of
+ * them:
+ *
+ *  * the athlete has **edited this set's** weight, so the plan is for a number
+ *    they are not loading;
+ *  * an **earlier set of the same exercise** was logged at a different weight,
+ *    so the bar is not where the server assumed — and every plan after it in
+ *    that exercise is stale, not only the next one;
+ *  * an earlier set of the same exercise was **skipped**, so the bar was never
+ *    loaded to that weight at all.
+ *
+ * A different exercise cannot stale this one: the plan resets to an empty bar
+ * between exercises, server-side.
+ *
+ * All of it is equality between two numbers this module already holds. Nothing
+ * here recomputes a plan — the client has no plate arithmetic and is not
+ * getting any (D-11). Instructions for a bar that is not in front of you are
+ * worse than no instructions.
+ */
+export function plateChangeFor(session: LocalSession, position: number): PlateChange | null {
+	const set = session.sets.find((candidate) => candidate.position === position);
+	if (!set?.plateChange) return null;
+
+	if (set.actualWeight !== set.prescribedWeight) return null;
+
+	const disturbed = session.sets.some(
+		(candidate) =>
+			candidate.exercise === set.exercise &&
+			candidate.position < position &&
+			(candidate.status === 'skipped' ||
+				(candidate.status === 'done' && candidate.actualWeight !== candidate.prescribedWeight))
+	);
+
+	return disturbed ? null : set.plateChange;
 }
 
 /** The four answers, in the order they are offered (D-08). */

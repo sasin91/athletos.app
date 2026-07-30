@@ -7,6 +7,7 @@ import {
 	isComplete,
 	logSet,
 	nextSetPosition,
+	plateChangeFor,
 	resetSet,
 	setsDone,
 	setsRemaining,
@@ -15,7 +16,13 @@ import {
 } from './session';
 import type { CommitOptions, LocalSession, NextSession } from './session';
 
-/** Two squat sets and one bodyweight set, as the API would send them. */
+/**
+ * Three squat sets and one bodyweight set, as the API would send them.
+ *
+ * Squat spans positions 0-2 and hanging leg raise starts at 3, so the
+ * `plateChangeFor` tests have a same-exercise chain to disturb (0-2) and a
+ * second exercise (3+) that a mess in the first cannot reach.
+ */
 const peeked: NextSession = {
 	enrollment_id: '018f1f2a-0000-7000-8000-000000000001',
 	program_key: 'wendler-531-bbb',
@@ -35,7 +42,7 @@ const peeked: NextSession = {
 			label: 'Squat',
 			cues: ['Bar on upper back', 'Brace core'],
 			is_primary: true,
-			lifts: [{ sets: 2, reps: 5, amrap: false, weight: 97.5, plates_per_side: [25, 10, 3.75] }]
+			lifts: [{ sets: 3, reps: 5, amrap: false, weight: 97.5, plates_per_side: [25, 10, 3.75] }]
 		},
 		{
 			exercise: 'hanging-leg-raise',
@@ -53,7 +60,8 @@ const peeked: NextSession = {
 			prescribed_weight: 97.5,
 			prescribed_reps: 5,
 			amrap: false,
-			plates_per_side: [25, 10, 3.75]
+			plates_per_side: [25, 10, 3.75],
+			plate_change: { remove: [], add: [25, 10, 3.75], plates_per_side: [25, 10, 3.75] }
 		},
 		{
 			position: 1,
@@ -62,16 +70,28 @@ const peeked: NextSession = {
 			prescribed_weight: 97.5,
 			prescribed_reps: 5,
 			amrap: false,
-			plates_per_side: [25, 10, 3.75]
+			plates_per_side: [25, 10, 3.75],
+			plate_change: { remove: [], add: [], plates_per_side: [25, 10, 3.75] }
 		},
 		{
 			position: 2,
+			exercise: 'squat',
+			label: 'Squat',
+			prescribed_weight: 97.5,
+			prescribed_reps: 5,
+			amrap: false,
+			plates_per_side: [25, 10, 3.75],
+			plate_change: { remove: [], add: [], plates_per_side: [25, 10, 3.75] }
+		},
+		{
+			position: 3,
 			exercise: 'hanging-leg-raise',
 			label: 'Hanging leg raise',
 			prescribed_weight: 0,
 			prescribed_reps: 12,
 			amrap: false,
-			plates_per_side: []
+			plates_per_side: [],
+			plate_change: { remove: [], add: [], plates_per_side: [] }
 		}
 	]
 };
@@ -91,9 +111,9 @@ describe('commitSession', () => {
 	it('materialises every prescribed set as pending', () => {
 		const session = commitSession(peeked, options);
 
-		expect(session.sets).toHaveLength(3);
+		expect(session.sets).toHaveLength(4);
 		expect(session.sets.every((set) => set.status === 'pending')).toBe(true);
-		expect(setsRemaining(session)).toBe(3);
+		expect(setsRemaining(session)).toBe(4);
 		expect(setsDone(session)).toBe(0);
 	});
 
@@ -110,7 +130,7 @@ describe('commitSession', () => {
 		const session = commitSession(peeked, options);
 
 		expect(session.sets[0].platesPerSide).toEqual([25, 10, 3.75]);
-		expect(session.sets[2].platesPerSide).toEqual([]);
+		expect(session.sets[3].platesPerSide).toEqual([]);
 	});
 
 	it('stamps started_at and the id it was given, and nothing else', () => {
@@ -140,7 +160,7 @@ describe('logging', () => {
 		expect(session.sets[0].status).toBe('done');
 		expect(session.sets[0].actualWeight).toBe(97.5);
 		expect(session.sets[0].prescribedWeight).toBe(97.5);
-		expect(setsRemaining(session)).toBe(2);
+		expect(setsRemaining(session)).toBe(3);
 	});
 
 	it('lets the athlete go heavier, and keeps both numbers', () => {
@@ -154,7 +174,7 @@ describe('logging', () => {
 	it('does not count a skipped set as remaining', () => {
 		const session = skipSet(commitSession(peeked, options), 2, AT);
 
-		expect(setsRemaining(session)).toBe(2);
+		expect(setsRemaining(session)).toBe(3);
 		expect(setsDone(session)).toBe(0);
 	});
 
@@ -195,7 +215,7 @@ describe('logging', () => {
 		const session = logSet(commitSession(peeked, options), 0, AT);
 
 		expect(nextSetPosition(session)).toBe(1);
-		expect(nextSetPosition(logSet(skipSet(session, 1, AT), 2, AT))).toBeNull();
+		expect(nextSetPosition(logSet(logSet(skipSet(session, 1, AT), 2, AT), 3, AT))).toBeNull();
 	});
 });
 
@@ -206,7 +226,7 @@ describe('toSubmission', () => {
 		let session = commitSession(peeked, options);
 		expect(isComplete(session)).toBe(false);
 
-		session = logSet(logSet(logSet(session, 0, AT), 1, AT), 2, AT);
+		session = logSet(logSet(logSet(logSet(session, 0, AT), 1, AT), 2, AT), 3, AT);
 		expect(isComplete(session)).toBe(true);
 
 		expect(toSubmission(session, ending).outcome).toBe('completed');
@@ -214,7 +234,11 @@ describe('toSubmission', () => {
 	});
 
 	it('a session where everything was skipped is not a completed session', () => {
-		const session = skipSet(skipSet(skipSet(commitSession(peeked, options), 0, AT), 1, AT), 2, AT);
+		const session = skipSet(
+			skipSet(skipSet(skipSet(commitSession(peeked, options), 0, AT), 1, AT), 2, AT),
+			3,
+			AT
+		);
 
 		expect(isComplete(session)).toBe(false);
 	});
@@ -229,10 +253,10 @@ describe('toSubmission', () => {
 
 		expect(body.outcome).toBe('cut_short');
 		expect(body.cut_reason).toBe('out_of_time');
-		expect(body.sets.map((set) => set.status)).toEqual(['done', 'skipped', 'pending']);
+		expect(body.sets.map((set) => set.status)).toEqual(['done', 'skipped', 'pending', 'pending']);
 		// The stamps travel with the sets, including on the skip. The pending
 		// set has none, and null is what the server reads as "not measured".
-		expect(body.sets.map((set) => set.logged_at)).toEqual([AT, AT, null]);
+		expect(body.sets.map((set) => set.logged_at)).toEqual([AT, AT, null, null]);
 	});
 
 	it('sends actual numbers only for the sets that were done', () => {
@@ -255,9 +279,9 @@ describe('toSubmission', () => {
 			cutReason: 'pain'
 		});
 
-		expect(body.sets.map((set) => set.prescribed_weight)).toEqual([97.5, 97.5, 0]);
-		expect(body.sets.map((set) => set.prescribed_reps)).toEqual([5, 5, 12]);
-		expect(body.sets.map((set) => set.position)).toEqual([0, 1, 2]);
+		expect(body.sets.map((set) => set.prescribed_weight)).toEqual([97.5, 97.5, 97.5, 0]);
+		expect(body.sets.map((set) => set.prescribed_reps)).toEqual([5, 5, 5, 12]);
+		expect(body.sets.map((set) => set.position)).toEqual([0, 1, 2, 3]);
 	});
 
 	it('carries the id and the timestamps the phone stamped', () => {
@@ -305,5 +329,53 @@ describe('intervalBefore', () => {
 		session = logSet(session, 0, '2026-07-30T11:30:00.000Z');
 
 		expect(intervalBefore(session, 0)).toBeNull();
+	});
+});
+
+describe('plateChangeFor', () => {
+	it('is the planned change for an untouched set', () => {
+		const session = fixture();
+		expect(plateChangeFor(session, 0)).toEqual(session.sets[0].plateChange);
+	});
+
+	it('is null once this set has been edited, because the plan is for another weight', () => {
+		const session = editSet(fixture(), 0, { weight: 105 });
+		expect(plateChangeFor(session, 0)).toBeNull();
+	});
+
+	// The plan assumes the previous set was loaded as written, so going heavier
+	// on set one invalidates every later plan in that exercise, not just the
+	// next one. Instructions for a bar that is not in front of you are worse
+	// than no instructions.
+	it('is null when an earlier set of the same exercise went heavier', () => {
+		let session = fixture();
+		session = editSet(session, 0, { weight: 105 });
+		session = logSet(session, 0, '2026-07-30T10:06:00.000Z');
+
+		expect(plateChangeFor(session, 1)).toBeNull();
+		expect(plateChangeFor(session, 2)).toBeNull();
+	});
+
+	// A skipped set means the bar was never loaded to that weight, so the chain
+	// is broken in exactly the same way.
+	it('is null when an earlier set of the same exercise was skipped', () => {
+		const session = skipSet(fixture(), 0, '2026-07-30T10:06:00.000Z');
+		expect(plateChangeFor(session, 1)).toBeNull();
+	});
+
+	it('is unaffected by what happened in a different exercise', () => {
+		// The fixture's sets 0-2 are one exercise and 3+ are another; the bar
+		// resets between them, so a mess in the first cannot stale the second.
+		let session = fixture();
+		session = editSet(session, 0, { weight: 105 });
+		session = logSet(session, 0, '2026-07-30T10:06:00.000Z');
+
+		expect(plateChangeFor(session, 3)).toEqual(session.sets[3].plateChange);
+	});
+
+	it('is null for a set with no plan, such as a dumbbell', () => {
+		const session = fixture();
+		session.sets[0].plateChange = null;
+		expect(plateChangeFor(session, 0)).toBeNull();
 	});
 });
