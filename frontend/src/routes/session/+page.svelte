@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Plates from '$lib/Plates.svelte';
+	import ThemeToggle from '$lib/ThemeToggle.svelte';
 	import { formatClock, formatElapsed } from '$lib/time';
 	import { projectedFinish } from '$lib/pace';
 	import {
@@ -142,6 +143,12 @@
 			{#if finish !== null}
 				<span class="ml-auto text-sm opacity-70">~{formatClock(new Date(finish))}</span>
 			{/if}
+			<!--
+				The logger has no nav of its own, and daylight at a rack is exactly
+				when the switch is wanted. It is not a mid-set action, so the top of
+				the screen is fine for it — unlike Log, which stays under a thumb.
+			-->
+			<span class="self-center" class:ml-auto={finish === null}><ThemeToggle /></span>
 		</header>
 
 		<main class="grow p-3">

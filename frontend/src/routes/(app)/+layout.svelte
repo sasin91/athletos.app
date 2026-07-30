@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import NavIcon from '$lib/NavIcon.svelte';
+	import ThemeToggle from '$lib/ThemeToggle.svelte';
 	import { page } from '$app/state';
 	import { flushPending, queueSummary } from '$lib/submit';
 
@@ -49,9 +50,12 @@
 <div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
 	<header class="flex items-center justify-between gap-2 border-b p-3">
 		<a href={resolve('/')} class="text-lg font-bold">AthletOS</a>
-		<form method="POST" action="/logout">
-			<button class="btn btn-ghost btn-sm" type="submit">Sign out</button>
-		</form>
+		<div class="flex items-center gap-1">
+			<ThemeToggle />
+			<form method="POST" action="/logout">
+				<button class="btn btn-ghost btn-sm" type="submit">Sign out</button>
+			</form>
+		</div>
 	</header>
 
 	{#if queued > 0}
