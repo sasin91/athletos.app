@@ -740,6 +740,82 @@ async fn the_session_carries_loadable_weights_and_their_plates(pool: PgPool) {
     assert_eq!(session["progress"]["total"], 12);
 }
 
+/// Plates as loading instructions: chained within an exercise, reset between
+/// them (D-04).
+///
+/// Asserted on the chaining rather than on which plates come out. The
+/// arrangement is the training crate's business and is swept exhaustively
+/// there; what this endpoint owns is *which bar* each set is planned against,
+/// and that is the thing a handler gets wrong.
+#[sqlx::test]
+async fn the_plate_change_chains_within_an_exercise_and_resets_between_them(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let plates = |value: &serde_json::Value| -> Vec<f64> {
+        value
+            .as_array()
+            .expect("a plate list")
+            .iter()
+            .map(|plate| plate.as_f64().expect("a plate is a number"))
+            .collect()
+    };
+
+    let mut previous_exercise = String::new();
+    let mut on_bar: Vec<f64> = Vec::new();
+
+    for set in session["prescribed_sets"]
+        .as_array()
+        .expect("the session carries its prescribed sets")
+    {
+        let change = &set["plate_change"];
+        assert!(
+            !change.is_null(),
+            "set {} is a barbell set and should carry a plan",
+            set["position"]
+        );
+
+        let remove = plates(&change["remove"]);
+        let add = plates(&change["add"]);
+        let resulting = plates(&change["plates_per_side"]);
+
+        let exercise = set["exercise"].as_str().expect("a set names its exercise");
+
+        // The bar starts empty for each exercise, so the first set of one has
+        // nothing to take off.
+        if exercise != previous_exercise {
+            assert!(
+                remove.is_empty(),
+                "set {} opens {exercise} and should plan from an empty bar",
+                set["position"]
+            );
+            on_bar.clear();
+        }
+
+        // The instructions apply to the bar as the previous set left it.
+        let kept = on_bar.len() - remove.len();
+        let mut applied = on_bar[..kept].to_vec();
+        applied.extend(add.iter().copied());
+        assert_eq!(applied, resulting, "set {}", set["position"]);
+
+        // And they build the weight that was prescribed.
+        let prescribed = set["prescribed_weight"].as_f64().expect("a weight");
+        let from_plates = resulting.iter().sum::<f64>() * 2.0 + 20.0;
+        assert!(
+            (from_plates - prescribed).abs() < 1e-9,
+            "set {} builds {from_plates} kg, not {prescribed}",
+            set["position"]
+        );
+
+        previous_exercise = exercise.to_owned();
+        on_bar = resulting;
+    }
+}
+
 // --- the pace projection (D-10) -------------------------------------------
 
 /// Logs the enrolment's current session with a chosen wall clock and a chosen

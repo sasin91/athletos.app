@@ -32,7 +32,10 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use athletos_training::{exercise, programs, Progress, Readout, Session, State as ProgramState};
+use athletos_training::{
+    exercise, plan, programs, Loading, Progress, Readout, Session, State as ProgramState,
+    BAR_WEIGHT,
+};
 
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
@@ -329,6 +332,37 @@ pub struct LiftView {
     pub plates_per_side: Vec<f64>,
 }
 
+/// What comes off the bar and what goes on, to get to this set's weight
+/// (D-04).
+///
+/// Mirrored from [`athletos_training::PlateChange`] because the training crate
+/// depends on `serde`, `serde_json` and `thiserror` and nothing else (D-15),
+/// so it cannot carry a `ToSchema` of its own.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PlateChangeView {
+    /// Per side, outermost first — the order they actually come off.
+    #[schema(example = json!([1.25, 2.5]))]
+    pub remove: Vec<f64>,
+    /// Per side, largest first — the order they go on.
+    #[schema(example = json!([15.0]))]
+    pub add: Vec<f64>,
+    /// What this leaves on the bar, largest first. Sums to
+    /// `prescribed_weight`, and is deliberately not always the greedy
+    /// breakdown that `plates_per_side` carries.
+    #[schema(example = json!([25.0, 15.0]))]
+    pub plates_per_side: Vec<f64>,
+}
+
+impl From<athletos_training::PlateChange> for PlateChangeView {
+    fn from(change: athletos_training::PlateChange) -> Self {
+        Self {
+            remove: change.remove,
+            add: change.add,
+            plates_per_side: change.plates_per_side,
+        }
+    }
+}
+
 /// One prescribed set, ready to be logged.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct PrescribedSet {
@@ -351,6 +385,19 @@ pub struct PrescribedSet {
     /// few duplicated floats are cheaper than either (D-11).
     #[schema(example = json!([25.0, 10.0, 2.5, 1.25]))]
     pub plates_per_side: Vec<f64>,
+    /// The change from the bar as the previous set of this exercise left it
+    /// (D-04).
+    ///
+    /// `None` for anything not loaded with plates. Additive (D-12):
+    /// `plates_per_side` above is untouched and stays the canonical greedy
+    /// breakdown, so `LiftView` and any client already reading it are
+    /// unaffected.
+    ///
+    /// Chained within an exercise and **reset to an empty bar between them** —
+    /// across exercises the previous stack is not on the bar being walked to,
+    /// and possibly not even the same bar.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plate_change: Option<PlateChangeView>,
 }
 
 /// Starts a program for the authenticated athlete.
@@ -639,13 +686,37 @@ fn prescribed_sets_of(session: &Session) -> Vec<PrescribedSet> {
     let mut sets = Vec::new();
     let mut position = 0u16;
 
+    // The bar starts empty for every exercise (D-04), but carries across a
+    // block boundary that names the same exercise — 5/3/1 BBB prescribes its
+    // main lift and its backoff sets as two separate `Block`s sharing one
+    // `exercise` key, and the second is still the bar the first one left.
+    let mut on_bar: Vec<f64> = Vec::new();
+    let mut current_exercise: Option<&str> = None;
+
     for block in &session.blocks {
-        let label = exercise::find(&block.exercise)
+        let known = exercise::find(&block.exercise);
+        let label = known
             .map(|found| found.label.to_owned())
             .unwrap_or_else(|| block.exercise.clone());
+        // An unresolvable key is not a barbell as far as this is concerned:
+        // without the registry there is no loading model, and inventing one
+        // would put plate instructions on a dumbbell.
+        let barbell = matches!(known.map(|found| found.loading), Some(Loading::Barbell));
+
+        if current_exercise != Some(block.exercise.as_str()) {
+            on_bar.clear();
+            current_exercise = Some(block.exercise.as_str());
+        }
 
         for lift in &block.lifts {
             for _ in 0..lift.sets {
+                let plate_change = barbell.then(|| {
+                    let target = (lift.load.weight - BAR_WEIGHT) / 2.0;
+                    let change = plan(&on_bar, target.max(0.0));
+                    on_bar = change.plates_per_side.clone();
+                    PlateChangeView::from(change)
+                });
+
                 sets.push(PrescribedSet {
                     position,
                     exercise: block.exercise.clone(),
@@ -654,6 +725,7 @@ fn prescribed_sets_of(session: &Session) -> Vec<PrescribedSet> {
                     prescribed_reps: lift.reps,
                     amrap: lift.amrap,
                     plates_per_side: lift.load.plates_per_side.clone(),
+                    plate_change,
                 });
                 position = position.saturating_add(1);
             }

@@ -828,6 +828,41 @@ export interface components {
              */
             sample_size: number;
         };
+        /**
+         * @description What comes off the bar and what goes on, to get to this set's weight
+         *     (D-04).
+         *
+         *     Mirrored from [`athletos_training::PlateChange`] because the training crate
+         *     depends on `serde`, `serde_json` and `thiserror` and nothing else (D-15),
+         *     so it cannot carry a `ToSchema` of its own.
+         */
+        PlateChangeView: {
+            /**
+             * @description Per side, largest first — the order they go on.
+             * @example [
+             *       15
+             *     ]
+             */
+            add: number[];
+            /**
+             * @description What this leaves on the bar, largest first. Sums to
+             *     `prescribed_weight`, and is deliberately not always the greedy
+             *     breakdown that `plates_per_side` carries.
+             * @example [
+             *       25,
+             *       15
+             *     ]
+             */
+            plates_per_side: number[];
+            /**
+             * @description Per side, outermost first — the order they actually come off.
+             * @example [
+             *       1.25,
+             *       2.5
+             *     ]
+             */
+            remove: number[];
+        };
         /** @description One prescribed set, ready to be logged. */
         PrescribedSet: {
             amrap: boolean;
@@ -837,6 +872,7 @@ export interface components {
              * @example Squat
              */
             label: string;
+            plate_change?: null | components["schemas"]["PlateChangeView"];
             /**
              * @description The same breakdown [`LiftView::plates_per_side`] carries, repeated here.
              *

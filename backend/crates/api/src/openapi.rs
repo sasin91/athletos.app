@@ -91,6 +91,7 @@ impl Modify for BearerToken {
         crate::routes::enrollments::BlockView,
         crate::routes::enrollments::LiftView,
         crate::routes::enrollments::PrescribedSet,
+        crate::routes::enrollments::PlateChangeView,
         crate::pace::PaceProjection,
         crate::routes::workouts::WorkoutSubmission,
         crate::routes::workouts::WorkoutOutcome,

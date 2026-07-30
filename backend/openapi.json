@@ -1530,6 +1530,52 @@
           }
         }
       },
+      "PlateChangeView": {
+        "type": "object",
+        "description": "What comes off the bar and what goes on, to get to this set's weight\n(D-04).\n\nMirrored from [`athletos_training::PlateChange`] because the training crate\ndepends on `serde`, `serde_json` and `thiserror` and nothing else (D-15),\nso it cannot carry a `ToSchema` of its own.",
+        "required": [
+          "remove",
+          "add",
+          "plates_per_side"
+        ],
+        "properties": {
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "Per side, largest first — the order they go on.",
+            "example": [
+              15.0
+            ]
+          },
+          "plates_per_side": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "What this leaves on the bar, largest first. Sums to\n`prescribed_weight`, and is deliberately not always the greedy\nbreakdown that `plates_per_side` carries.",
+            "example": [
+              25.0,
+              15.0
+            ]
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "Per side, outermost first — the order they actually come off.",
+            "example": [
+              1.25,
+              2.5
+            ]
+          }
+        }
+      },
       "PrescribedSet": {
         "type": "object",
         "description": "One prescribed set, ready to be logged.",
@@ -1553,6 +1599,17 @@
             "type": "string",
             "description": "The exercise's display name, resolved from the compiled registry.",
             "example": "Squat"
+          },
+          "plate_change": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlateChangeView",
+                "description": "The change from the bar as the previous set of this exercise left it\n(D-04).\n\n`None` for anything not loaded with plates. Additive (D-12):\n`plates_per_side` above is untouched and stays the canonical greedy\nbreakdown, so `LiftView` and any client already reading it are\nunaffected.\n\nChained within an exercise and **reset to an empty bar between them** —\nacross exercises the previous stack is not on the bar being walked to,\nand possibly not even the same bar."
+              }
+            ]
           },
           "plates_per_side": {
             "type": "array",
