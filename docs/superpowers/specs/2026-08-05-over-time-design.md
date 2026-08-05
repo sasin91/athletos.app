@@ -390,6 +390,12 @@ the data. A table consulted deliberately is a reference; a congratulation
 arriving while the athlete decides how heavy to go is accelerant. This is the
 first, and it must not drift into the second.
 
+> This is not an inference from the decisions. Asked directly, the athlete this
+> product is built for said: *no celebratory stuff, just the facts and data.*
+> Recorded here because a rule with a person behind it survives a redesign, and
+> one derived from principles gets re-derived the other way by the next reader
+> who wants a badge.
+
 ---
 
 ## 7 · Vocabulary
