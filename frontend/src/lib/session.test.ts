@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+	barUnchangedFrom,
 	commitSession,
 	editSet,
 	intervalBefore,
@@ -10,6 +11,7 @@ import {
 	noteSet,
 	plateChangeFor,
 	resetSet,
+	setDriftReason,
 	setsDone,
 	setsRemaining,
 	skipSet,
@@ -432,5 +434,112 @@ describe('summarise', () => {
 		expect(summary.pending).toBe(session.sets.length - 3);
 		expect(summary.total).toBe(session.sets.length);
 		expect(summary.cutReason).toBe('out_of_time');
+	});
+});
+
+const committed = fixture();
+
+describe('a weight edit carries through the exercise', () => {
+	it('rewrites every later pending set of the same exercise', () => {
+		const edited = editSet(committed, 0, { weight: 100 });
+
+		expect(edited.sets[0].actualWeight).toBe(100);
+		expect(edited.sets[1].actualWeight).toBe(100);
+		expect(edited.sets[2].actualWeight).toBe(100);
+	});
+
+	it('stops at the next exercise, which is a different bar', () => {
+		const edited = editSet(committed, 0, { weight: 100 });
+
+		// Position 3 is the hanging leg raise.
+		expect(edited.sets[3].actualWeight).toBe(committed.sets[3].actualWeight);
+	});
+
+	it('leaves a set that has already been answered alone', () => {
+		const logged = logSet(committed, 1, '2026-08-05T10:05:00Z');
+		const edited = editSet(logged, 0, { weight: 100 });
+
+		expect(edited.sets[1].actualWeight).toBe(97.5);
+		expect(edited.sets[2].actualWeight).toBe(100);
+	});
+
+	it('never touches the prescription, because drift is measured against it', () => {
+		const edited = editSet(committed, 0, { weight: 100 });
+
+		expect(edited.sets.map((set) => set.prescribedWeight)).toEqual(
+			committed.sets.map((set) => set.prescribedWeight)
+		);
+	});
+
+	it('does not carry a rep edit, which is about one set', () => {
+		const edited = editSet(committed, 0, { reps: 3 });
+
+		expect(edited.sets[0].actualReps).toBe(3);
+		expect(edited.sets[1].actualReps).toBe(5);
+	});
+
+	it('re-propagates on a second edit, last edit winning', () => {
+		const once = editSet(committed, 0, { weight: 100 });
+		const tweaked = editSet(once, 2, { weight: 102.5 });
+		const again = editSet(tweaked, 0, { weight: 105 });
+
+		expect(again.sets[2].actualWeight).toBe(105);
+	});
+});
+
+describe('the reason for a drift', () => {
+	it('carries with the weight it is about', () => {
+		const edited = editSet(committed, 0, { weight: 100 });
+		const reasoned = setDriftReason(edited, 0, 'too_easy');
+
+		expect(reasoned.sets[1].driftReason).toBe('too_easy');
+		expect(reasoned.sets[3].driftReason).toBeNull();
+	});
+
+	it('clears when the weight goes back to the prescription', () => {
+		const reasoned = setDriftReason(editSet(committed, 0, { weight: 100 }), 0, 'too_easy');
+		const back = editSet(reasoned, 0, { weight: 97.5 });
+
+		expect(back.sets[0].driftReason).toBeNull();
+		expect(back.sets[1].driftReason).toBeNull();
+	});
+
+	it('clears on undo and on skip', () => {
+		const reasoned = setDriftReason(editSet(committed, 0, { weight: 100 }), 0, 'too_easy');
+
+		expect(resetSet(reasoned, 0).sets[0].driftReason).toBeNull();
+		expect(skipSet(reasoned, 1, '2026-08-05T10:05:00Z').sets[1].driftReason).toBeNull();
+	});
+
+	it('is sent only for a set that was done', () => {
+		const reasoned = setDriftReason(editSet(committed, 0, { weight: 100 }), 0, 'too_easy');
+		const logged = logSet(reasoned, 0, '2026-08-05T10:05:00Z');
+		const body = toSubmission(logged, { endedAt: '2026-08-05T11:00:00Z', cutReason: 'enough' });
+
+		expect(body.sets[0].drift_reason).toBe('too_easy');
+		// Position 1 carries the reason locally but was never reached. Sending
+		// it would arrive with a null actual_weight, the check constraint would
+		// refuse it, and the whole session would be lost over a chip.
+		expect(body.sets[1].drift_reason).toBeNull();
+	});
+});
+
+describe('barUnchangedFrom', () => {
+	it('is true when the previous answered set of the exercise is the same weight', () => {
+		const edited = editSet(committed, 0, { weight: 100 });
+		const logged = logSet(edited, 0, '2026-08-05T10:05:00Z');
+
+		expect(barUnchangedFrom(logged, 1)).toBe(true);
+	});
+
+	it('is false at the first set of an exercise, which has no predecessor', () => {
+		expect(barUnchangedFrom(editSet(committed, 0, { weight: 100 }), 0)).toBe(false);
+	});
+
+	it('is false for an exercise that is not loaded with plates', () => {
+		// Position 3 is the hanging leg raise: no plate change, so "the bar is
+		// already loaded" would be a statement about a bar that is not there.
+		const logged = logSet(committed, 3, '2026-08-05T10:30:00Z');
+		expect(barUnchangedFrom(logged, 3)).toBe(false);
 	});
 });
