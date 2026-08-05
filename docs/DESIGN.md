@@ -539,6 +539,125 @@ permissive logging:
 
 Design rule: **honesty must never cost more than dishonesty.**
 
+> **Amended after a week of training on it. The weight now says why it
+> changed.** This decision stores two numbers for a set the athlete disagreed
+> with and nothing at all about what the disagreement was. Under the weight
+> input, on the current set only, appearing the moment `actual_weight` differs
+> from `prescribed_weight` and vanishing again if it is edited back:
+>
+> > **too easy · too heavy · bar was loaded · felt off**
+>
+> **This is not the thing the paragraphs above forbid**, and the distinction is
+> not a fine one. "Never blocked and never warned about mid-session" is a
+> statement about what happens when the athlete goes heavier, and the chips do
+> neither: nothing is refused, nothing is flagged, no chip disputes the number,
+> and the row does not exist until the weight already differs — it never
+> appears before a decision, only after one. It is not a modal and it does not
+> take the screen. **No tap is a valid answer**, and Log stays exactly one tap
+> whether a chip was tapped or not, which is this decision's own closing rule
+> satisfied rather than bent: saying what happened costs the same as saying
+> nothing. Structurally it is D-08's single cut-short question asked on the
+> other axis of drift, and made cheaper still, because that one is answered
+> before the session can end and this one can be walked past.
+>
+> **Nothing is pre-selected, and a default would have been the version of this
+> worth refusing.** *Too easy* is the first chip, and making the first chip the
+> selected one saves a tap in the common case — which is exactly the trade to
+> turn down here. Every edit an athlete walked past on the way to Log would
+> then land in the database as *too easy*: a claim nobody made, in the one
+> signal this product exists to read, and indistinguishable afterwards from the
+> ones that were meant. A blank is recoverable and a fabricated majority is
+> not. So the row starts empty, a second tap on a lit chip clears it, and an
+> unanswered edit stays unanswered.
+>
+> **Drift gains a third column.** D-08 records two axes, weight and work not
+> done; a stated reason is the third and it is first-class in the same sense
+> they are — a `drift_reason` on `workout_sets`, queryable forever, constrained
+> in the schema so that a set with no deviation cannot carry one. That last
+> part is why "clearing the drift clears the reason" is a fact rather than a
+> client convention. What it buys is the difference between *the program is
+> light for me* and *the bar was already loaded and I was not going to strip
+> it* — two identical rows of drift with opposite meanings, which until now the
+> database could not tell apart, and which pull the governor in opposite
+> directions.
+>
+> **A fifth chip was weighed and left out.** *Couldn't load it* is the only
+> candidate reason the product could act on rather than merely record, and D-04
+> is where the argument for it lives: the plate planner assumes an unlimited
+> supply of every size, a gym owning four 15s cannot always follow it, and that
+> is drift manufactured by the room rather than chosen by the athlete. It is
+> left out to keep the row at four one-handed taps in a gym. Recorded here so
+> that the next person to want it knows it was weighed rather than missed.
+
+> **Amended in the same pass. A weight edit carries to the rest of the
+> exercise.** Every set is pre-filled from its own prescription at commit, so
+> an athlete who decided 95 kg was light and lifted 100 typed `100` again on
+> set two, and set three, and set four. That is the closing rule above failing
+> in the small: the honest answer cost four edits and the dishonest one cost
+> nothing. A weight edit now carries the **difference** to every later
+> **pending** set sharing the same exercise, and stops at the first set of a
+> different exercise — the same boundary D-04 already draws for the plate
+> chain, because a different exercise is a different bar and possibly not even
+> the same bar. Sets already logged or skipped are not touched; rewriting them
+> would falsify the log, which is the one thing this product cannot do and stay
+> useful. A stated reason travels with the weight it explains: tap *too easy*
+> on set one of five and the four sets the difference reaches carry it too,
+> because that is one decision continuing and recording four of the five as
+> unanswered would misreport it.
+>
+> **The difference and not the weight, and the first draft had that wrong.**
+> Copying the weight forward is the obvious reading, and it is correct for a
+> block of straight sets. It breaks on the program this app was built around.
+> 5/3/1 BBB prescribes its main lift and its Boring But Big backoff as two
+> `Block`s sharing one `exercise` key — that is D-04's own worked squat day —
+> so off a 140 kg training max, week one is 90, 105 and 117.5, and then five
+> sets of ten at 70. Take the top set to 120 because it went up easily, and a
+> rule that copies the weight pre-fills those five sets of ten at **120 kg
+> where 70 was prescribed**, on a screen whose entire design is that one tap
+> logs what it shows. Carrying the difference pre-fills them at 72.5: the same
+> +2.5 kg decision, applied to each set's own prescription.
+>
+> **`prescribed_weight` is never written.** Drift is still measured against the
+> number the athlete was actually shown, which is the property the whole of
+> this decision rests on and the same reason a prescriptive program snapshots
+> its maxes at enrolment rather than re-deriving a block in progress (D-03).
+>
+> **What it costs, first.** This is the same shape as the cross-session carry
+> declined at the end of this amendment: a bump taken on a light set pushes a
+> heavy one further than intended. The squat day above is that case rather than
+> a hypothetical — the +2.5 kg taken on a top set that went up easily also
+> lands on fifty reps of backoff volume, which is the half of the day that
+> costs recovery (D-01). It is accepted deliberately, because here it is
+> bounded to one session, one bar and one exercise, and every set it reaches
+> is still pending and still one edit away from being something else.
+>
+> **And a difference need not be loadable.** Every prescription is rounded down
+> to a loadable weight (D-04); the gap between two numbers an athlete typed is
+> not. Correct 97.5 to 96 and the 70 kg backoff pre-fills at 68.5, which no bar
+> in the room can hold. The client cannot round it — it has no plate arithmetic
+> and is not getting any (D-11) — so the athlete is shown a number they have to
+> edit, on the screen built to stop them having to. Recorded rather than fixed.
+> It arises only from a difference that was not loadable when it was typed, and
+> the fix for it is plate arithmetic on the phone, which is the one thing D-11
+> does not let the client have.
+>
+> **Carrying the number into future sessions was asked for and declined**, on
+> the athlete's own objection: a bump taken on a light day would push a heavy
+> day too far. The objection is the correct one, and the mechanisms behind it
+> are all worse than they look, which is worth recording so the request does
+> not have to be re-argued from scratch. A prescriptive program snapshots its
+> maxes into `State` at enrolment (D-03), and 5/3/1's training max lives in
+> `State` and moves only at a cycle boundary inside `advance()` — so editing an
+> entered 1RM changes nothing about an enrolment already running, and "it
+> carries to next week" would have had to be one of three things: `advance()`
+> learning from drift, which makes the governor follow the athlete upward and
+> is expressible only for adaptive programs; an athlete-owned per-exercise
+> offset, which is exactly the "edit my training max" field D-04 refuses by
+> name; or mid-block re-derivation, which D-03 forbids because drift must be
+> measured against the number that was displayed. If a prescription is reliably
+> light the fault is upstream, in an entered 1RM typed conservatively, and the
+> fix is to correct the number the athlete owns, deliberately, between blocks.
+
 ---
 
 ## D-08 · Session lifecycle
@@ -624,6 +743,66 @@ away, on a page built to hold them.
 **It does not redirect on its own.** A screen that leaves while it is being
 read is a screen that was not shown. The athlete is standing in a gym having
 just finished lifting; the dashboard is one tap away and will still be there.
+
+> **Amended after a week of training on it. The drift total and the timing
+> breakdown are on this screen.** The paragraph above refuses both by name —
+> *"No drift total and no timing breakdown, and both are tempting exactly
+> here"* — and gives two grounds for it. Neither ground is overridden. Both are
+> answered, and if either answer stops being true the refusal comes back.
+>
+> **Drift does not appear alone**, which was the first ground and the serious
+> one. It arrives beside the load actually moved, beside the load prescribed
+> for those same sets, and beside the athlete's own average duration for this
+> enrolment — which is D-13's requirement in the form D-13 asks for, progress
+> never shown without its cost, here on one line rather than one page. Take
+> the 5/3/1 squat day worked in D-04 and again in D-07's carry amendment: 90×5,
+> 105×5, 117.5×5 and five sets of ten at 70 is 5062.5 kg prescribed, and taking
+> the top set to 120 with the carry running makes it 5200 kg moved, over on 6
+> of 8 sets, in a duration standing beside this enrolment's average for the
+> sessions before it. None of that reads as a score. And the count says six
+> because six sets really were heavier than asked for, though one edit is what
+> made them so — the carry amended into D-07 and this line are the same fact
+> seen from two ends.
+>
+> **No number is invented in a client**, which was the second ground, and it
+> was never a claim that the number is uninteresting — it was that a total
+> computed in a client is one the next client has to compute again. So the
+> arithmetic is `report.rs`: pure, over the sets, taking only what it uses, in
+> the same shape as `timing.rs` and testable without a database. It rides back
+> on the `WorkoutReceipt` the phone already reads to find out whether the
+> submit landed. A second client parses a field; it does not reimplement a sum,
+> which is the whole of D-11. A retry gets the same summary rather than a blank
+> screen, recomputed from the stored rows, because a session that finally lands
+> three days later is exactly the one whose numbers nobody has seen — one extra
+> read on the rare path.
+>
+> **The loads count done sets only**, so the gap between moved and prescribed
+> is weight drift and is not contaminated by work not done. The two axes stay
+> apart on the one screen that reports both: the second is the sets done,
+> skipped and not reached line that was already here.
+>
+> **A median rather than a mean** for the intervals, which is D-10's rule
+> applied in D-10's own units. Pace takes a median on the stated grounds that
+> the tail of this distribution is not signal, and one interval spent talking
+> to somebody moves a mean of twelve by a minute. The figures are `timing.rs`'s
+> outright, so the discard-rather-than-clamp rule and the count of what was
+> discarded come with them. The enrolment average is absent below three
+> sessions — same rule and same reason as pace, not shown before there is data
+> to compute it from.
+>
+> **The offline behaviour above is unchanged, and that is what keeps this
+> honest.** The summary renders in the sent phase only. `queued` still says
+> *saved on this device and not sent yet* and still offers the disabled *the
+> full breakdown needs a connection*, which becomes more true rather than less.
+> There is no baseline cached at commit and no aggregation on the phone — which
+> is exactly what stops this becoming a second implementation the native client
+> has to reproduce, and what keeps a session finished underground showing
+> precisely what it showed before.
+>
+> **The history link stays**, because the per-exercise breakdown is not
+> duplicated here. This screen says what the hour cost and how the intervals
+> inside it were spread; the page built to answer *which lift ate my session*
+> is still one tap away, and that is still the right place for it.
 
 ---
 
