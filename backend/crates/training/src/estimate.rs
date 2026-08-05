@@ -86,8 +86,10 @@ mod tests {
     #[test]
     fn it_agrees_with_epley_at_the_ceiling_and_is_kinder_below_it() {
         // 36/27 and 1 + 10/30 are both 4/3, so the choice of formula costs
-        // nothing at the ceiling. Below it Brzycki is the more conservative,
-        // which is the direction this product wants to be wrong in (D-01).
+        // nothing at the ceiling. Below it the two genuinely differ — Brzycki
+        // is strictly the more conservative, never merely tied — which is the
+        // whole reason to prefer it (D-01): a non-strict bound here would
+        // still pass if this formula were ever reverted to literal Epley.
         let epley = |weight: f64, reps: u32| weight * (1.0 + f64::from(reps) / 30.0);
 
         let at_ceiling = estimate(100.0, ESTIMATE_REP_CEILING).expect("at the ceiling");
@@ -95,7 +97,7 @@ mod tests {
 
         for reps in 1..ESTIMATE_REP_CEILING {
             let ours = estimate(100.0, reps).expect("within the ceiling");
-            assert!(ours <= epley(100.0, reps), "at {reps} reps");
+            assert!(ours < epley(100.0, reps), "at {reps} reps");
         }
     }
 
