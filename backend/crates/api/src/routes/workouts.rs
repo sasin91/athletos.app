@@ -526,12 +526,30 @@ pub async fn submit(
     // a session because life interrupted it is precisely the guilt loop D-06
     // exists to avoid, and a completeness threshold would force every program
     // author to invent one.
+    //
+    // By `position`, not by the order the phone happened to serialise `sets`
+    // in — the training migration calls wire order "an accident of the wire"
+    // for exactly this reason, and `position` is the one the schema treats as
+    // canonical. `validate` has already confirmed every position is unique,
+    // so this is a total order and the sort is unambiguous. Without it, a
+    // program whose fold reads `LoggedSession.sets` order-sensitively — 5/3/1
+    // BBB's `made_the_minimum` breaks a weight tie with `max_by`, which
+    // returns the *last* maximum — would answer differently depending on
+    // request order alone, which is not a fact about the session.
+    let mut ordered_sets: Vec<&SubmittedSet> = body.sets.iter().collect();
+    ordered_sets.sort_by_key(|set| set.position);
+
     let logged = LoggedSession {
         week: session.week,
         day: session.day,
-        sets: body.sets.iter().map(LoggedSet::from).collect(),
+        sets: ordered_sets.into_iter().map(LoggedSet::from).collect(),
         cut_reason: body.cut_reason.map(Into::into),
     };
+
+    // Captured before the fold consumes it. Cloning an already-decoded value is
+    // cheaper than reading the row again, and reading it again would be reading
+    // it at a different moment.
+    let state_before = program_state.as_json().clone();
 
     let advanced = program.advance(program_state, &logged)?;
     let progress = program.progress(&advanced)?;
@@ -553,6 +571,25 @@ pub async fn submit(
         .bind(body.enrollment_id)
         .execute(&mut *tx)
         .await?;
+
+    // What the fold did, so a wrong one can be found later (D-19).
+    //
+    // Inside the transaction that already holds this enrolment's `for update`
+    // lock, beside the state write it describes — so the record and the state
+    // it records can never disagree. Only this branch advances; the two retry
+    // branches have nothing to record.
+    sqlx::query(
+        "insert into enrollment_advances
+             (workout_id, enrollment_id, state_before, state_after, engine_version)
+         values ($1, $2, $3::jsonb, $4::jsonb, $5)",
+    )
+    .bind(body.id)
+    .bind(body.enrollment_id)
+    .bind(&state_before)
+    .bind(advanced.as_json())
+    .bind(env!("CARGO_PKG_VERSION"))
+    .execute(&mut *tx)
+    .await?;
 
     let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
     tx.commit().await?;
