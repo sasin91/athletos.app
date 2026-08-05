@@ -139,8 +139,64 @@ figure computed in Rust (D-11).
 |---|---|
 | `lifts[]` | per exercise: `exercise`, `label`, and `points[]` of `{ workout_id, at, estimate, training_max, drift_kg, sets_over, sets_under, reasons[] }` |
 | `sessions[]` | per workout: `at`, `enrollment_id`, `load_moved_kg`, `load_prescribed_kg`, `sets_over`, `sets_under`, `duration_seconds` |
-| `programs[]` | per enrollment: `program_key`, `program_name`, `status`, `sessions`, `load_moved_kg`, `sets_over`, `sets_under`, `median_duration_seconds`, `median_interval_seconds` |
-| `overall` | the same shape as one `programs[]` entry, across everything |
+| `programs[]` | per enrollment: `program_key`, `program_name`, `status`, and `indicators[]` |
+| `overall` | `indicators[]`, across everything |
+
+### Indicators, and why they are a response shape rather than a table
+
+Every figure that renders as a card on this screen travels as the same thing:
+
+```
+Indicator { key, label, value, unit }
+```
+
+`unit` is one of `kg`, `count`, `seconds` — a semantic tag, not a display
+string. Formatting lives at the UI edge, as D-04 already requires of every
+weight in this system. One shape means one card component and a new metric that
+does not touch the client.
+
+**An indicator with nothing to say is omitted, never sent as zero.** A median
+session duration across no sessions is not zero minutes, and the card should be
+absent rather than wrong — the same rule `timing` follows in omitting itself
+rather than serving an empty breakdown, and the same one pace follows in not
+projecting before there is data to project from.
+
+The values are **computed by query, not stored**. That was considered carefully
+and the reasoning is worth keeping, because a `performance_indicators` table
+written at submit is a good pattern that does not fit here.
+
+It earns its keep when aggregation is expensive, when the inputs will not be
+available later, when the number is contractual, when metric definitions vary by
+tenant or version, or when the metric set is open-ended. This codebase scores
+one out of five, and the one is already handled: everything else derives from
+`workout_sets`, which is permanent, and a year of training is roughly two
+hundred workouts and six thousand set rows — an indexed aggregate, not a scan.
+D-16 sized this box by measurement rather than estimate; caching before
+measuring is the same instinct in reverse.
+
+**The estimate is the specific reason not to freeze these.** It is a formula,
+the rep ceiling is a judgement call, and Brzycki is a live alternative. Values
+materialised at submit would leave a year's chart silently mixing points
+computed under different rules, with nothing marking where the deploy happened —
+a trend whose slope is partly an artifact. Derived on read, a revision re-draws
+all of history consistently, which is the only behaviour a trend line can
+honestly have.
+
+Two smaller costs avoided: a generic `value numeric` gives up the per-metric
+constraints this schema uses everywhere, and an unconstrained `key` turns a typo
+into a new metric rather than an error. And a materialised table has a writer,
+which means a backfill bug invisible until somebody recomputes by hand — D-13
+carries that scar already, in a reference implementation that "writes a
+`lift_records` table that nothing reads back".
+
+**What is given up**, recorded rather than glossed: there is no record of what
+the number was once believed to be, adding a metric is a deploy rather than a
+row, and every load does real work that the right indexes have to cover.
+
+**The asymmetry is what settles it.** Deriving first costs nothing later — the
+derivation becomes the definition a cache is built from, the day a measured load
+says one is needed. Materialising first and then revising a formula means
+reconciling a table against a rule that has moved, with no marker for where.
 
 `training_max` is nullable per point — every session logged before
 `workout_readouts` existed has none, and the chart must draw a gap rather than a
@@ -228,9 +284,16 @@ everything below it, so the eye crosses it on the way down the page.
 
 **Load**, its own panel and its own scale.
 
-**Per program**, one block per enrollment: sessions logged, load moved, sets over
-and under, median session duration, median interval. **Overall**, the same shape
-across everything.
+**Per program**, one block per enrollment, and **overall** below it. Both are
+rendered from `indicators[]` by one card component — key, label, value and unit,
+laid out identically whatever the metric is. Adding an indicator server-side
+makes a card appear; removing one makes it vanish. The client never learns what
+any particular metric means, which is what keeps a KPI grid from becoming
+thirty-one special cases (D-11).
+
+The set shipping first: sessions logged, load moved, sets over, sets under,
+median session duration, median interval. That list is a server-side constant,
+not a contract the screen depends on.
 
 ### Drawing it
 
