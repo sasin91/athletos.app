@@ -5,7 +5,10 @@ app, deferred out of [when the prescription is
 wrong](2026-08-05-when-the-prescription-is-wrong-design.md) so that it could be
 designed against a database that already knew why an athlete drifted.
 
-Two new measurements, one new table, one endpoint, one screen.
+Two new measurements, one endpoint, one screen — and **no new table**. Every
+figure here is derived from rows that already exist or will exist for another
+reason, which is the decision this spec makes most often and defends in
+[section 4](#indicators-and-why-they-are-a-response-shape-rather-than-a-table).
 
 `docs/DESIGN.md` **D-13** is amended, and an aside in **D-11** is corrected.
 They are listed in [Amendments to DESIGN.md](#amendments-to-designmd) and must
@@ -140,7 +143,7 @@ figure computed in Rust (D-11).
 
 | Field | What it carries |
 |---|---|
-| `lifts[]` | per exercise: `exercise`, `label`, and `points[]` of `{ workout_id, at, estimate, training_max, drift_kg, sets_over, sets_under, reasons[] }` |
+| `lifts[]` | per exercise: `exercise`, `label`, `points[]` of `{ workout_id, at, estimate, training_max, drift_kg, sets_over, sets_under, reasons[] }`, and `bests[]` of `{ reps, weight, actual_reps, at, workout_id }` — see [section 6](#6--bests) |
 | `sessions[]` | per workout: `at`, `enrollment_id`, `load_moved_kg`, `load_prescribed_kg`, `sets_over`, `sets_under`, `duration_seconds` |
 | `programs[]` | per enrollment: `program_key`, `program_name`, `status`, and `indicators[]` |
 | `overall` | `indicators[]`, across everything |
@@ -285,6 +288,9 @@ everything below it, so the eye crosses it on the way down the page.
 
 **The figure.** "Over on 23 of 180 sets in this block."
 
+**Bests** — the rep-max grid for the lift being charted, directly under it. See
+[section 6](#6--bests).
+
 **Load**, its own panel and its own scale.
 
 **Per program**, one block per enrollment, and **overall** below it. Both are
@@ -321,7 +327,72 @@ lines.
 
 ---
 
-## 6 · Vocabulary
+## 6 · Bests
+
+The trend says whether the number is moving. It does not answer the question a
+set of five actually poses — *what can I do for five?* That is a different
+artifact and it is a table.
+
+**Per lift, six cells: 1, 2, 3, 5, 8 and 10 reps.** Each holds the heaviest
+weight lifted for **at least** that many reps, over all history and all
+programs. A display constant, changed by editing a list.
+
+### At least, not exactly
+
+A cell is the best weight over sets whose `actual_reps >= n`. Every cell is
+still a set that actually happened: lifting 145 for two means 145 has certainly
+been lifted once, and 140 for five means 140 has been lifted for three.
+
+The alternative — only sets performed at exactly that rep count — was declined.
+It is more literal and it produces a grid full of holes that can show a 3-rep
+best below a 5-rep best. Not wrong, but it reads as broken, and it invites the
+athlete to go and perform a pointless triple to fill a cell, which is the
+product suggesting work for the table's benefit rather than the athlete's.
+
+Filling gaps with the **estimate** was also declined, and more firmly. It would
+put a formula's output in a table where every other number is something that was
+done, and a records table that mixes the two stops meaning anything.
+
+Being monotonic in reps is therefore a property of the definition rather than
+something to enforce or check.
+
+### What counts
+
+Every `done` set carrying actual numbers, whatever the program, whatever the
+prescription. **Drifted sets count**: a set logged at 105 kg against a 100 kg
+prescription is a 105 that was lifted, and `bar was loaded` does not make the
+bar lighter. AMRAP sets need no special handling and are where most of these
+will come from — a twelve-rep top set fills the 10 and the 8.
+
+**Derived by query**, like everything else on this screen:
+`max(actual_weight) where exercise = ? and actual_reps >= ? and status = 'done'`.
+No table, no writer, nothing to backfill.
+
+### Each cell carries when
+
+The weight, the reps actually performed, the date, and the workout id. That is
+what keeps this a reference rather than a scoreboard: the athlete can always ask
+*when was that*, and go and read what else happened that day.
+
+### Bodyweight lifts get no grid
+
+Recorded as a gap rather than solved. Their record is reps, not weight, and
+every set of hanging leg raises ties at zero kilograms. A reps-based grid is a
+different feature; this one should not pretend to cover it by drawing six cells
+that all say nothing.
+
+### No celebration
+
+No detection at submit, no notification, no badge, no marker on a cell that was
+set recently. D-01 and D-13 argue against motivation for an athlete whose
+failure mode is over-reaching — and the argument lands on the *moment*, not on
+the data. A table consulted deliberately is a reference; a congratulation
+arriving while the athlete decides how heavy to go is accelerant. This is the
+first, and it must not drift into the second.
+
+---
+
+## 7 · Vocabulary
 
 `CONTEXT.md` gains, in the athlete's-numbers section:
 
@@ -338,6 +409,15 @@ chart's two series are labelled **Estimate** and **Training max**.
 **Load** — kilograms moved: sets times reps times weight, over work actually
 done. In use informally since `report.rs`; named here.
 
+**Best** — the heaviest weight lifted for at least a given number of reps. An
+observed fact, never an estimate.
+_Avoid_: PR, personal best, rep max
+
+> The avoidances are not arbitrary. `CONTEXT.md` already rules out *PR* and
+> *personal best* under **Entered 1RM**, and flags *Max* as ambiguous in the
+> same entry — so the three obvious names for this were all spoken for before
+> the feature existed. *Best* collides with nothing.
+
 ---
 
 ## Amendments to DESIGN.md
@@ -347,7 +427,15 @@ The amendment must name that reversal and argue the distinction rather than
 wave at it: what D-13 refused was a grid of whatever happens to be countable,
 sitting on the screen the athlete opens. This is a screen navigated to on
 purpose, carrying exactly D-13's three things — e1RM trend, drift, session
-duration — and nothing it did not already ask for. It must also record that
+duration — plus a table of bests, which it did not ask for and which is
+addressed below.
+
+It must also address D-13's other sentence, because this spec walks straight
+into it: *"The reference writes a `lift_records` table that nothing reads back."*
+The bests grid is the same idea and the opposite construction — nothing is
+written, the numbers are a query over sets already stored, and the table exists
+because a screen renders it. The scar D-13 records is about a write with no
+reader, not about the concept of a record. It must also record that
 D-13's own rule survived contact: the drift band shares the trend's axis rather
 than sitting a tap away, because a rule about not showing progress without its
 cost is kept by layout or not at all.
