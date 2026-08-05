@@ -1215,13 +1215,7 @@ impl DriftReason {
             "too_heavy" => Ok(Self::TooHeavy),
             "already_loaded" => Ok(Self::AlreadyLoaded),
             "felt_off" => Ok(Self::FeltOff),
-            // Read out of the `text` column, so an unknown value means the
-            // check constraint and this enum have drifted apart. That is our
-            // bug and 500 is the honest answer — unlike an unknown value off a
-            // query string, which is the client's typo.
-            other => Err(ApiError::Internal(format!(
-                "unknown drift reason in the database: {other}"
-            ))),
+            other => Err(drifted("drift_reason", other)),
         }
     }
 }
