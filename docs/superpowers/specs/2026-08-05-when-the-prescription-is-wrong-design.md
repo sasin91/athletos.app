@@ -29,8 +29,35 @@ answer cost more than the dishonest one.
 
 ### What changes
 
-A **weight** edit writes that weight to every later **pending** set sharing the
-same `exercise` key, and stops at the first set of a different exercise.
+A **weight** edit carries the **difference** to every later **pending** set
+sharing the same `exercise` key, and stops at the first set of a different
+exercise. Edit set one from 90 to 95 and every later pending squat set is
+pre-filled at its own prescription plus 5.
+
+> **Corrected during implementation, and the first draft would have been
+> dangerous.** This said "writes that weight to every later pending set", which
+> is right for a block of straight sets and wrong on the program this app was
+> built around. 5/3/1 BBB prescribes its main lift and its Boring But Big
+> backoff as two `Block`s sharing one `exercise` key (D-04) — a squat day is
+> 65/75/85% and then five sets of ten at 50%. Copying the weight would have
+> pre-filled those five backoff sets at the main lift's number, 117.5 kg where
+> 70 was prescribed, on a screen whose entire design is that one tap logs what
+> it shows. Carrying the difference keeps each set's own prescription as its
+> base.
+>
+> Jonas chose the difference over the alternative — stopping the carry at any
+> change of prescribed weight — with the objection stated: it is the same shape
+> as the cross-session carry rejected earlier in this design, a bump taken on a
+> light set pushing a heavy one further than intended. Inside one session, on
+> one bar, against one exercise, that was judged acceptable.
+>
+> **One consequence is recorded rather than fixed.** A difference need not be a
+> multiple of the loading resolution: correct 97.5 to 96 and a 70 kg backoff
+> pre-fills at 68.5, which no bar can hold. The client cannot round it — it has
+> no plate arithmetic and is not getting any (D-11) — so the athlete sees a
+> number they must edit. The prescription itself is always loadable; only a
+> carried difference can produce this, and only when the athlete types a
+> difference that is not loadable in the first place.
 
 - **Weight only, never reps.** A rep edit is about that set — an AMRAP that
   went well, a set cut short at eight. A weight edit is about the bar, and the
