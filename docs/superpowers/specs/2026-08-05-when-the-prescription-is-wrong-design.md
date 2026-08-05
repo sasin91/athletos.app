@@ -29,8 +29,35 @@ answer cost more than the dishonest one.
 
 ### What changes
 
-A **weight** edit writes that weight to every later **pending** set sharing the
-same `exercise` key, and stops at the first set of a different exercise.
+A **weight** edit carries the **difference** to every later **pending** set
+sharing the same `exercise` key, and stops at the first set of a different
+exercise. Edit set one from 90 to 95 and every later pending squat set is
+pre-filled at its own prescription plus 5.
+
+> **Corrected during implementation, and the first draft would have been
+> dangerous.** This said "writes that weight to every later pending set", which
+> is right for a block of straight sets and wrong on the program this app was
+> built around. 5/3/1 BBB prescribes its main lift and its Boring But Big
+> backoff as two `Block`s sharing one `exercise` key (D-04) — a squat day is
+> 65/75/85% and then five sets of ten at 50%. Copying the weight would have
+> pre-filled those five backoff sets at the main lift's number, 117.5 kg where
+> 70 was prescribed, on a screen whose entire design is that one tap logs what
+> it shows. Carrying the difference keeps each set's own prescription as its
+> base.
+>
+> Jonas chose the difference over the alternative — stopping the carry at any
+> change of prescribed weight — with the objection stated: it is the same shape
+> as the cross-session carry rejected earlier in this design, a bump taken on a
+> light set pushing a heavy one further than intended. Inside one session, on
+> one bar, against one exercise, that was judged acceptable.
+>
+> **One consequence is recorded rather than fixed.** A difference need not be a
+> multiple of the loading resolution: correct 97.5 to 96 and a 70 kg backoff
+> pre-fills at 68.5, which no bar can hold. The client cannot round it — it has
+> no plate arithmetic and is not getting any (D-11) — so the athlete sees a
+> number they must edit. The prescription itself is always loadable; only a
+> carried difference can produce this, and only when the athlete types a
+> difference that is not loadable in the first place.
 
 - **Weight only, never reps.** A rep edit is about that set — an AMRAP that
   went well, a set cut short at eight. A weight edit is about the bar, and the
@@ -101,13 +128,19 @@ plate arithmetic reaches the client** (D-11) and none is precomputed
 server-side.
 
 **The same-weight rule.** When this set's `actualWeight` equals the
-`actualWeight` of the previous *answered* set of the same exercise, the screen
+`actualWeight` of the previous *done* set of the same exercise, the screen
 says **bar is already loaded**. It is exactly true and it is exactly the
 instruction. It draws no plate stack, because on an edited weight nobody
 computed one — the words were always the instruction and the picture was the
 nicety. Guarded on `set.plateChange !== null`, which is how the client knows
 this exercise is loaded with plates at all; a pair of dumbbells at the same
 weight must not be told the bar is loaded.
+
+*Done*, not merely answered: a skipped set answers the question of whether it
+happened without answering what the bar held, since `actualWeight` on a skip
+is only ever the pre-filled or carried number nobody touched. Counting a skip
+here would let a skipped backoff set — sitting at a weight the previous, real
+set never carried — tell the athlete the bar is already at it.
 
 **The dimmed fallback is dropped when, and only when, this set's
 `actualWeight !== prescribedWeight`.** That is precisely the case where the

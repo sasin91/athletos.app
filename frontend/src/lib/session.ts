@@ -23,6 +23,8 @@ export type CutReason = Schemas['CutReason'];
 export type SetStatus = Schemas['SetStatus'];
 export type WorkoutSubmission = Schemas['WorkoutSubmission'];
 export type PlateChange = Schemas['PlateChangeView'];
+export type WorkoutReceipt = Schemas['WorkoutReceipt'];
+export type DriftReason = Schemas['DriftReason'];
 
 /**
  * One set, prescribed and actual side by side (D-07).
@@ -72,6 +74,14 @@ export type LocalSet = {
 	 * session because attached to the session it is a fact about nothing.
 	 */
 	note: string | null;
+	/**
+	 * Why this set is not being lifted as prescribed, or `null`.
+	 *
+	 * Never asked for and never defaulted: an unanswered edit stays `null`
+	 * rather than becoming "too easy", which would be a claim nobody made on
+	 * the one signal the product exists to read (D-07).
+	 */
+	driftReason: DriftReason | null;
 };
 
 /** A committed session, and everything the logger needs to run offline. */
@@ -135,7 +145,8 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
 			actualReps: set.prescribed_reps,
 			status: 'pending',
 			loggedAt: null,
-			note: null
+			note: null,
+			driftReason: null
 		})),
 		cues: Object.fromEntries(next.blocks.map((block) => [block.exercise, block.cues]))
 	};
@@ -152,17 +163,120 @@ function replace(
 	};
 }
 
-/** Records what the athlete actually lifted, without logging the set yet. */
+/**
+ * Records what the athlete actually lifted.
+ *
+ * Editing the addressed set is always allowed, whatever its status — a
+ * correction to a number mistyped after logging is a correction to the
+ * record, not a falsification of it.
+ *
+ * A **weight** edit carries — but only when the addressed set is itself
+ * `pending`. Correcting an already-logged set changes what happened; it must
+ * not rewrite the plan for sets not yet performed.
+ *
+ * What carries is the **difference**, not the weight: `delta = the new weight
+ * minus the edited set's own prescription`, applied to each later pending
+ * set's *own* prescription and clamped at zero. 5/3/1 BBB prescribes a main
+ * lift and its Boring But Big backoff under one `exercise` key at two
+ * different percentages (D-04); carrying the raw weight would pre-fill five
+ * backoff sets at the main lift's number. Carrying the delta instead means
+ * editing set one from 90 to 95 leaves later main-lift sets at their own
+ * prescription +5 and the backoff sets at their own prescription +5, and
+ * editing back to 90 returns every carried set to exactly its own
+ * prescription.
+ *
+ * The carry stops at the next exercise — which is a different bar, and
+ * possibly not even the same bar, the boundary D-04 already draws for the
+ * plate chain. Retyping the same correction five times is the app making an
+ * honest answer cost more than a dishonest one (D-07).
+ *
+ * A **rep** edit never carries. It is about that set — an AMRAP that went
+ * well, a set cut short at eight — whereas a weight edit is about the bar,
+ * and the bar is still loaded when the next set starts.
+ *
+ * The carry only *writes* to pending sets: a set already logged or skipped is
+ * a record of what happened, and rewriting it would falsify the log.
+ *
+ * `prescribedWeight` is never touched, so drift is still measured against the
+ * number the athlete was actually shown.
+ */
 export function editSet(
 	session: LocalSession,
 	position: number,
 	values: { weight?: number; reps?: number }
 ): LocalSession {
-	return replace(session, position, (set) => ({
-		...set,
-		actualWeight: values.weight ?? set.actualWeight,
-		actualReps: values.reps ?? set.actualReps
-	}));
+	const target = session.sets.find((set) => set.position === position);
+	if (!target) return session;
+
+	const edited = replace(session, position, (set) => {
+		const actualWeight = values.weight ?? set.actualWeight;
+		return {
+			...set,
+			actualWeight,
+			actualReps: values.reps ?? set.actualReps,
+			driftReason: actualWeight === set.prescribedWeight ? null : set.driftReason
+		};
+	});
+
+	if (values.weight === undefined || target.status !== 'pending') return edited;
+
+	const delta = values.weight - target.prescribedWeight;
+
+	return {
+		...edited,
+		sets: edited.sets.map((set) => {
+			const carries =
+				set.exercise === target.exercise && set.position > position && set.status === 'pending';
+
+			if (!carries) return set;
+
+			const actualWeight = Math.max(0, set.prescribedWeight + delta);
+			return {
+				...set,
+				actualWeight,
+				driftReason: actualWeight === set.prescribedWeight ? null : target.driftReason
+			};
+		})
+	};
+}
+
+/**
+ * Records why this set is not being lifted as prescribed, or clears it.
+ *
+ * Only attaches to a set that has actually deviated — `actualWeight !==
+ * prescribedWeight` — the addressed set included. The server refuses a
+ * `drift_reason` on a set sitting at its own prescription with the same check
+ * constraint it refuses one on a pending set with, and a chip tapped on a set
+ * that never drifted must not take the whole submission down with it.
+ *
+ * Carries to the same sets a weight edit carries to — later pending sets of
+ * the same exercise — because it is one decision continuing, and recording
+ * four of five carried sets as unanswered would misreport it. A set among
+ * those whose carried weight happens to land back on its own prescription
+ * gets `null` regardless, since there is nothing left for the reason to be
+ * about.
+ */
+export function setDriftReason(
+	session: LocalSession,
+	position: number,
+	reason: DriftReason | null
+): LocalSession {
+	const target = session.sets.find((set) => set.position === position);
+	if (!target) return session;
+
+	return {
+		...session,
+		sets: session.sets.map((set) => {
+			const applies =
+				set.position === position ||
+				(set.exercise === target.exercise && set.position > position && set.status === 'pending');
+
+			if (!applies) return set;
+
+			const deviated = set.actualWeight !== set.prescribedWeight;
+			return { ...set, driftReason: deviated ? reason : null };
+		})
+	};
 }
 
 /**
@@ -206,7 +320,12 @@ export function logSet(session: LocalSession, position: number, at: string): Loc
  * whichever set came next.
  */
 export function skipSet(session: LocalSession, position: number, at: string): LocalSession {
-	return replace(session, position, (set) => ({ ...set, status: 'skipped', loggedAt: at }));
+	return replace(session, position, (set) => ({
+		...set,
+		status: 'skipped',
+		loggedAt: at,
+		driftReason: null
+	}));
 }
 
 /**
@@ -223,7 +342,8 @@ export function resetSet(session: LocalSession, position: number): LocalSession 
 		actualReps: set.prescribedReps,
 		// Cleared with the status. A stamp surviving an undo would report an
 		// interval for a set the athlete decided they had not done.
-		loggedAt: null
+		loggedAt: null,
+		driftReason: null
 	}));
 }
 
@@ -286,7 +406,8 @@ export function toSubmission(session: LocalSession, ending: Ending): WorkoutSubm
 			actual_reps: set.status === 'done' ? set.actualReps : null,
 			status: set.status,
 			logged_at: set.loggedAt,
-			note: set.note
+			note: set.note,
+			drift_reason: set.status === 'done' ? set.driftReason : null
 		}))
 	};
 }
@@ -356,16 +477,59 @@ export function plateChangeFor(session: LocalSession, position: number): PlateCh
 }
 
 /**
+ * Whether the bar already holds this set's weight (D-04).
+ *
+ * True when the previous *done* set of the same exercise was lifted at the
+ * same weight as this one is about to be. Pure equality between two numbers
+ * this module already holds — no plate arithmetic reaches the client and none
+ * is coming (D-11).
+ *
+ * Deliberately not a skipped set, even at a matching weight: a skip leaves
+ * `actualWeight` at whatever was pre-filled or carried, which is a number
+ * nobody put on the bar. `plateChangeFor` already treats a skip this way when
+ * deciding whether a *later* plan is still live; this function has to agree,
+ * or the two would tell different stories about the same skipped set.
+ *
+ * This is what keeps the plate guidance alive once a weight has been edited
+ * and carried: `plateChangeFor` goes `null` for every deviated set, and
+ * "bar is already loaded" is the true instruction for all of them but the
+ * first.
+ *
+ * Guarded on `plateChange` being present, which is how this module knows the
+ * exercise is loaded with plates at all. A pair of dumbbells at the same weight
+ * must not be told the bar is loaded.
+ */
+export function barUnchangedFrom(session: LocalSession, position: number): boolean {
+	const set = session.sets.find((candidate) => candidate.position === position);
+	if (!set?.plateChange) return false;
+
+	const previous = session.sets
+		.filter(
+			(candidate) =>
+				candidate.exercise === set.exercise &&
+				candidate.position < position &&
+				candidate.status === 'done'
+		)
+		.sort((a, b) => a.position - b.position)
+		.at(-1);
+
+	return previous !== undefined && previous.actualWeight === set.actualWeight;
+}
+
+/**
  * What the finish screen says, counted from the session that was just sent.
  *
- * Counting only. There is deliberately **no drift total and no timing
- * breakdown** here: the history page already marks drift per row and does not
- * total it, on the grounds that a total computed in a client is one the next
- * client has to compute again (D-07, D-11) — and D-13 puts drift beside the
- * e1RM trend on purpose, because progress is never shown without its cost. A
- * drift number invented here would be the first place in the product it
- * appears alone. The timing aggregation belongs to `timing.rs` for the same
- * reason, and both are one tap away.
+ * Counting only — `done`, `skipped`, `pending`, a duration measured on the
+ * client's own clock. Deliberately no drift total and no timing breakdown
+ * *here*: those are computed once, in Rust, off the numbers that just landed
+ * (D-07, D-11), and arrive on the receipt (`WorkoutReceipt`) once the submit
+ * is accepted, which is what the finish screen actually renders alongside
+ * this summary. Duplicating that arithmetic in a client is a total the next
+ * client would have to compute again for itself. The reasoning that kept a
+ * drift number out of this type still holds — it would be invented here,
+ * with no prescription to check it against — only its conclusion moved: the
+ * total now exists, computed where the prescription already lives, not in
+ * this count.
  */
 export type SessionSummary = {
 	durationSeconds: number;
@@ -399,3 +563,22 @@ export const CUT_REASONS: { value: CutReason; label: string }[] = [
 	{ value: 'equipment', label: 'Equipment unavailable' },
 	{ value: 'enough', label: 'Done enough' }
 ];
+
+/**
+ * What each reason is called on screen (D-07).
+ *
+ * Lower case, matching the `eyebrow` copy the logger already uses. Note that
+ * `already_loaded` reads as "bar was loaded" — the stored value names the
+ * state, the label names what the athlete did about it.
+ */
+export const DRIFT_REASON_LABELS: Record<DriftReason, string> = {
+	too_easy: 'too easy',
+	too_heavy: 'too heavy',
+	already_loaded: 'bar was loaded',
+	felt_off: 'felt off'
+};
+
+/** The four answers, in the order they are offered. "too easy" leads. */
+export const DRIFT_REASONS: { value: DriftReason; label: string }[] = (
+	['too_easy', 'too_heavy', 'already_loaded', 'felt_off'] as const
+).map((value) => ({ value, label: DRIFT_REASON_LABELS[value] }));

@@ -96,6 +96,7 @@ impl Modify for BearerToken {
         crate::routes::workouts::WorkoutSubmission,
         crate::routes::workouts::WorkoutOutcome,
         crate::routes::workouts::CutReason,
+        crate::routes::workouts::DriftReason,
         crate::routes::workouts::SetStatus,
         crate::routes::workouts::SubmittedSet,
         crate::routes::workouts::WorkoutReceipt,
@@ -107,6 +108,8 @@ impl Modify for BearerToken {
         crate::timing::SessionTiming,
         crate::timing::ExerciseSpend,
         crate::timing::LongestInterval,
+        crate::timing::IntervalSpread,
+        crate::report::SessionReport,
     )),
     tags(
         (name = "health", description = "Liveness and readiness probes"),

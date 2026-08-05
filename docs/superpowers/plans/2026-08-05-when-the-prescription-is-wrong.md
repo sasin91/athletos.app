@@ -352,9 +352,9 @@ fn the_spread_is_min_median_max_of_the_believable_intervals() {
 }
 
 #[test]
-fn the_spread_discards_what_compute_discards() {
-    // A clock jump backwards, and a gap over the ceiling. The tripwire: these
-    // are two walks of the same rule living in one file, and they must agree.
+fn the_spread_counts_what_it_could_not_believe() {
+    // A clock jump backwards, and a gap over the ceiling. Both readings come
+    // off the shared walk, so this pins the walk rather than an agreement.
     let sets = vec![
         (0_u16, set("squat", Some(at(1, 0)))),
         (1, set("squat", Some(at(0, 30)))),
@@ -365,6 +365,7 @@ fn the_spread_discards_what_compute_discards() {
     let spread = spread(at(0, 0), &sets).expect("stamps exist");
     let computed = compute(at(0, 0), Some(at(45, 0)), &sets).expect("stamps exist");
 
+    assert_eq!(spread.discarded, 2);
     assert_eq!(spread.discarded, computed.discarded_intervals);
 }
 
@@ -380,7 +381,142 @@ fn there_is_no_spread_without_a_gap_between_two_sets() {
 Run: `cd backend && cargo test -p athletos-api spread`
 Expected: FAIL — `spread` not found.
 
-- [ ] **Step 3: Implement `spread`**
+- [ ] **Step 3: Extract the walk that both readings share**
+
+`compute` currently inlines the cursor rule — which stamps are believable, what a missing stamp does to the cursor, where the lead-in ends. `spread` needs the same rule and must not restate it. Add above `compute`:
+
+```rust
+/// One believable gap between two stamps.
+struct Interval {
+    seconds: i64,
+    /// Index into the `sets` slice the walk was given, so a caller that cares
+    /// which exercise this belonged to can look it up. The walk itself knows
+    /// nothing about exercises.
+    index: usize,
+    /// True for the gap from the commit to the first stamped set — the
+    /// lead-in, which is walking in and changing rather than work, and is
+    /// never attributed to a lift (D-10).
+    lead_in: bool,
+}
+
+/// What one pass over the stamps found.
+struct Walk {
+    intervals: Vec<Interval>,
+    /// Negative, or over [`INTERVAL_CEILING`]. Discarded rather than clamped:
+    /// clamping folds a bad measurement in at an invented value with no way to
+    /// see it happened.
+    discarded: u32,
+    /// Sets carrying no stamp at all. Not the same as `discarded` — this is
+    /// work that was never measured, that is a measurement not believed.
+    unstamped: u32,
+    /// The last stamp seen, believable or not. What the tail measures from.
+    last_stamp: Option<DateTime<Utc>>,
+}
+
+/// The one place the interval rules live.
+///
+/// Every reading of a session's time comes through here, so there is exactly
+/// one definition of what a believable gap is and exactly one cursor
+/// discipline. `compute` attributes these to exercises; `spread` takes their
+/// shape. Neither restates the rule.
+fn walk(started_at: DateTime<Utc>, sets: &[(u16, TimedSet)]) -> Walk {
+    let mut intervals = Vec::new();
+    let mut discarded = 0_u32;
+    let mut unstamped = 0_u32;
+
+    // The cursor is the last stamp, which is not always the previous set's: a
+    // set with no stamp leaves it where it was, so the next stamped set
+    // measures across the gap rather than losing its interval too.
+    let mut cursor = started_at;
+    let mut last_stamp: Option<DateTime<Utc>> = None;
+
+    for (index, (_, set)) in sets.iter().enumerate() {
+        let Some(logged_at) = set.logged_at else {
+            unstamped += 1;
+            continue;
+        };
+
+        let seconds = (logged_at - cursor).num_seconds();
+
+        if (0..=INTERVAL_CEILING).contains(&seconds) {
+            intervals.push(Interval {
+                seconds,
+                index,
+                lead_in: last_stamp.is_none(),
+            });
+        } else {
+            discarded += 1;
+        }
+
+        // Advances whether or not the interval was believable. A clock jump
+        // corrupts the interval straddling it; the stamps either side are
+        // still the best account of when those sets happened, and refusing to
+        // advance would corrupt every later interval as well.
+        cursor = logged_at;
+        last_stamp = Some(logged_at);
+    }
+
+    Walk {
+        intervals,
+        discarded,
+        unstamped,
+        last_stamp,
+    }
+}
+```
+
+- [ ] **Step 4: Rewrite `compute` on top of it**
+
+Replace `compute`'s body — its doc comment stays as it is. The `if !sets.iter().any(...)` early return stays. Everything between that and the `Some(SessionTiming { ... })` becomes:
+
+```rust
+    let found = walk(started_at, sets);
+
+    // Insertion-ordered: `order` remembers where each exercise was first seen
+    // so the output can be walked back in the order the athlete performed it,
+    // while the map does the accumulating.
+    let mut totals: HashMap<String, (i64, u32)> = HashMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
+
+    let mut lead_in = None;
+    let mut longest: Option<LongestInterval> = None;
+
+    for interval in &found.intervals {
+        let (position, set) = &sets[interval.index];
+
+        if interval.lead_in {
+            // The first stamped set closes the lead-in, and the lead-in is not
+            // work: it is not attributed to any exercise.
+            lead_in = Some(interval.seconds);
+            continue;
+        }
+
+        let key = set.exercise.clone();
+        let entry = totals.entry(key.clone()).or_insert_with(|| {
+            order.push((key.clone(), set.label.clone()));
+            (0, 0)
+        });
+        entry.0 += interval.seconds;
+        entry.1 += 1;
+
+        if longest
+            .as_ref()
+            .is_none_or(|best| interval.seconds > best.seconds)
+        {
+            longest = Some(LongestInterval {
+                seconds: interval.seconds,
+                position: *position,
+                label: set.label.clone(),
+            });
+        }
+    }
+```
+
+and the returned struct takes `discarded_intervals: found.discarded`, `unstamped_sets: found.unstamped`, and a tail built from `found.last_stamp` exactly as before.
+
+The existing `mod tests` in this file is the guard on this refactor: run it before moving on and expect every case to still pass unchanged.
+
+- [ ] **Step 5: Implement `spread`**
 
 In `timing.rs`, after `compute`:
 
@@ -409,37 +545,18 @@ pub struct IntervalSpread {
 /// rather than a gap between two lifts, and D-10 holds it apart so it cannot
 /// be ranked against work.
 ///
-/// This is a second walk of [`compute`]'s cursor rule rather than a shared
-/// one, because the two produce genuinely different things and folding them
-/// together made `compute` harder to read than the duplication is. What guards
-/// the pair is `the_spread_discards_what_compute_discards`, which fails if
-/// they ever stop agreeing about what is believable — the same tripwire
-/// discipline `$lib/time.ts` uses for its copy of `INTERVAL_CEILING`.
+/// Reads the same [`walk`] [`compute`] does, so there is one definition of a
+/// believable gap and one cursor discipline. This function only takes the
+/// shape of what that walk found.
 pub fn spread(started_at: DateTime<Utc>, sets: &[(u16, TimedSet)]) -> Option<IntervalSpread> {
-    let mut intervals: Vec<i64> = Vec::new();
-    let mut discarded = 0_u32;
+    let found = walk(started_at, sets);
 
-    let mut cursor = started_at;
-    let mut first = true;
-
-    for (_, set) in sets {
-        let Some(logged_at) = set.logged_at else {
-            continue;
-        };
-
-        let seconds = (logged_at - cursor).num_seconds();
-
-        if (0..=INTERVAL_CEILING).contains(&seconds) {
-            if !first {
-                intervals.push(seconds);
-            }
-        } else {
-            discarded += 1;
-        }
-
-        cursor = logged_at;
-        first = false;
-    }
+    let mut intervals: Vec<i64> = found
+        .intervals
+        .iter()
+        .filter(|interval| !interval.lead_in)
+        .map(|interval| interval.seconds)
+        .collect();
 
     if intervals.is_empty() {
         return None;
@@ -460,17 +577,17 @@ pub fn spread(started_at: DateTime<Utc>, sets: &[(u16, TimedSet)]) -> Option<Int
         min_seconds: intervals[0],
         median_seconds: median,
         max_seconds: intervals[intervals.len() - 1],
-        discarded,
+        discarded: found.discarded,
     })
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [ ] **Step 6: Run to verify the refactor held and `spread` works**
 
-Run: `cd backend && cargo test -p athletos-api spread`
-Expected: PASS.
+Run: `cd backend && cargo test -p athletos-api timing`
+Expected: PASS — every pre-existing `timing` test unchanged, plus the three new `spread` cases. A pre-existing failure here means the extraction changed behaviour and must be fixed before going on.
 
-- [ ] **Step 5: Write the failing tests for `report::compute`**
+- [ ] **Step 7: Write the failing tests for `report::compute`**
 
 Create `backend/crates/api/src/report.rs` with the module doc and a test module only:
 
@@ -575,12 +692,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 6: Run to verify it fails**
+- [ ] **Step 8: Run to verify it fails**
 
 Run: `cd backend && cargo test -p athletos-api report`
 Expected: FAIL — `report` module not declared, `ReportedSet` and `compute` not found.
 
-- [ ] **Step 7: Implement it**
+- [ ] **Step 9: Implement it**
 
 Add `mod report;` to `backend/crates/api/src/lib.rs` beside `mod timing;`, and above the test module in `report.rs`:
 
@@ -664,12 +781,12 @@ pub fn compute(
 }
 ```
 
-- [ ] **Step 8: Run to verify it passes**
+- [ ] **Step 10: Run to verify it passes**
 
 Run: `cd backend && cargo test -p athletos-api report`
 Expected: PASS, all five.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add backend/crates/api/src/report.rs backend/crates/api/src/timing.rs backend/crates/api/src/lib.rs
@@ -686,7 +803,7 @@ git commit -m "report: what an hour cost, computed where it can be checked"
 - Test: `backend/crates/api/tests/training.rs`
 
 **Interfaces:**
-- Consumes: `report::{compute, ReportedSet, SessionReport}` and `timing::spread` from Task 2.
+- Consumes: `report::{compute, ReportedSet, SessionReport}` and `timing::spread` from Task 2. Reads `workout_sets` back inside the submit transaction, so it also depends on Task 1 having landed the rows it selects.
 - Produces: `WorkoutReceipt.summary: SessionReport` on the wire as `summary`. Task 7 renders it.
 
 - [ ] **Step 1: Write the failing test**
@@ -847,55 +964,91 @@ async fn average_duration(
     })
 }
 
-/// The ending, built from the submission the phone sent.
+/// The ending, built from what is recorded rather than from what was sent.
 ///
-/// From `body` rather than from the rows, on every path including the retry —
-/// the same choice `receipt` already makes for `id` and `enrollment_id`. The
-/// id is the idempotency key and a retry is the same queued item re-sent, so
-/// the two are the same bytes; a client that reused an id for different content
-/// would get a read-only echo of what it just sent, which corrupts nothing.
-fn summary_for(body: &WorkoutSubmission, average_duration_seconds: Option<i64>) -> SessionReport {
-    let reported: Vec<ReportedSet> = body
-        .sets
+/// Read back inside the same transaction, on every path including both retry
+/// branches. One piece of code and one guarantee: the ending describes the
+/// workout that is in the database. Building it from `body` would have saved a
+/// query and cost that guarantee — a client reusing an id for different content
+/// would be shown numbers about something that was never stored.
+async fn recorded_report(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workout_id: Uuid,
+    enrollment_id: Uuid,
+) -> ApiResult<SessionReport> {
+    let (started_at, ended_at): (DateTime<Utc>, Option<DateTime<Utc>>) =
+        sqlx::query_as("select started_at, ended_at from workouts where id = $1")
+            .bind(workout_id)
+            .fetch_one(&mut **tx)
+            .await?;
+
+    // `unique (workout_id, "position")` is both the ordering and the index —
+    // and the order matters, because the walk that produces intervals is a
+    // walk in performed order.
+    let rows: Vec<(i16, String, f64, i16, Option<f64>, Option<i16>, String, Option<DateTime<Utc>>)> =
+        sqlx::query_as(
+            "select \"position\", exercise, prescribed_weight::float8, prescribed_reps,
+                    actual_weight::float8, actual_reps, status, logged_at
+             from workout_sets
+             where workout_id = $1
+             order by \"position\"",
+        )
+        .bind(workout_id)
+        .fetch_all(&mut **tx)
+        .await?;
+
+    let reported: Vec<ReportedSet> = rows
         .iter()
-        .map(|set| ReportedSet {
-            prescribed_weight: set.prescribed_weight,
-            prescribed_reps: set.prescribed_reps,
-            actual_weight: set.actual_weight,
-            actual_reps: set.actual_reps,
-            done: matches!(set.status, SetStatus::Done),
+        .map(|(_, _, prescribed_weight, prescribed_reps, actual_weight, actual_reps, status, _)| {
+            ReportedSet {
+                prescribed_weight: *prescribed_weight,
+                prescribed_reps: u32::try_from(*prescribed_reps).unwrap_or_default(),
+                actual_weight: *actual_weight,
+                actual_reps: actual_reps.map(|reps| u32::try_from(reps).unwrap_or_default()),
+                done: status == "done",
+            }
         })
         .collect();
 
-    let timed: Vec<(u16, TimedSet)> = body
-        .sets
+    // `label` is the raw key and is never read: `spread` takes the shape of the
+    // intervals and does not attribute them to exercises. Resolving labels from
+    // the registry here would be work with no consumer.
+    let timed: Vec<(u16, TimedSet)> = rows
         .iter()
-        .map(|set| {
+        .map(|(position, exercise, _, _, _, _, _, logged_at)| {
             (
-                set.position,
+                u16::try_from(*position).unwrap_or_default(),
                 TimedSet {
-                    exercise: set.exercise.clone(),
-                    label: set.exercise.clone(),
-                    logged_at: set.logged_at,
+                    exercise: exercise.clone(),
+                    label: exercise.clone(),
+                    logged_at: *logged_at,
                 },
             )
         })
         .collect();
 
-    report::compute(
-        (body.ended_at - body.started_at).num_seconds(),
-        average_duration_seconds,
+    let average = average_duration(tx, enrollment_id, workout_id).await?;
+
+    Ok(report::compute(
+        ended_at
+            .map(|end| (end - started_at).num_seconds())
+            .unwrap_or_default(),
+        average,
         &reported,
-        crate::timing::spread(body.started_at, &timed),
-    )
+        timing::spread(started_at, &timed),
+    ))
 }
 ```
 
-Note the `label` on `TimedSet` is the raw key here and is never read — `spread` does not attribute intervals to exercises. Resolving it from the registry would be work with no consumer.
-
 - [ ] **Step 5: Thread it through all three returns**
 
-`fn receipt` gains a `summary: SessionReport` parameter and sets the field. Each of the three call sites in `submit` — the closed-enrolment path (:~430), the conflict path (:~470), and the success path (:~520) — calls `average_duration(&mut tx, body.enrollment_id, body.id).await?` before its `tx.commit()`, then passes `summary_for(&body, average)`.
+`fn receipt` gains a `summary: SessionReport` parameter and sets the field. Each of the three call sites in `submit` — the closed-enrolment path (:~430), the conflict path (:~470), and the success path (:~520) — calls
+
+```rust
+    let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
+```
+
+**before its `tx.commit()`**, and passes `summary` to `receipt`. On the success path this must come **after `insert_sets`**, or it reads a workout with no sets and reports an empty session. Placing it immediately before `tx.commit()` on all three paths satisfies that by construction.
 
 - [ ] **Step 6: Run to verify it passes**
 
@@ -1718,8 +1871,7 @@ Expected: clean.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add frontend/src/routes/\(app\)/history/\[id\]/+page.svelte frontend/src/lib/session.ts \
-        frontend/src/routes/session/+page.svelte
+git add frontend/src/routes/\(app\)/history/\[id\]/+page.svelte
 git commit -m "history: show the reason beside the drift it explains"
 ```
 

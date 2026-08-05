@@ -2333,3 +2333,216 @@ async fn a_note_over_the_cap_is_refused(pool: PgPool) {
         .await
         .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+/// The current session logged as prescribed, except that set 0 was lifted
+/// `over` kilograms heavier than asked and says why.
+fn logged_with_drift(
+    id: Uuid,
+    enrollment: Uuid,
+    session: &serde_json::Value,
+    over: f64,
+    reason: &str,
+) -> serde_json::Value {
+    let mut body = logged_as_prescribed(id, enrollment, session);
+    let prescribed = body["sets"][0]["prescribed_weight"]
+        .as_f64()
+        .expect("a prescribed set carries a weight");
+
+    body["sets"][0]["actual_weight"] = json!(prescribed + over);
+    body["sets"][0]["drift_reason"] = json!(reason);
+    body
+}
+
+#[sqlx::test]
+async fn a_drift_reason_round_trips_to_the_history(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let id = Uuid::now_v7();
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&logged_with_drift(
+            id, enrollment, &session, 5.0, "too_easy",
+        ))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let detail: serde_json::Value = server
+        .get(&format!("/v1/workouts/{id}"))
+        .authorization_bearer(&token)
+        .await
+        .json();
+
+    assert_eq!(detail["sets"][0]["drift_reason"], json!("too_easy"));
+    assert_eq!(detail["sets"][1]["drift_reason"], json!(null));
+}
+
+#[sqlx::test]
+async fn a_reason_on_a_set_that_was_not_done_is_refused(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["outcome"] = json!("cut_short");
+    body["cut_reason"] = json!("out_of_time");
+    body["sets"][0]["status"] = json!("pending");
+    body["sets"][0]["actual_weight"] = json!(null);
+    body["sets"][0]["actual_reps"] = json!(null);
+    body["sets"][0]["drift_reason"] = json!("too_easy");
+
+    // 422, not the 500 a raw constraint violation would produce. A client
+    // holding a queued offline workout has to be able to learn why it will
+    // never be accepted.
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test]
+async fn a_reason_on_a_set_that_did_not_drift_is_refused(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    // Logged exactly as prescribed, so there is no deviation for a reason to
+    // be about.
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["sets"][0]["drift_reason"] = json!("too_easy");
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// The athlete's typed weight differs from the prescription only below the
+/// two decimal places the column actually stores. `validate` compares in
+/// `f64`, so it sees a difference and lets the drift reason through; the
+/// insert rounds both sides to `numeric(6,2)`, the constraint sees no drift,
+/// and without this fix Postgres — not the 422 path — is what refuses it.
+#[sqlx::test]
+async fn a_reason_on_a_drift_too_small_to_store_is_refused_as_422_not_500(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let body = logged_with_drift(Uuid::now_v7(), enrollment, &session, 0.001, "too_easy");
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test]
+async fn a_retry_reports_the_same_ending_as_the_first_submit(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let body = logged_with_drift(Uuid::now_v7(), enrollment, &session, 5.0, "too_easy");
+
+    let first: serde_json::Value = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .json();
+
+    let response = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await;
+    response.assert_status(StatusCode::OK);
+    let retry: serde_json::Value = response.json();
+
+    assert_eq!(first["duplicate"], json!(false));
+    assert_eq!(retry["duplicate"], json!(true));
+
+    // A session that finally lands three days later is exactly the one whose
+    // numbers the athlete has not seen. A blank ending on the retry would be
+    // the worst possible time to have one.
+    assert_eq!(first["summary"], retry["summary"]);
+    assert_eq!(first["summary"]["sets_over"], json!(1));
+    assert_eq!(first["summary"]["sets_under"], json!(0));
+}
+
+#[sqlx::test]
+async fn the_ending_has_no_average_before_three_sessions(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    for day in 1..=2 {
+        let session = next_session(&server, &token, enrollment).await;
+        let sets = session["prescribed_sets"].as_array().unwrap().len();
+        log_a_session_lasting(&server, &token, enrollment, &session, day, 3_600, sets).await;
+    }
+
+    let session = next_session(&server, &token, enrollment).await;
+    let receipt: serde_json::Value = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&logged_as_prescribed(Uuid::now_v7(), enrollment, &session))
+        .await
+        .json();
+
+    // Two prior sessions would let one long day *be* the average rather than
+    // merely be in it — D-10's rule for pace, here for the same reason.
+    assert_eq!(receipt["summary"]["average_duration_seconds"], json!(null));
+}
+
+#[sqlx::test]
+async fn the_ending_compares_against_the_sessions_before_it(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    for day in 1..=3 {
+        let session = next_session(&server, &token, enrollment).await;
+        let sets = session["prescribed_sets"].as_array().unwrap().len();
+        log_a_session_lasting(&server, &token, enrollment, &session, day, 3_600, sets).await;
+    }
+
+    // The fourth runs ninety minutes. `logged_as_prescribed` hard-codes an
+    // hour, so both stamps are replaced.
+    let session = next_session(&server, &token, enrollment).await;
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["started_at"] = json!("2026-08-04T09:00:00Z");
+    body["ended_at"] = json!("2026-08-04T10:30:00Z");
+
+    let receipt: serde_json::Value = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .json();
+
+    assert_eq!(receipt["summary"]["duration_seconds"], json!(5_400));
+    // The average of the three before it, and not diluted by its own ninety
+    // minutes — the comparison is against history.
+    assert_eq!(receipt["summary"]["average_duration_seconds"], json!(3_600));
+}

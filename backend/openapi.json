@@ -1010,6 +1010,16 @@
           "enough"
         ]
       },
+      "DriftReason": {
+        "type": "string",
+        "description": "Why a set was lifted at something other than the prescribed weight (D-07).\n\nOptional in every direction. The chips that produce it are unselected by\ndefault, no tap is a valid answer, and nothing blocks — a default would\nanswer the question on the athlete's behalf and land a claim nobody made in\nthe one signal this product exists to read.",
+        "enum": [
+          "too_easy",
+          "too_heavy",
+          "already_loaded",
+          "felt_off"
+        ]
+      },
       "Enrollment": {
         "type": "object",
         "description": "One athlete's run of one program.",
@@ -1185,6 +1195,37 @@
           }
         }
       },
+      "IntervalSpread": {
+        "type": "object",
+        "description": "The shape of one session's intervals: fastest, typical, slowest.",
+        "required": [
+          "min_seconds",
+          "median_seconds",
+          "max_seconds",
+          "discarded"
+        ],
+        "properties": {
+          "discarded": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Intervals thrown away as impossible, so a screen showing these figures\ncan say why they account for less than the wall clock.",
+            "minimum": 0
+          },
+          "max_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "median_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Median, not mean. One interval spent talking to somebody moves a mean\nof twelve by a minute, and the tail of this distribution is not signal —\nthe same rule, and the same reason, as [`crate::pace`]."
+          },
+          "min_seconds": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Jwk": {
         "type": "object",
         "description": "An Ed25519 public key as an OKP JWK (RFC 8037).",
@@ -1315,6 +1356,17 @@
               "null"
             ],
             "format": "double"
+          },
+          "drift_reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DriftReason",
+                "description": "Why this set drifted, if the athlete said. Null for every set logged\nbefore the chips existed, and for every deviation they walked past."
+              }
+            ]
           },
           "exercise": {
             "type": "string",
@@ -1941,6 +1993,63 @@
           }
         }
       },
+      "SessionReport": {
+        "type": "object",
+        "description": "What the finish screen says, computed here so no client has to (D-11).",
+        "required": [
+          "load_moved_kg",
+          "load_prescribed_kg",
+          "sets_over",
+          "sets_under",
+          "duration_seconds"
+        ],
+        "properties": {
+          "average_duration_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The athlete's average across this **enrolment's** other recorded\nsessions — same block, same training max, so it compares like with\nlike. `None` below three of them, the same rule and the same reason as\n[`crate::pace`]: not shown before there is data to compute it from."
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "intervals": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IntervalSpread",
+                "description": "`None` when no two sets carry believable stamps."
+              }
+            ]
+          },
+          "load_moved_kg": {
+            "type": "number",
+            "format": "double",
+            "description": "Summed over **done sets only**, as performed."
+          },
+          "load_prescribed_kg": {
+            "type": "number",
+            "format": "double",
+            "description": "Summed over the same done sets, as asked for. The gap between the two\nis weight drift, uncontaminated by work not done."
+          },
+          "sets_over": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Done sets lifted heavier than prescribed. The count is the part that\ncan be acted on: a kilogram total alone does not distinguish one wild\nset from twelve small ones.",
+            "minimum": 0
+          },
+          "sets_under": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "SessionTiming": {
         "type": "object",
         "description": "Where one session's time went.",
@@ -2032,6 +2141,17 @@
             ],
             "format": "double",
             "description": "Required when `status` is `done`; the schema will not record a set as\ndone with no numbers, because that is a hole in every drift query that\nwill ever run over this table."
+          },
+          "drift_reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DriftReason",
+                "description": "Why this set was lifted at something other than its prescription (D-07).\n\nOptional and additively so (D-12). **Only a `done` set may carry one**,\nand only when its weight actually differs — see `validate`. That is not\ntidiness: a reason on a set that was never reached arrives with a null\n`actual_weight`, the check constraint refuses it, and the whole\nsubmission goes down over a chip tapped forty minutes earlier."
+              }
+            ]
           },
           "exercise": {
             "type": "string"
@@ -2195,7 +2315,8 @@
           "week",
           "day",
           "duplicate",
-          "progress"
+          "progress",
+          "summary"
         ],
         "properties": {
           "day": {
@@ -2218,6 +2339,10 @@
           "progress": {
             "$ref": "#/components/schemas/ProgressView",
             "description": "Progress *after* the submit. A retry reports the same numbers the first\nattempt did, which is the whole point."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SessionReport",
+            "description": "What this session cost, and how it compares (D-08, amended).\n\nPresent on a retry too, and computed the same way — see `recorded_report`."
           },
           "week": {
             "type": "integer",

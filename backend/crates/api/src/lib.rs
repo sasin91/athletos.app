@@ -9,6 +9,7 @@ pub mod config;
 pub mod error;
 pub mod openapi;
 pub mod pace;
+pub mod report;
 pub mod routes;
 pub mod state;
 pub mod timing;

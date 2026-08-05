@@ -142,6 +142,84 @@ pub struct LongestInterval {
     pub label: String,
 }
 
+/// One believable gap between two stamps.
+struct Interval {
+    seconds: i64,
+    /// Index into the `sets` slice the walk was given, so a caller that cares
+    /// which exercise this belonged to can look it up. The walk itself knows
+    /// nothing about exercises.
+    index: usize,
+    /// True for the gap from the commit to the first stamped set — the
+    /// lead-in, which is walking in and changing rather than work, and is
+    /// never attributed to a lift (D-10).
+    lead_in: bool,
+}
+
+/// What one pass over the stamps found.
+struct Walk {
+    intervals: Vec<Interval>,
+    /// Negative, or over [`INTERVAL_CEILING`]. Discarded rather than clamped:
+    /// clamping folds a bad measurement in at an invented value with no way to
+    /// see it happened.
+    discarded: u32,
+    /// Sets carrying no stamp at all. Not the same as `discarded` — this is
+    /// work that was never measured, that is a measurement not believed.
+    unstamped: u32,
+    /// The last stamp seen, believable or not. What the tail measures from.
+    last_stamp: Option<DateTime<Utc>>,
+}
+
+/// The one place the interval rules live.
+///
+/// Every reading of a session's time comes through here, so there is exactly
+/// one definition of what a believable gap is and exactly one cursor
+/// discipline. `compute` attributes these to exercises; `spread` takes their
+/// shape. Neither restates the rule.
+fn walk(started_at: DateTime<Utc>, sets: &[(u16, TimedSet)]) -> Walk {
+    let mut intervals = Vec::new();
+    let mut discarded = 0_u32;
+    let mut unstamped = 0_u32;
+
+    // The cursor is the last stamp, which is not always the previous set's: a
+    // set with no stamp leaves it where it was, so the next stamped set
+    // measures across the gap rather than losing its interval too.
+    let mut cursor = started_at;
+    let mut last_stamp: Option<DateTime<Utc>> = None;
+
+    for (index, (_, set)) in sets.iter().enumerate() {
+        let Some(logged_at) = set.logged_at else {
+            unstamped += 1;
+            continue;
+        };
+
+        let seconds = (logged_at - cursor).num_seconds();
+
+        if (0..=INTERVAL_CEILING).contains(&seconds) {
+            intervals.push(Interval {
+                seconds,
+                index,
+                lead_in: last_stamp.is_none(),
+            });
+        } else {
+            discarded += 1;
+        }
+
+        // Advances whether or not the interval was believable. A clock jump
+        // corrupts the interval straddling it; the stamps either side are
+        // still the best account of when those sets happened, and refusing to
+        // advance would corrupt every later interval as well.
+        cursor = logged_at;
+        last_stamp = Some(logged_at);
+    }
+
+    Walk {
+        intervals,
+        discarded,
+        unstamped,
+        last_stamp,
+    }
+}
+
 /// Works out where the session's time went.
 ///
 /// `sets` must be in performed order — which is `position` order, and which the
@@ -161,65 +239,45 @@ pub fn compute(
         return None;
     }
 
-    // Insertion-ordered: `order` remembers where each exercise was first seen so
-    // the output can be walked back in the order the athlete performed it, while
-    // the map does the accumulating.
+    let found = walk(started_at, sets);
+
+    // Insertion-ordered: `order` remembers where each exercise was first seen
+    // so the output can be walked back in the order the athlete performed it,
+    // while the map does the accumulating.
     let mut totals: HashMap<String, (i64, u32)> = HashMap::new();
     let mut order: Vec<(String, String)> = Vec::new();
 
     let mut lead_in = None;
     let mut longest: Option<LongestInterval> = None;
-    let mut discarded = 0_u32;
-    let mut unstamped = 0_u32;
 
-    // The cursor is the last *believable* stamp, which is not always the
-    // previous set's. A set with no stamp leaves it where it was, so the next
-    // stamped set measures across the gap rather than losing its interval too.
-    let mut cursor = started_at;
-    let mut last_stamp: Option<DateTime<Utc>> = None;
+    for interval in &found.intervals {
+        let (position, set) = &sets[interval.index];
 
-    for (position, set) in sets {
-        let Some(logged_at) = set.logged_at else {
-            unstamped += 1;
+        if interval.lead_in {
+            // The first stamped set closes the lead-in, and the lead-in is not
+            // work: it is not attributed to any exercise.
+            lead_in = Some(interval.seconds);
             continue;
-        };
-
-        let seconds = (logged_at - cursor).num_seconds();
-        let believable = (0..=INTERVAL_CEILING).contains(&seconds);
-
-        if believable {
-            if last_stamp.is_none() {
-                // The first stamped set closes the lead-in, and the lead-in is
-                // not work: it is not attributed to any exercise.
-                lead_in = Some(seconds);
-            } else {
-                let key = set.exercise.clone();
-                let entry = totals.entry(key.clone()).or_insert_with(|| {
-                    order.push((key.clone(), set.label.clone()));
-                    (0, 0)
-                });
-                entry.0 += seconds;
-                entry.1 += 1;
-
-                if longest.as_ref().is_none_or(|best| seconds > best.seconds) {
-                    longest = Some(LongestInterval {
-                        seconds,
-                        position: *position,
-                        label: set.label.clone(),
-                    });
-                }
-            }
-        } else {
-            discarded += 1;
         }
 
-        // The cursor advances to this stamp whether or not the interval was
-        // believable. A clock jump corrupts the interval that straddles it; the
-        // stamps on either side are still the best account of when those sets
-        // happened, and refusing to advance would corrupt every later interval
-        // as well.
-        cursor = logged_at;
-        last_stamp = Some(logged_at);
+        let key = set.exercise.clone();
+        let entry = totals.entry(key.clone()).or_insert_with(|| {
+            order.push((key.clone(), set.label.clone()));
+            (0, 0)
+        });
+        entry.0 += interval.seconds;
+        entry.1 += 1;
+
+        if longest
+            .as_ref()
+            .is_none_or(|best| interval.seconds > best.seconds)
+        {
+            longest = Some(LongestInterval {
+                seconds: interval.seconds,
+                position: *position,
+                label: set.label.clone(),
+            });
+        }
     }
 
     let exercises = order
@@ -238,13 +296,73 @@ pub fn compute(
     Some(SessionTiming {
         lead_in_seconds: lead_in,
         tail_seconds: ended_at
-            .zip(last_stamp)
+            .zip(found.last_stamp)
             .map(|(end, last)| (end - last).num_seconds())
             .filter(|seconds| *seconds >= 0),
         exercises,
         longest_interval: longest,
-        discarded_intervals: discarded,
-        unstamped_sets: unstamped,
+        discarded_intervals: found.discarded,
+        unstamped_sets: found.unstamped,
+    })
+}
+
+/// The shape of one session's intervals: fastest, typical, slowest.
+#[derive(Debug, Serialize, ToSchema, PartialEq)]
+pub struct IntervalSpread {
+    pub min_seconds: i64,
+    /// Median, not mean. One interval spent talking to somebody moves a mean
+    /// of twelve by a minute, and the tail of this distribution is not signal —
+    /// the same rule, and the same reason, as [`crate::pace`].
+    pub median_seconds: i64,
+    pub max_seconds: i64,
+    /// Intervals thrown away as impossible, so a screen showing these figures
+    /// can say why they account for less than the wall clock.
+    pub discarded: u32,
+}
+
+/// The min, median and max of the intervals between answered sets.
+///
+/// `None` when fewer than one interval survives — a session with a single
+/// stamp has no gap between two sets to describe, and an empty spread would be
+/// a shape drawn around nothing.
+///
+/// **The lead-in is excluded.** It is walking in, changing and warming up
+/// rather than a gap between two lifts, and D-10 holds it apart so it cannot
+/// be ranked against work.
+///
+/// Reads the same [`walk`] [`compute`] does, so there is one definition of a
+/// believable gap and one cursor discipline. This function only takes the
+/// shape of what that walk found.
+pub fn spread(started_at: DateTime<Utc>, sets: &[(u16, TimedSet)]) -> Option<IntervalSpread> {
+    let found = walk(started_at, sets);
+
+    let mut intervals: Vec<i64> = found
+        .intervals
+        .iter()
+        .filter(|interval| !interval.lead_in)
+        .map(|interval| interval.seconds)
+        .collect();
+
+    if intervals.is_empty() {
+        return None;
+    }
+
+    intervals.sort_unstable();
+    let middle = intervals.len() / 2;
+    let median = if intervals.len() % 2 == 1 {
+        intervals[middle]
+    } else {
+        // The mean of the middle pair, matching `pace::median`. An even sample
+        // has no single middle and taking either neighbour would make the
+        // figure depend on which side of the list the tie fell.
+        (intervals[middle - 1] + intervals[middle]) / 2
+    };
+
+    Some(IntervalSpread {
+        min_seconds: intervals[0],
+        median_seconds: median,
+        max_seconds: intervals[intervals.len() - 1],
+        discarded: found.discarded,
     })
 }
 
@@ -397,5 +515,49 @@ mod tests {
         let timing = compute(at(0, 0), Some(at(5, 30)), &sets).expect("stamped");
 
         assert_eq!(timing.tail_seconds, Some(150));
+    }
+
+    #[test]
+    fn the_spread_is_min_median_max_of_the_believable_intervals() {
+        // Lead-in 0:00 -> 2:00, then gaps of 60, 180, 120 seconds.
+        let sets = vec![
+            (0_u16, set("squat", Some(at(2, 0)))),
+            (1, set("squat", Some(at(3, 0)))),
+            (2, set("squat", Some(at(6, 0)))),
+            (3, set("squat", Some(at(8, 0)))),
+        ];
+
+        let spread = spread(at(0, 0), &sets).expect("stamps exist");
+
+        // The lead-in is not an interval between sets and is excluded — D-10 holds
+        // it apart precisely so it cannot be ranked against a lift.
+        assert_eq!(spread.min_seconds, 60);
+        assert_eq!(spread.median_seconds, 120);
+        assert_eq!(spread.max_seconds, 180);
+        assert_eq!(spread.discarded, 0);
+    }
+
+    #[test]
+    fn the_spread_counts_what_it_could_not_believe() {
+        // A clock jump backwards, and a gap over the ceiling. Both readings come
+        // off the shared walk, so this pins the walk rather than an agreement.
+        let sets = vec![
+            (0_u16, set("squat", Some(at(1, 0)))),
+            (1, set("squat", Some(at(0, 30)))),
+            (2, set("squat", Some(at(40, 0)))),
+            (3, set("squat", Some(at(42, 0)))),
+        ];
+
+        let spread = spread(at(0, 0), &sets).expect("stamps exist");
+        let computed = compute(at(0, 0), Some(at(45, 0)), &sets).expect("stamps exist");
+
+        assert_eq!(spread.discarded, 2);
+        assert_eq!(spread.discarded, computed.discarded_intervals);
+    }
+
+    #[test]
+    fn there_is_no_spread_without_a_gap_between_two_sets() {
+        let sets = vec![(0_u16, set("squat", Some(at(2, 0))))];
+        assert!(spread(at(0, 0), &sets).is_none());
     }
 }
