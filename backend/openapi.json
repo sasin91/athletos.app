@@ -1195,6 +1195,37 @@
           }
         }
       },
+      "IntervalSpread": {
+        "type": "object",
+        "description": "The shape of one session's intervals: fastest, typical, slowest.",
+        "required": [
+          "min_seconds",
+          "median_seconds",
+          "max_seconds",
+          "discarded"
+        ],
+        "properties": {
+          "discarded": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Intervals thrown away as impossible, so a screen showing these figures\ncan say why they account for less than the wall clock.",
+            "minimum": 0
+          },
+          "max_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "median_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Median, not mean. One interval spent talking to somebody moves a mean\nof twelve by a minute, and the tail of this distribution is not signal —\nthe same rule, and the same reason, as [`crate::pace`]."
+          },
+          "min_seconds": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Jwk": {
         "type": "object",
         "description": "An Ed25519 public key as an OKP JWK (RFC 8037).",
@@ -1962,6 +1993,63 @@
           }
         }
       },
+      "SessionReport": {
+        "type": "object",
+        "description": "What the finish screen says, computed here so no client has to (D-11).",
+        "required": [
+          "load_moved_kg",
+          "load_prescribed_kg",
+          "sets_over",
+          "sets_under",
+          "duration_seconds"
+        ],
+        "properties": {
+          "average_duration_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The athlete's average across this **enrolment's** other recorded\nsessions — same block, same training max, so it compares like with\nlike. `None` below three of them, the same rule and the same reason as\n[`crate::pace`]: not shown before there is data to compute it from."
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "intervals": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/IntervalSpread",
+                "description": "`None` when no two sets carry believable stamps."
+              }
+            ]
+          },
+          "load_moved_kg": {
+            "type": "number",
+            "format": "double",
+            "description": "Summed over **done sets only**, as performed."
+          },
+          "load_prescribed_kg": {
+            "type": "number",
+            "format": "double",
+            "description": "Summed over the same done sets, as asked for. The gap between the two\nis weight drift, uncontaminated by work not done."
+          },
+          "sets_over": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Done sets lifted heavier than prescribed. The count is the part that\ncan be acted on: a kilogram total alone does not distinguish one wild\nset from twelve small ones.",
+            "minimum": 0
+          },
+          "sets_under": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "SessionTiming": {
         "type": "object",
         "description": "Where one session's time went.",
@@ -2227,7 +2315,8 @@
           "week",
           "day",
           "duplicate",
-          "progress"
+          "progress",
+          "summary"
         ],
         "properties": {
           "day": {
@@ -2250,6 +2339,10 @@
           "progress": {
             "$ref": "#/components/schemas/ProgressView",
             "description": "Progress *after* the submit. A retry reports the same numbers the first\nattempt did, which is the whole point."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SessionReport",
+            "description": "What this session cost, and how it compares (D-08, amended).\n\nPresent on a retry too, and computed the same way — see `recorded_report`."
           },
           "week": {
             "type": "integer",

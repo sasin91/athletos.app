@@ -55,6 +55,7 @@ use athletos_training::{
 
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
+use crate::report::{self, ReportedSet, SessionReport};
 use crate::routes::enrollments::{unknown_program, ProgressView};
 use crate::routes::maxes::MAX_WEIGHT_KG;
 use crate::state::AppState;
@@ -269,6 +270,10 @@ pub struct WorkoutReceipt {
     /// Progress *after* the submit. A retry reports the same numbers the first
     /// attempt did, which is the whole point.
     pub progress: ProgressView,
+    /// What this session cost, and how it compares (D-08, amended).
+    ///
+    /// Present on a retry too, and computed the same way — see `recorded_report`.
+    pub summary: SessionReport,
 }
 
 /// One row of the history list.
@@ -458,11 +463,12 @@ pub async fn submit(
             })?;
 
         let progress = program.progress(&program_state)?;
+        let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
         tx.commit().await?;
 
         return Ok((
             StatusCode::OK,
-            Json(receipt(&body, week, day, true, progress.into())),
+            Json(receipt(&body, week, day, true, progress.into(), summary)),
         ));
     };
 
@@ -505,11 +511,12 @@ pub async fn submit(
             })?;
 
         let progress = program.progress(&program_state)?;
+        let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
         tx.commit().await?;
 
         return Ok((
             StatusCode::OK,
-            Json(receipt(&body, week, day, true, progress.into())),
+            Json(receipt(&body, week, day, true, progress.into(), summary)),
         ));
     }
 
@@ -547,11 +554,138 @@ pub async fn submit(
         .execute(&mut *tx)
         .await?;
 
+    let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
     tx.commit().await?;
 
     Ok((
         StatusCode::CREATED,
-        Json(receipt(&body, week, day, false, progress.into())),
+        Json(receipt(&body, week, day, false, progress.into(), summary)),
+    ))
+}
+
+/// The athlete's average session length on this enrolment, in seconds.
+///
+/// Excludes the session being reported, so the comparison is against history
+/// rather than diluted by itself, and excludes `auto_closed` sessions — a
+/// three-hour workout closed by the stale-session sweep is a measurement of an
+/// afternoon, not of a session (D-08).
+///
+/// `None` below three, which is D-10's rule for pace and is here for the same
+/// reason: two would let one long session *be* the average rather than merely
+/// be in it.
+async fn average_duration(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    enrollment_id: Uuid,
+    excluding: Uuid,
+) -> ApiResult<Option<i64>> {
+    let row: Option<(i64, Option<f64>)> = sqlx::query_as(
+        "select count(*), avg(extract(epoch from (ended_at - started_at)))::float8
+         from workouts
+         where enrollment_id = $1
+           and id <> $2
+           and ended_at is not null
+           and outcome <> 'auto_closed'",
+    )
+    .bind(enrollment_id)
+    .bind(excluding)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    Ok(match row {
+        Some((count, Some(average))) if count >= 3 => Some(average.round() as i64),
+        _ => None,
+    })
+}
+
+/// One row of `workout_sets`, as `recorded_report` needs it: position, the
+/// numbers prescribed and performed, whether the set was done, and its stamp.
+///
+/// Deliberately not [`StoredSet`] — that row carries `note` and
+/// `drift_reason`, which this query has no use for.
+type ReportedRow = (
+    i16,
+    String,
+    f64,
+    i16,
+    Option<f64>,
+    Option<i16>,
+    String,
+    Option<DateTime<Utc>>,
+);
+
+/// The ending, built from what is recorded rather than from what was sent.
+///
+/// Read back inside the same transaction, on every path including both retry
+/// branches. One piece of code and one guarantee: the ending describes the
+/// workout that is in the database. Building it from `body` would have saved a
+/// query and cost that guarantee — a client reusing an id for different content
+/// would be shown numbers about something that was never stored.
+async fn recorded_report(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workout_id: Uuid,
+    enrollment_id: Uuid,
+) -> ApiResult<SessionReport> {
+    let (started_at, ended_at): (DateTime<Utc>, Option<DateTime<Utc>>) =
+        sqlx::query_as("select started_at, ended_at from workouts where id = $1")
+            .bind(workout_id)
+            .fetch_one(&mut **tx)
+            .await?;
+
+    // `unique (workout_id, "position")` is both the ordering and the index —
+    // and the order matters, because the walk that produces intervals is a
+    // walk in performed order.
+    let rows: Vec<ReportedRow> = sqlx::query_as(
+        "select \"position\", exercise, prescribed_weight::float8, prescribed_reps,
+                    actual_weight::float8, actual_reps, status, logged_at
+             from workout_sets
+             where workout_id = $1
+             order by \"position\"",
+    )
+    .bind(workout_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let reported: Vec<ReportedSet> = rows
+        .iter()
+        .map(
+            |(_, _, prescribed_weight, prescribed_reps, actual_weight, actual_reps, status, _)| {
+                ReportedSet {
+                    prescribed_weight: *prescribed_weight,
+                    prescribed_reps: u32::try_from(*prescribed_reps).unwrap_or_default(),
+                    actual_weight: *actual_weight,
+                    actual_reps: actual_reps.map(|reps| u32::try_from(reps).unwrap_or_default()),
+                    done: status == "done",
+                }
+            },
+        )
+        .collect();
+
+    // `label` is the raw key and is never read: `spread` takes the shape of the
+    // intervals and does not attribute them to exercises. Resolving labels from
+    // the registry here would be work with no consumer.
+    let timed: Vec<(u16, TimedSet)> = rows
+        .iter()
+        .map(|(position, exercise, _, _, _, _, _, logged_at)| {
+            (
+                u16::try_from(*position).unwrap_or_default(),
+                TimedSet {
+                    exercise: exercise.clone(),
+                    label: exercise.clone(),
+                    logged_at: *logged_at,
+                },
+            )
+        })
+        .collect();
+
+    let average = average_duration(tx, enrollment_id, workout_id).await?;
+
+    Ok(report::compute(
+        ended_at
+            .map(|end| (end - started_at).num_seconds())
+            .unwrap_or_default(),
+        average,
+        &reported,
+        timing::spread(started_at, &timed),
     ))
 }
 
@@ -561,6 +695,7 @@ fn receipt(
     day: i16,
     duplicate: bool,
     progress: ProgressView,
+    summary: SessionReport,
 ) -> WorkoutReceipt {
     WorkoutReceipt {
         id: body.id,
@@ -569,6 +704,7 @@ fn receipt(
         day: u32::try_from(day).unwrap_or_default(),
         duplicate,
         progress,
+        summary,
     }
 }
 

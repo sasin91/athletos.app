@@ -108,6 +108,8 @@ impl Modify for BearerToken {
         crate::timing::SessionTiming,
         crate::timing::ExerciseSpend,
         crate::timing::LongestInterval,
+        crate::timing::IntervalSpread,
+        crate::report::SessionReport,
     )),
     tags(
         (name = "health", description = "Liveness and readiness probes"),

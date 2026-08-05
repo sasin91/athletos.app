@@ -2428,3 +2428,98 @@ async fn a_reason_on_a_set_that_did_not_drift_is_refused(pool: PgPool) {
         .await
         .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+#[sqlx::test]
+async fn a_retry_reports_the_same_ending_as_the_first_submit(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let body = logged_with_drift(Uuid::now_v7(), enrollment, &session, 5.0, "too_easy");
+
+    let first: serde_json::Value = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .json();
+
+    let response = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await;
+    response.assert_status(StatusCode::OK);
+    let retry: serde_json::Value = response.json();
+
+    assert_eq!(first["duplicate"], json!(false));
+    assert_eq!(retry["duplicate"], json!(true));
+
+    // A session that finally lands three days later is exactly the one whose
+    // numbers the athlete has not seen. A blank ending on the retry would be
+    // the worst possible time to have one.
+    assert_eq!(first["summary"], retry["summary"]);
+    assert_eq!(first["summary"]["sets_over"], json!(1));
+    assert_eq!(first["summary"]["sets_under"], json!(0));
+}
+
+#[sqlx::test]
+async fn the_ending_has_no_average_before_three_sessions(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    for day in 1..=2 {
+        let session = next_session(&server, &token, enrollment).await;
+        let sets = session["prescribed_sets"].as_array().unwrap().len();
+        log_a_session_lasting(&server, &token, enrollment, &session, day, 3_600, sets).await;
+    }
+
+    let session = next_session(&server, &token, enrollment).await;
+    let receipt: serde_json::Value = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&logged_as_prescribed(Uuid::now_v7(), enrollment, &session))
+        .await
+        .json();
+
+    // Two prior sessions would let one long day *be* the average rather than
+    // merely be in it — D-10's rule for pace, here for the same reason.
+    assert_eq!(receipt["summary"]["average_duration_seconds"], json!(null));
+}
+
+#[sqlx::test]
+async fn the_ending_compares_against_the_sessions_before_it(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    for day in 1..=3 {
+        let session = next_session(&server, &token, enrollment).await;
+        let sets = session["prescribed_sets"].as_array().unwrap().len();
+        log_a_session_lasting(&server, &token, enrollment, &session, day, 3_600, sets).await;
+    }
+
+    // The fourth runs ninety minutes. `logged_as_prescribed` hard-codes an
+    // hour, so both stamps are replaced.
+    let session = next_session(&server, &token, enrollment).await;
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["started_at"] = json!("2026-08-04T09:00:00Z");
+    body["ended_at"] = json!("2026-08-04T10:30:00Z");
+
+    let receipt: serde_json::Value = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .json();
+
+    assert_eq!(receipt["summary"]["duration_seconds"], json!(5_400));
+    // The average of the three before it, and not diluted by its own ninety
+    // minutes — the comparison is against history.
+    assert_eq!(receipt["summary"]["average_duration_seconds"], json!(3_600));
+}
