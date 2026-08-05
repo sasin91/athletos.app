@@ -95,38 +95,41 @@ D-03 exists precisely so that no consumer knows which program it is holding. It
 would be correct until the day a second adaptive program shipped, and wrong
 silently after it.
 
-### `workout_readouts`
+### It comes from `enrollment_advances`, and needs no table of its own
 
-A new table, written at submit from whatever `readout()` returns:
+> **Simplified during design, after a question that was sharper than the answer
+> it got.** This section originally specified a `workout_readouts` table written
+> at submit. It was redundant before it was written.
 
-```sql
-create table workout_readouts (
-    workout_id  uuid    not null references workouts (id) on delete cascade,
-    exercise    text    not null,
-    label       text    not null,
-    weight      numeric(6,2) not null,
+`readout(&self, state: &State) -> Result<Vec<Readout>>` is a **pure function of
+state**. [What the fold did](2026-08-05-what-the-fold-did-design.md) already
+records `state_before` for every advance, keyed by the workout that caused it.
+So every historical training max is `program.readout(&state_before)` — derived,
+not stored, from a table that exists for another reason entirely.
 
-    primary key (workout_id, exercise)
-);
-```
+Storing it as well would have materialised a fact the other table implies, which
+is the thing [section 4](#indicators-and-why-they-are-a-response-shape-rather-than-a-table)
+declines for every other figure on this screen.
 
-**A table rather than `jsonb` on `workouts`, deliberately.** The obvious
-precedent is `enrollments.state`, and it is the wrong one: that column is JSON
-because it is opaque and only the program may read it. A readout is the opposite
-— `Readout` exists *to be displayed*, it carries a label naming what kind of
-number it is precisely so a consumer can show it, and storing display data
-opaquely would be copying a decision from the case that argues against it.
+**`state_before`, and the name is the point.** The first draft said "written at
+submit from whatever `readout()` returns" and never said whether that was before
+or after `advance()`. It must be before: the number the session was actually
+performed under, not the one the next session will use. Reading it off
+`state_before` makes that a property of the column rather than a sentence
+somebody has to remember.
 
-`label` is stored beside the weight rather than resolved at read time, because
-it is program knowledge with nowhere else to live (D-03): only the program knows
-whether it took 90%, took the number straight, or has been moving it every cycle.
-A label recomputed later from today's registry would relabel history.
+**Two costs, both accepted.** The labels and weights come from today's
+`readout()` applied to old state, so a program that changed what it reports
+would re-label history — a display reinterpretation rather than a re-fold, and
+consistent history is what a chart wants anyway, by the same argument as the
+estimate. And `readout()` returns a `Result`: a program dropped from the
+registry yields no points at all, where a stored row would have survived it.
+That is the same trade `routes::workouts` already takes when it falls back to
+the program key for a name.
 
-**Nothing here knows which program it holds.** The program reports; this stores.
-
-**Sessions already logged get no row, ever.** The line starts the day this
-ships and fills forward. That is the same shape as `logged_at` in D-10 and it is
-honest for the same reason: a backfilled value would be a number nobody measured.
+**The line starts where the advances start.** Sessions logged before that table
+existed have no `state_before` and therefore no training max, ever — the same
+shape as `logged_at` in D-10, and honest for the same reason.
 
 ---
 
@@ -199,8 +202,8 @@ says one is needed. Materialising first and then revising a formula means
 reconciling a table against a rule that has moved, with no marker for where.
 
 `training_max` is nullable per point — every session logged before
-`workout_readouts` existed has none, and the chart must draw a gap rather than a
-zero. `estimate` is nullable for the same reason from the other direction: a
+`enrollment_advances` existed has no `state_before` to read a training max from,
+and the chart must draw a gap rather than a zero. `estimate` is nullable for the same reason from the other direction: a
 session where every set of that lift was skipped, or where the only sets
 performed were above the rep ceiling, contributes no estimate.
 

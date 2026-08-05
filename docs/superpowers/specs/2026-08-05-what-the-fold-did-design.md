@@ -234,9 +234,16 @@ from it. It is an audit of one function.
 expensive half of event sourcing, and section 2 declines it. `engine_version` is
 a note to a human, not a dispatch key.
 
-**Not related to `workout_readouts`** in [Over time](2026-08-05-over-time-design.md),
-and worth saying so before somebody asks why both exist. `state` is opaque under
-D-03 and only the program may interpret it, so a training max cannot be read out
-of `state_before` without exactly the program knowledge that the other table
-exists to avoid. One stores what the fold did; the other stores what the program
-says it is currently working from.
+**Not only an audit tool, as it turned out.** [Over time](2026-08-05-over-time-design.md)
+originally specified a second table to record the training max per session. It
+does not need one: `readout()` is a pure function of state, so
+`program.readout(&state_before)` recovers what the program was prescribing from
+during any recorded session. That spec now derives its training-max line from
+this table.
+
+This is worth noting as a caution rather than a triumph. A table justified by
+one purpose acquiring a second is how tables end up serving neither well. The
+guard is that nothing in this spec bends toward the chart: `state_before` and
+`state_after` are here because the fold needs auditing, the verifier reads them
+structurally and cares nothing for labels, and if the chart's needs ever pull
+the schema away from that, the chart gets its own table back.
