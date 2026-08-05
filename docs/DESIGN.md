@@ -547,18 +547,38 @@ Design rule: **honesty must never cost more than dishonesty.**
 >
 > > **too easy · too heavy · bar was loaded · felt off**
 >
-> **This is not the thing the paragraphs above forbid**, and the distinction is
-> not a fine one. "Never blocked and never warned about mid-session" is a
-> statement about what happens when the athlete goes heavier, and the chips do
-> neither: nothing is refused, nothing is flagged, no chip disputes the number,
-> and the row does not exist until the weight already differs — it never
-> appears before a decision, only after one. It is not a modal and it does not
-> take the screen. **No tap is a valid answer**, and Log stays exactly one tap
-> whether a chip was tapped or not, which is this decision's own closing rule
-> satisfied rather than bent: saying what happened costs the same as saying
-> nothing. Structurally it is D-08's single cut-short question asked on the
-> other axis of drift, and made cheaper still, because that one is answered
-> before the session can end and this one can be walked past.
+> **This is not the thing the paragraphs above forbid**, and the two sentences
+> that do the forbidding have to be answered separately. The first is *"Going
+> heavier means **editing the number** — possible, deliberate, never blocked and
+> never warned about mid-session"*, and it is a statement about what the app
+> does when the athlete goes heavier. The chips do none of it: nothing is
+> refused, nothing is flagged, no chip disputes the number, and the row does not
+> exist until the weight already differs, so it never appears before a decision,
+> only after one.
+>
+> **The second sentence is the harder one and is answered on its own terms**,
+> because the chips appear exactly where it says nothing may: *"Feedback is
+> **retrospective and calm** — 'you went over on 6 of 12 sets last week' — never
+> a modal at the moment of lifting."* Observing that the row is not a modal
+> answers the weakest word in that sentence. The load-bearing ones are
+> *feedback* and *at the moment of lifting*, and the answer is that the row is
+> not feedback. That sentence governs the product speaking to the athlete —
+> reading their own numbers back at them, which is the thing that has to wait
+> until it can be read against something, and which is why the example in it is
+> a count from last week. The chips are the athlete speaking to the product.
+> Nothing in the row reports, counts, compares or scores; no chip contains a
+> number; there is nothing in it the athlete did not just decide themselves. And
+> it arrives only after the decision to go heavier has been taken — it annotates
+> a choice rather than intervening in one, which is the difference between a
+> question and a verdict. So that sentence stands unamended, and the row is not
+> an exception carved out of it.
+>
+> **No tap is a valid answer**, and Log stays exactly one tap whether a chip was
+> tapped or not, which is this decision's own closing rule satisfied rather than
+> bent: saying what happened costs the same as saying nothing. Structurally it
+> is D-08's single cut-short question asked on the other axis of drift, and made
+> cheaper still, because that one is answered before the session can end and
+> this one can be walked past.
 >
 > **Nothing is pre-selected, and a default would have been the version of this
 > worth refusing.** *Too easy* is the first chip, and making the first chip the
@@ -772,9 +792,19 @@ just finished lifting; the dashboard is one tap away and will still be there.
 > on the `WorkoutReceipt` the phone already reads to find out whether the
 > submit landed. A second client parses a field; it does not reimplement a sum,
 > which is the whole of D-11. A retry gets the same summary rather than a blank
-> screen, recomputed from the stored rows, because a session that finally lands
-> three days later is exactly the one whose numbers nobody has seen — one extra
-> read on the rare path.
+> screen, because a session that finally lands three days later is exactly the
+> one whose numbers nobody has seen.
+>
+> **The summary is read back out of the database, and that costs a query on
+> every submission.** Not on the retry path — on all three of them: the ordinary
+> accepted submit, the retry, and a submit arriving against an enrolment that
+> has already closed. The alternative was to compute it from the request body,
+> which is free and which the sets are sitting in anyway. What the query buys is
+> that the ending describes the workout that is *stored*: a client that reuses
+> an id for different content is shown the numbers that were recorded rather
+> than numbers about a session nobody has. Given D-09 makes the retry a routine
+> event rather than an error path, an ending that could disagree with the record
+> it links to would be worse than the query is expensive.
 >
 > **The loads count done sets only**, so the gap between moved and prescribed
 > is weight drift and is not contaminated by work not done. The two axes stay
