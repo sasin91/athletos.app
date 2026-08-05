@@ -479,10 +479,16 @@ export function plateChangeFor(session: LocalSession, position: number): PlateCh
 /**
  * Whether the bar already holds this set's weight (D-04).
  *
- * True when the previous *answered* set of the same exercise was lifted at the
+ * True when the previous *done* set of the same exercise was lifted at the
  * same weight as this one is about to be. Pure equality between two numbers
  * this module already holds — no plate arithmetic reaches the client and none
  * is coming (D-11).
+ *
+ * Deliberately not a skipped set, even at a matching weight: a skip leaves
+ * `actualWeight` at whatever was pre-filled or carried, which is a number
+ * nobody put on the bar. `plateChangeFor` already treats a skip this way when
+ * deciding whether a *later* plan is still live; this function has to agree,
+ * or the two would tell different stories about the same skipped set.
  *
  * This is what keeps the plate guidance alive once a weight has been edited
  * and carried: `plateChangeFor` goes `null` for every deviated set, and
@@ -502,7 +508,7 @@ export function barUnchangedFrom(session: LocalSession, position: number): boole
 			(candidate) =>
 				candidate.exercise === set.exercise &&
 				candidate.position < position &&
-				candidate.status !== 'pending'
+				candidate.status === 'done'
 		)
 		.sort((a, b) => a.position - b.position)
 		.at(-1);
@@ -513,14 +519,17 @@ export function barUnchangedFrom(session: LocalSession, position: number): boole
 /**
  * What the finish screen says, counted from the session that was just sent.
  *
- * Counting only. There is deliberately **no drift total and no timing
- * breakdown** here: the history page already marks drift per row and does not
- * total it, on the grounds that a total computed in a client is one the next
- * client has to compute again (D-07, D-11) — and D-13 puts drift beside the
- * e1RM trend on purpose, because progress is never shown without its cost. A
- * drift number invented here would be the first place in the product it
- * appears alone. The timing aggregation belongs to `timing.rs` for the same
- * reason, and both are one tap away.
+ * Counting only — `done`, `skipped`, `pending`, a duration measured on the
+ * client's own clock. Deliberately no drift total and no timing breakdown
+ * *here*: those are computed once, in Rust, off the numbers that just landed
+ * (D-07, D-11), and arrive on the receipt (`WorkoutReceipt`) once the submit
+ * is accepted, which is what the finish screen actually renders alongside
+ * this summary. Duplicating that arithmetic in a client is a total the next
+ * client would have to compute again for itself. The reasoning that kept a
+ * drift number out of this type still holds — it would be invented here,
+ * with no prescription to check it against — only its conclusion moved: the
+ * total now exists, computed where the prescription already lives, not in
+ * this count.
  */
 export type SessionSummary = {
 	durationSeconds: number;

@@ -128,13 +128,19 @@ plate arithmetic reaches the client** (D-11) and none is precomputed
 server-side.
 
 **The same-weight rule.** When this set's `actualWeight` equals the
-`actualWeight` of the previous *answered* set of the same exercise, the screen
+`actualWeight` of the previous *done* set of the same exercise, the screen
 says **bar is already loaded**. It is exactly true and it is exactly the
 instruction. It draws no plate stack, because on an edited weight nobody
 computed one — the words were always the instruction and the picture was the
 nicety. Guarded on `set.plateChange !== null`, which is how the client knows
 this exercise is loaded with plates at all; a pair of dumbbells at the same
 weight must not be told the bar is loaded.
+
+*Done*, not merely answered: a skipped set answers the question of whether it
+happened without answering what the bar held, since `actualWeight` on a skip
+is only ever the pre-filled or carried number nobody touched. Counting a skip
+here would let a skipped backoff set — sitting at a weight the previous, real
+set never carried — tell the athlete the bar is already at it.
 
 **The dimmed fallback is dropped when, and only when, this set's
 `actualWeight !== prescribedWeight`.** That is precisely the case where the

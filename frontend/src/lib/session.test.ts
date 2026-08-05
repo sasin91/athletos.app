@@ -682,4 +682,13 @@ describe('barUnchangedFrom', () => {
 		const logged = logSet(committed, 3, '2026-08-05T10:30:00Z');
 		expect(barUnchangedFrom(logged, 3)).toBe(false);
 	});
+
+	it('is false when the previous set at the same weight was skipped rather than lifted', () => {
+		// A skip leaves `actualWeight` at whatever was pre-filled — untouched,
+		// not a record of what the bar holds. Position 0 skipped at its own
+		// prescription (97.5) must not tell position 1, sitting at the same
+		// 97.5, that the bar is already loaded: nobody touched it.
+		const skipped = skipSet(committed, 0, '2026-08-05T10:05:00Z');
+		expect(barUnchangedFrom(skipped, 1)).toBe(false);
+	});
 });
