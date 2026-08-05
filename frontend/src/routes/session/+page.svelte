@@ -5,7 +5,9 @@
 	import { formatClock, formatElapsed } from '$lib/time';
 	import { projectedFinish } from '$lib/pace';
 	import {
+		barUnchangedFrom,
 		CUT_REASONS,
+		DRIFT_REASONS,
 		editSet,
 		intervalBefore,
 		isComplete,
@@ -14,6 +16,7 @@
 		noteSet,
 		plateChangeFor,
 		resetSet,
+		setDriftReason,
 		setsDone,
 		setsRemaining,
 		skipSet,
@@ -242,7 +245,11 @@
 									line correctly, because it carries a `plate_change` with an
 									empty `plates_per_side` rather than no change at all.
 								-->
-								{#if change || set.platesPerSide.length > 0}
+								{@const unchanged = barUnchangedFrom(session, set.position)}
+								{@const showPrescribed =
+									set.actualWeight === set.prescribedWeight && set.platesPerSide.length > 0}
+
+								{#if change || unchanged || showPrescribed}
 									<div class="mt-1 mb-1">
 										{#if change}
 											<!--
@@ -272,13 +279,23 @@
 											{/if}
 
 											<Plates plates={change.plates_per_side} />
+										{:else if unchanged}
+											<!--
+												The plan is gone because this weight was edited, but
+												the bar is where the last set left it and that is the
+												whole instruction. No stack is drawn: nobody computed
+												one for an edited weight, and the words were always
+												the instruction while the picture was the nicety
+												(D-04, D-11).
+											-->
+											<p class="eyebrow">bar is already loaded</p>
 										{:else}
 											<!--
-												The plan assumed a bar that is not the one in front of
-												them, so it is not shown as an instruction. The
-												breakdown of the prescribed weight still is, dimmed and
-												labelled, because it is true about the prescription even
-												when it is not true about the bar.
+												Stale for one of the *other* reasons — an earlier set
+												of this exercise skipped, or logged at a weight other
+												than its own. This set still sits at its own
+												prescription, so the breakdown is true about the
+												weight it names, and it stays dimmed and labelled.
 											-->
 											<div class="opacity-60">
 												<Plates plates={set.platesPerSide} />
@@ -358,6 +375,38 @@
 									<span>reps</span>
 								</label>
 							</div>
+
+							<!--
+								Why the weight changed. Appears only on the set being performed
+								and only once it actually differs; vanishes if it goes back.
+								Nothing is selected, no tap is a valid answer, and Log stays one
+								tap either way — honesty must never cost more than dishonesty
+								(D-07).
+							-->
+							{#if set.position === current && set.actualWeight !== set.prescribedWeight}
+								<fieldset class="flex flex-wrap items-baseline gap-2">
+									<legend class="eyebrow">why</legend>
+									{#each DRIFT_REASONS as reason (reason.value)}
+										<button
+											class="btn btn-xs"
+											class:btn-primary={set.driftReason === reason.value}
+											class:btn-outline={set.driftReason !== reason.value}
+											type="button"
+											aria-pressed={set.driftReason === reason.value}
+											onclick={() =>
+												apply((s) =>
+													setDriftReason(
+														s,
+														set.position,
+														set.driftReason === reason.value ? null : reason.value
+													)
+												)}
+										>
+											{reason.label}
+										</button>
+									{/each}
+								</fieldset>
+							{/if}
 
 							<!--
 								Placed under the current set only, and reopened for a set that
