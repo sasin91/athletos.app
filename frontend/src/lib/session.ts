@@ -23,6 +23,7 @@ export type CutReason = Schemas['CutReason'];
 export type SetStatus = Schemas['SetStatus'];
 export type WorkoutSubmission = Schemas['WorkoutSubmission'];
 export type PlateChange = Schemas['PlateChangeView'];
+export type WorkoutReceipt = Schemas['WorkoutReceipt'];
 
 /**
  * One set, prescribed and actual side by side (D-07).

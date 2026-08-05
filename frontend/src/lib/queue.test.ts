@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { classifyStatus, enqueued, flushQueue } from './queue';
 import type { QueuedWorkout, QueueStore, SendOutcome } from './queue';
-import type { WorkoutSubmission } from './session';
+import type { WorkoutReceipt, WorkoutSubmission } from './session';
 
 function submission(id: string): WorkoutSubmission {
 	return {
@@ -14,6 +14,26 @@ function submission(id: string): WorkoutSubmission {
 		cut_reason: null,
 		notes: null,
 		sets: []
+	};
+}
+
+function receipt(id: string): WorkoutReceipt {
+	return {
+		id,
+		enrollment_id: '00000000-0000-7000-8000-000000000001',
+		week: 1,
+		day: 4,
+		duplicate: false,
+		progress: { completed: 3, total: null },
+		summary: {
+			load_moved_kg: 1000,
+			load_prescribed_kg: 950,
+			sets_over: 1,
+			sets_under: 0,
+			duration_seconds: 3300,
+			average_duration_seconds: null,
+			intervals: null
+		}
 	};
 }
 
@@ -33,8 +53,12 @@ function memoryStore(
 
 describe('classifyStatus', () => {
 	it('treats a duplicate as success, because that is what it is', () => {
-		expect(classifyStatus(201, null)).toEqual({ kind: 'accepted', duplicate: false });
-		expect(classifyStatus(200, null)).toEqual({ kind: 'accepted', duplicate: true });
+		expect(classifyStatus(201, null)).toEqual({
+			kind: 'accepted',
+			duplicate: false,
+			receipt: null
+		});
+		expect(classifyStatus(200, null)).toEqual({ kind: 'accepted', duplicate: true, receipt: null });
 	});
 
 	it('retries what waiting can fix', () => {
@@ -67,7 +91,7 @@ describe('flushQueue', () => {
 		const sent: string[] = [];
 		await flushQueue(store, async (body) => {
 			sent.push(body.id);
-			return { kind: 'accepted', duplicate: false };
+			return { kind: 'accepted', duplicate: false, receipt: null };
 		});
 
 		expect(sent).toEqual(['earlier', 'later']);
@@ -81,7 +105,7 @@ describe('flushQueue', () => {
 
 		const report = await flushQueue(store, async (body) =>
 			body.id === 'landed'
-				? { kind: 'accepted', duplicate: false }
+				? { kind: 'accepted', duplicate: false, receipt: null }
 				: { kind: 'retry', reason: 'no signal' }
 		);
 
@@ -96,7 +120,11 @@ describe('flushQueue', () => {
 	it('drops a duplicate as readily as a fresh accept — the retry is the point', async () => {
 		const store = memoryStore([enqueued(submission('sent-twice'), '2026-07-26T10:00:00Z')]);
 
-		const report = await flushQueue(store, async () => ({ kind: 'accepted', duplicate: true }));
+		const report = await flushQueue(store, async () => ({
+			kind: 'accepted',
+			duplicate: true,
+			receipt: null
+		}));
 
 		expect(report.duplicate).toEqual(['sent-twice']);
 		expect(store.items.size).toBe(0);
@@ -123,11 +151,17 @@ describe('flushQueue', () => {
 		let attempts = 0;
 		const report = await flushQueue(store, async () => {
 			attempts += 1;
-			return { kind: 'accepted', duplicate: false } satisfies SendOutcome;
+			return { kind: 'accepted', duplicate: false, receipt: null } satisfies SendOutcome;
 		});
 
 		expect(attempts).toBe(0);
-		expect(report).toEqual({ accepted: [], duplicate: [], retrying: [], rejected: [] });
+		expect(report).toEqual({
+			accepted: [],
+			duplicate: [],
+			retrying: [],
+			rejected: [],
+			receipts: {}
+		});
 	});
 
 	it('counts attempts across launches rather than resetting them', async () => {
@@ -138,5 +172,40 @@ describe('flushQueue', () => {
 		await flushQueue(store, async () => ({ kind: 'retry', reason: 'still offline' }));
 
 		expect(store.items.get('stubborn')?.attempts).toBe(5);
+	});
+});
+
+describe('receipts', () => {
+	const first = '00000000-0000-7000-8000-0000000000a1';
+	const second = '00000000-0000-7000-8000-0000000000a2';
+
+	it('attributes each receipt to the workout it came back for', async () => {
+		// A flush sends everything outstanding, so an older session landing
+		// beside this one must not put its numbers on this one's ending.
+		const store = memoryStore([
+			enqueued(submission(first), '2026-08-05T10:00:00Z'),
+			enqueued(submission(second), '2026-08-05T11:00:00Z')
+		]);
+
+		const report = await flushQueue(store, async (body) => ({
+			kind: 'accepted',
+			duplicate: false,
+			receipt: receipt(body.id)
+		}));
+
+		expect(report.accepted).toEqual([first, second]);
+		expect(report.receipts[first].id).toBe(first);
+		expect(report.receipts[second].id).toBe(second);
+	});
+
+	it('records no receipt for a submission that did not land', async () => {
+		const store = memoryStore([enqueued(submission(first), '2026-08-05T10:00:00Z')]);
+
+		const report = await flushQueue(store, async () => ({
+			kind: 'retry',
+			reason: 'offline'
+		}));
+
+		expect(report.receipts).toEqual({});
 	});
 });

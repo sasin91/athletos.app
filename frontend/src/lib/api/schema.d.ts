@@ -479,6 +479,16 @@ export interface components {
          * @enum {string}
          */
         CutReason: "out_of_time" | "pain" | "equipment" | "enough";
+        /**
+         * @description Why a set was lifted at something other than the prescribed weight (D-07).
+         *
+         *     Optional in every direction. The chips that produce it are unselected by
+         *     default, no tap is a valid answer, and nothing blocks — a default would
+         *     answer the question on the athlete's behalf and land a claim nobody made in
+         *     the one signal this product exists to read.
+         * @enum {string}
+         */
+        DriftReason: "too_easy" | "too_heavy" | "already_loaded" | "felt_off";
         /** @description One athlete's run of one program. */
         Enrollment: {
             /**
@@ -592,6 +602,26 @@ export interface components {
             /** @example ok */
             status: string;
         };
+        /** @description The shape of one session's intervals: fastest, typical, slowest. */
+        IntervalSpread: {
+            /**
+             * Format: int32
+             * @description Intervals thrown away as impossible, so a screen showing these figures
+             *     can say why they account for less than the wall clock.
+             */
+            discarded: number;
+            /** Format: int64 */
+            max_seconds: number;
+            /**
+             * Format: int64
+             * @description Median, not mean. One interval spent talking to somebody moves a mean
+             *     of twelve by a minute, and the tail of this distribution is not signal —
+             *     the same rule, and the same reason, as [`crate::pace`].
+             */
+            median_seconds: number;
+            /** Format: int64 */
+            min_seconds: number;
+        };
         /** @description An Ed25519 public key as an OKP JWK (RFC 8037). */
         Jwk: {
             /**
@@ -660,6 +690,7 @@ export interface components {
             actual_reps?: number | null;
             /** Format: double */
             actual_weight?: number | null;
+            drift_reason?: null | components["schemas"]["DriftReason"];
             /** @example squat */
             exercise: string;
             /**
@@ -1100,6 +1131,40 @@ export interface components {
             /** @example Military Press */
             label: string;
         };
+        /** @description What the finish screen says, computed here so no client has to (D-11). */
+        SessionReport: {
+            /**
+             * Format: int64
+             * @description The athlete's average across this **enrolment's** other recorded
+             *     sessions — same block, same training max, so it compares like with
+             *     like. `None` below three of them, the same rule and the same reason as
+             *     [`crate::pace`]: not shown before there is data to compute it from.
+             */
+            average_duration_seconds?: number | null;
+            /** Format: int64 */
+            duration_seconds: number;
+            intervals?: null | components["schemas"]["IntervalSpread"];
+            /**
+             * Format: double
+             * @description Summed over **done sets only**, as performed.
+             */
+            load_moved_kg: number;
+            /**
+             * Format: double
+             * @description Summed over the same done sets, as asked for. The gap between the two
+             *     is weight drift, uncontaminated by work not done.
+             */
+            load_prescribed_kg: number;
+            /**
+             * Format: int32
+             * @description Done sets lifted heavier than prescribed. The count is the part that
+             *     can be acted on: a kilogram total alone does not distinguish one wild
+             *     set from twelve small ones.
+             */
+            sets_over: number;
+            /** Format: int32 */
+            sets_under: number;
+        };
         /** @description Where one session's time went. */
         SessionTiming: {
             /**
@@ -1162,6 +1227,7 @@ export interface components {
              *     will ever run over this table.
              */
             actual_weight?: number | null;
+            drift_reason?: null | components["schemas"]["DriftReason"];
             exercise: string;
             /**
              * Format: date-time
@@ -1292,6 +1358,12 @@ export interface components {
              *     attempt did, which is the whole point.
              */
             progress: components["schemas"]["ProgressView"];
+            /**
+             * @description What this session cost, and how it compares (D-08, amended).
+             *
+             *     Present on a retry too, and computed the same way — see `recorded_report`.
+             */
+            summary: components["schemas"]["SessionReport"];
             /**
              * Format: int32
              * @description Where in the program this session sat — decided by the server from the
