@@ -884,7 +884,10 @@ fn logged_set(
         status: SetStatus::parse(&status)?,
         logged_at,
         note,
-        drift_reason: drift_reason.as_deref().map(DriftReason::parse).transpose()?,
+        drift_reason: drift_reason
+            .as_deref()
+            .map(DriftReason::parse)
+            .transpose()?,
     })
 }
 

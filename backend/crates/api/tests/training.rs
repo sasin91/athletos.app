@@ -2365,7 +2365,9 @@ async fn a_drift_reason_round_trips_to_the_history(pool: PgPool) {
     server
         .post("/v1/workouts")
         .authorization_bearer(&token)
-        .json(&logged_with_drift(id, enrollment, &session, 5.0, "too_easy"))
+        .json(&logged_with_drift(
+            id, enrollment, &session, 5.0, "too_easy",
+        ))
         .await
         .assert_status(StatusCode::CREATED);
 

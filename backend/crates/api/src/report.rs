@@ -121,7 +121,11 @@ mod tests {
         // Two done sets at 100x5, one skipped. The skipped set contributes to
         // neither total, so the gap between them is pure weight drift and not
         // contaminated by work not done — D-08's two axes stay apart.
-        let sets = [done(95.0, 100.0, 5), done(95.0, 100.0, 5), not_done(95.0, 5)];
+        let sets = [
+            done(95.0, 100.0, 5),
+            done(95.0, 100.0, 5),
+            not_done(95.0, 5),
+        ];
         let report = compute(3_600, None, &sets, None);
 
         assert_eq!(report.load_moved_kg, 1_000.0);
@@ -130,7 +134,11 @@ mod tests {
 
     #[test]
     fn over_and_under_are_counted_separately() {
-        let sets = [done(95.0, 100.0, 5), done(95.0, 90.0, 5), done(95.0, 95.0, 5)];
+        let sets = [
+            done(95.0, 100.0, 5),
+            done(95.0, 90.0, 5),
+            done(95.0, 95.0, 5),
+        ];
         let report = compute(3_600, None, &sets, None);
 
         assert_eq!(report.sets_over, 1);
