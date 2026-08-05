@@ -2546,3 +2546,75 @@ async fn the_ending_compares_against_the_sessions_before_it(pool: PgPool) {
     // minutes — the comparison is against history.
     assert_eq!(receipt["summary"]["average_duration_seconds"], json!(3_600));
 }
+
+/// The enrolment's state as Postgres holds it, for tests that need to see the
+/// fold from outside the engine.
+async fn stored_state(pool: &PgPool, enrollment: Uuid) -> serde_json::Value {
+    sqlx::query_scalar("select state from enrollments where id = $1")
+        .bind(enrollment)
+        .fetch_one(pool)
+        .await
+        .expect("the enrolment exists")
+}
+
+#[sqlx::test]
+async fn advancing_records_what_the_fold_did(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let before = stored_state(&pool, enrollment).await;
+    let workout = log_a_session(&server, &token, enrollment).await;
+    let after = stored_state(&pool, enrollment).await;
+
+    let (recorded_workout, recorded_enrollment, state_before, state_after, engine_version): (
+        Uuid,
+        Uuid,
+        serde_json::Value,
+        serde_json::Value,
+        String,
+    ) = sqlx::query_as(
+        "select workout_id, enrollment_id, state_before, state_after, engine_version
+         from enrollment_advances",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("exactly one advance was recorded");
+
+    assert_eq!(recorded_workout, workout);
+    assert_eq!(recorded_enrollment, enrollment);
+    // The fold's input is the state as it stood *before* the submit, and its
+    // output is what the submit persisted. Both compared structurally.
+    assert_eq!(state_before, before);
+    assert_eq!(state_after, after);
+    assert!(!engine_version.is_empty());
+}
+
+#[sqlx::test]
+async fn a_retried_submit_records_no_second_advance(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+
+    for _ in 0..2 {
+        server
+            .post("/v1/workouts")
+            .authorization_bearer(&token)
+            .json(&body)
+            .await;
+    }
+
+    // A retry does not advance, so it has nothing to record. The primary key
+    // would refuse a second row anyway, which is the belt to this braces.
+    let advances: i64 = sqlx::query_scalar("select count(*) from enrollment_advances")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(advances, 1);
+}
