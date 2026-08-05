@@ -190,6 +190,23 @@ async fn logged_session(
         return Ok(None);
     };
 
+    // An unrecognised `cut_reason` here, or an unrecognised `status` below, is
+    // reconstruction failing — the same outcome `Ok(None)` already reports for
+    // a workout with no row at all, and `Finding::FoldNotRun` is the variant
+    // the design has for exactly this: "a stored session that will not
+    // reconstruct". D-12 makes this vocabulary additive, so the day a new
+    // value ships, an older binary must report that one workout could not be
+    // refolded, not abort every other enrolment's audit with it. A genuine
+    // `sqlx` error — a dropped connection, a missing table — is not a per-row
+    // problem and still propagates with `?`.
+    let cut_reason = match cut_reason {
+        None => None,
+        Some(reason) => match serde_json::from_value::<CutReason>(Value::String(reason)) {
+            Ok(reason) => Some(reason),
+            Err(_) => return Ok(None),
+        },
+    };
+
     let rows: Vec<WorkoutSetRow> = sqlx::query_as(
         "select \"position\", exercise, prescribed_weight::float8, prescribed_reps,
                 actual_weight::float8, actual_reps, status
@@ -203,6 +220,14 @@ async fn logged_session(
 
     let mut sets = Vec::with_capacity(rows.len());
     for row in rows {
+        // Through serde rather than a hand-written match: these enums already
+        // derive `Deserialize` with `rename_all = "snake_case"`, which is the
+        // same mapping the column's check constraint uses. A second match
+        // here would be a second place for the vocabulary to drift.
+        let Ok(status) = serde_json::from_value::<SetStatus>(Value::String(row.status)) else {
+            return Ok(None);
+        };
+
         sets.push(LoggedSet {
             exercise: row.exercise,
             position: u16::try_from(row.position).unwrap_or_default(),
@@ -212,12 +237,7 @@ async fn logged_session(
             actual_reps: row
                 .actual_reps
                 .map(|reps| u32::try_from(reps).unwrap_or_default()),
-            // Through serde rather than a hand-written match: these enums
-            // already derive `Deserialize` with `rename_all = "snake_case"`,
-            // which is the same mapping the column's check constraint uses. A
-            // second match here would be a second place for the vocabulary to
-            // drift.
-            status: serde_json::from_value::<SetStatus>(Value::String(row.status))?,
+            status,
         });
     }
 
@@ -225,9 +245,7 @@ async fn logged_session(
         week: u32::try_from(week).unwrap_or_default(),
         day: u32::try_from(day).unwrap_or_default(),
         sets,
-        cut_reason: cut_reason
-            .map(|reason| serde_json::from_value::<CutReason>(Value::String(reason)))
-            .transpose()?,
+        cut_reason,
     }))
 }
 
