@@ -2429,6 +2429,29 @@ async fn a_reason_on_a_set_that_did_not_drift_is_refused(pool: PgPool) {
         .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
 }
 
+/// The athlete's typed weight differs from the prescription only below the
+/// two decimal places the column actually stores. `validate` compares in
+/// `f64`, so it sees a difference and lets the drift reason through; the
+/// insert rounds both sides to `numeric(6,2)`, the constraint sees no drift,
+/// and without this fix Postgres — not the 422 path — is what refuses it.
+#[sqlx::test]
+async fn a_reason_on_a_drift_too_small_to_store_is_refused_as_422_not_500(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let body = logged_with_drift(Uuid::now_v7(), enrollment, &session, 0.001, "too_easy");
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
 #[sqlx::test]
 async fn a_retry_reports_the_same_ending_as_the_first_submit(pool: PgPool) {
     let server = server(pool);

@@ -1274,10 +1274,15 @@ fn validate(body: &WorkoutSubmission) -> ApiResult<()> {
         }
 
         if set.drift_reason.is_some() {
+            // Compared at the same two decimal places `numeric(6,2)` stores,
+            // not raw `f64` equality: a difference this predicate cannot see
+            // is one the column cannot see either, and the two need to agree
+            // or the check constraint refuses at insert time — a 500 the
+            // client cannot recover from — instead of here at 422.
             let drifted = matches!(set.status, SetStatus::Done)
-                && set
-                    .actual_weight
-                    .is_some_and(|actual| actual != set.prescribed_weight);
+                && set.actual_weight.is_some_and(|actual| {
+                    (actual * 100.0).round() != (set.prescribed_weight * 100.0).round()
+                });
 
             if !drifted {
                 return Err(ApiError::Validation(format!(
