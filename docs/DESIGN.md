@@ -1514,31 +1514,49 @@ which is what keeps the verifier on the right side of D-03's rule that only the
 program reads or writes `State`.
 
 **A fold that could not be run is a third outcome and not a disagreement.** A
-stored workout whose `status` or `cut_reason` is a value this binary does not
-recognise fails to reconstruct, and D-12's additive vocabularies make that a
-matter of time rather than a hypothetical: the day a new reason ships, every
-binary built before it is an old binary. Such a row is reported as *could not be
-refolded — nothing is claimed about it*, and the walk continues. Aborting there
-would let one unrecognised string swallow the audit of every other enrolment,
-which is the failure mode of a tool nobody ends up running. Genuine
-infrastructure failures are not per-row problems and still abort.
+stored session fails to reconstruct when a set's `status` on `workout_sets`, or
+the workout's own `cut_reason`, is a value this binary does not recognise, and
+D-12's additive vocabularies make that a matter of time rather than a
+hypothetical: the day a new reason ships, every binary built before it is an old
+binary. Such a row is reported as *could not be refolded — nothing is claimed
+about it*, and the walk continues. Aborting there would let one unrecognised
+string swallow the audit of every other enrolment, which is the failure mode of
+a tool nobody ends up running. Genuine infrastructure failures are not per-row
+problems and still abort.
 
 **It exits `0` with nothing to report, `1` with findings, and `2` when it could
-not run**, and the three are distinguishable on purpose so the tool can be put
-in a cron job or a deploy check without a human reading its output. That is why
-`main` translates exit codes by hand rather than returning a `Result`: the `Err`
-arm of `Termination` is exit `1`, which would make *no `DATABASE_URL`*
-indistinguishable from *here is what does not hold* — the two answers this tool
-exists to keep apart.
+not run**, and the three are distinguishable on purpose so that an unattended
+caller — a cron job, a step in a deploy — can act on the answer without parsing
+stdout. That is why `main` translates exit codes by hand rather than returning a
+`Result`: the `Err` arm of `Termination` is exit `1`, which would make *no
+`DATABASE_URL`* indistinguishable from *here is what does not hold* — the two
+answers this tool exists to keep apart.
+
+**But the codes carry findings, and the absence of records is not a finding.**
+That seam is stated here rather than left to be discovered. An enrolment with
+nothing recorded produces no finding and therefore exits `0`, byte-identical to
+an enrolment whose every fold holds. The alternative was weighed and is worse:
+exiting non-zero for an unrecorded enrolment means failing forever for every
+enrolment that predates the table, and a check that cries every night is a check
+somebody turns off. So the separation the next section rests on — *nothing to
+check* is not *clean* — lives in stdout alone. An unattended run distinguishes
+*something does not hold* from *nothing does not hold*, which is the question
+worth waking someone for; it cannot distinguish *nothing to check* from *all of
+it holds*, and a person has to read the output at least once per enrolment to
+learn which of those two they are looking at.
 
 ### What it costs, and what it does not solve
 
-**It starts mid-history and always will.** The migration is additive with no
-backfill (D-17), so enrolments already running have advanced many times with no
-record and never will have one. The verifier reports that as *no advances
-recorded — nothing to check*, counted and stated separately from clean, because
-a clean report over an empty table is the most dangerous output this tool can
-produce.
+**It starts mid-history and always will.** The migration is additive and
+rollback-safe in D-17's sense, and it carries no backfill — not as a house rule
+but because there is nothing to backfill from. The `state_before` of an advance
+that already happened is precisely the input this decision opens by saying is
+gone; the only values that could be written into those rows are invented ones,
+and a fabricated audit trail is worse than an absent one. So enrolments already
+running have advanced many times with no record and never will have one. The
+verifier reports that as *no advances recorded — nothing to check*, counted and
+stated separately from clean, because a clean report over an empty table is the
+most dangerous output this tool can produce.
 
 **`engine_version` is coarse.** It is the API crate's version from
 `CARGO_PKG_VERSION` — automatic, always populated, and unable to tell two builds
@@ -1628,6 +1646,17 @@ ever pull the schema away from that, the chart gets its own table back.
   `plate_change` on `PrescribedSet` and the `note` on a set. That last one is
   the one worth noting, because a machine now checks D-12 rather than a
   reviewer remembering it.
+
+- **Nothing schedules `verify-advances`.** D-19 declines event sourcing partly
+  on the grounds that a projection rebuild nobody runs is D-18's untested backup
+  in a different hat, and it refuses to abort on one unreadable row because that
+  is the failure mode of a tool nobody ends up running. Both arguments now point
+  at the verifier itself: it is written and it is tested, and no cron entry, no
+  deploy step and no release job triggers it. D-18 answered the same question
+  for backups by making the restore procedure a script that is run once before
+  it is needed. What the equivalent is here — how often this runs, from where,
+  and who reads its output, which it needs a human for at least once per
+  enrolment — is an operations decision and is deliberately not taken in D-19.
 
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.
