@@ -2333,3 +2333,96 @@ async fn a_note_over_the_cap_is_refused(pool: PgPool) {
         .await
         .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+/// The current session logged as prescribed, except that set 0 was lifted
+/// `over` kilograms heavier than asked and says why.
+fn logged_with_drift(
+    id: Uuid,
+    enrollment: Uuid,
+    session: &serde_json::Value,
+    over: f64,
+    reason: &str,
+) -> serde_json::Value {
+    let mut body = logged_as_prescribed(id, enrollment, session);
+    let prescribed = body["sets"][0]["prescribed_weight"]
+        .as_f64()
+        .expect("a prescribed set carries a weight");
+
+    body["sets"][0]["actual_weight"] = json!(prescribed + over);
+    body["sets"][0]["drift_reason"] = json!(reason);
+    body
+}
+
+#[sqlx::test]
+async fn a_drift_reason_round_trips_to_the_history(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let id = Uuid::now_v7();
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&logged_with_drift(id, enrollment, &session, 5.0, "too_easy"))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let detail: serde_json::Value = server
+        .get(&format!("/v1/workouts/{id}"))
+        .authorization_bearer(&token)
+        .await
+        .json();
+
+    assert_eq!(detail["sets"][0]["drift_reason"], json!("too_easy"));
+    assert_eq!(detail["sets"][1]["drift_reason"], json!(null));
+}
+
+#[sqlx::test]
+async fn a_reason_on_a_set_that_was_not_done_is_refused(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["outcome"] = json!("cut_short");
+    body["cut_reason"] = json!("out_of_time");
+    body["sets"][0]["status"] = json!("pending");
+    body["sets"][0]["actual_weight"] = json!(null);
+    body["sets"][0]["actual_reps"] = json!(null);
+    body["sets"][0]["drift_reason"] = json!("too_easy");
+
+    // 422, not the 500 a raw constraint violation would produce. A client
+    // holding a queued offline workout has to be able to learn why it will
+    // never be accepted.
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test]
+async fn a_reason_on_a_set_that_did_not_drift_is_refused(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    // Logged exactly as prescribed, so there is no deviation for a reason to
+    // be about.
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["sets"][0]["drift_reason"] = json!("too_easy");
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}

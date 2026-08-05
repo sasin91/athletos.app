@@ -96,6 +96,7 @@ impl Modify for BearerToken {
         crate::routes::workouts::WorkoutSubmission,
         crate::routes::workouts::WorkoutOutcome,
         crate::routes::workouts::CutReason,
+        crate::routes::workouts::DriftReason,
         crate::routes::workouts::SetStatus,
         crate::routes::workouts::SubmittedSet,
         crate::routes::workouts::WorkoutReceipt,

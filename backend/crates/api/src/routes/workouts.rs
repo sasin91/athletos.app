@@ -165,6 +165,25 @@ pub enum CutReason {
     Enough,
 }
 
+/// Why a set was lifted at something other than the prescribed weight (D-07).
+///
+/// Optional in every direction. The chips that produce it are unselected by
+/// default, no tap is a valid answer, and nothing blocks — a default would
+/// answer the question on the athlete's behalf and land a claim nobody made in
+/// the one signal this product exists to read.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, ToSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum DriftReason {
+    /// The prescription was light. The first chip offered, and never the
+    /// selected one.
+    TooEasy,
+    TooHeavy,
+    /// The bar already held that weight and stripping it was not worth it —
+    /// drift the display caused rather than the athlete (D-04).
+    AlreadyLoaded,
+    FeltOff,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SetStatus {
@@ -222,6 +241,16 @@ pub struct SubmittedSet {
     /// refusing it.
     #[serde(default)]
     pub note: Option<String>,
+
+    /// Why this set was lifted at something other than its prescription (D-07).
+    ///
+    /// Optional and additively so (D-12). **Only a `done` set may carry one**,
+    /// and only when its weight actually differs — see `validate`. That is not
+    /// tidiness: a reason on a set that was never reached arrives with a null
+    /// `actual_weight`, the check constraint refuses it, and the whole
+    /// submission goes down over a chip tapped forty minutes earlier.
+    #[serde(default)]
+    pub drift_reason: Option<DriftReason>,
 }
 
 /// What the server recorded, and where the program stands afterwards.
@@ -327,6 +356,9 @@ pub struct LoggedSetView {
     /// What the athlete wrote about this set. Null for every set logged
     /// before notes existed, and for every set they had nothing to say about.
     pub note: Option<String>,
+    /// Why this set drifted, if the athlete said. Null for every set logged
+    /// before the chips existed, and for every deviation they walked past.
+    pub drift_reason: Option<DriftReason>,
 }
 
 /// Which slice of the history to return.
@@ -582,6 +614,7 @@ type StoredSet = (
     String,
     Option<DateTime<Utc>>,
     Option<String>,
+    Option<String>,
 );
 
 /// Everything the athlete has logged, newest first.
@@ -740,7 +773,8 @@ pub async fn show(
     // `unique (workout_id, "position")` is both the ordering and the index.
     let sets: Vec<StoredSet> = sqlx::query_as(
         "select \"position\", exercise, prescribed_weight::float8, prescribed_reps,
-                actual_weight::float8, actual_reps, status, logged_at, note
+                actual_weight::float8, actual_reps, status, logged_at, note,
+                drift_reason
          from workout_sets
          where workout_id = $1
          order by \"position\"",
@@ -832,6 +866,7 @@ fn logged_set(
         status,
         logged_at,
         note,
+        drift_reason,
     ): StoredSet,
 ) -> ApiResult<LoggedSetView> {
     let label = exercise::find(&exercise)
@@ -849,6 +884,7 @@ fn logged_set(
         status: SetStatus::parse(&status)?,
         logged_at,
         note,
+        drift_reason: drift_reason.as_deref().map(DriftReason::parse).transpose()?,
     })
 }
 
@@ -916,6 +952,7 @@ async fn insert_sets(
     let mut statuses: Vec<String> = Vec::with_capacity(sets.len());
     let mut logged_ats: Vec<Option<DateTime<Utc>>> = Vec::with_capacity(sets.len());
     let mut notes: Vec<Option<String>> = Vec::with_capacity(sets.len());
+    let mut drift_reasons: Vec<Option<String>> = Vec::with_capacity(sets.len());
 
     for set in sets {
         exercises.push(set.exercise.trim().to_owned());
@@ -942,12 +979,13 @@ async fn insert_sets(
                 .filter(|note| !note.is_empty())
                 .map(str::to_owned),
         );
+        drift_reasons.push(set.drift_reason.map(DriftReason::as_str).map(str::to_owned));
     }
 
     sqlx::query(
         "insert into workout_sets
              (workout_id, exercise, \"position\", prescribed_weight, prescribed_reps,
-              actual_weight, actual_reps, status, logged_at, note)
+              actual_weight, actual_reps, status, logged_at, note, drift_reason)
          select $1,
                 logged.exercise,
                 logged.slot,
@@ -957,12 +995,14 @@ async fn insert_sets(
                 logged.actual_reps,
                 logged.status,
                 logged.logged_at,
-                logged.note
+                logged.note,
+                logged.drift_reason
          from unnest($2::text[], $3::int2[], $4::float8[], $5::int2[],
                      $6::float8[], $7::int2[], $8::text[], $9::timestamptz[],
-                     $10::text[])
+                     $10::text[], $11::text[])
               as logged(exercise, slot, prescribed_weight, prescribed_reps,
-                        actual_weight, actual_reps, status, logged_at, note)",
+                        actual_weight, actual_reps, status, logged_at, note,
+                        drift_reason)",
     )
     .bind(workout_id)
     .bind(&exercises)
@@ -974,6 +1014,7 @@ async fn insert_sets(
     .bind(&statuses)
     .bind(&logged_ats)
     .bind(&notes)
+    .bind(&drift_reasons)
     .execute(&mut **tx)
     .await?;
 
@@ -1092,6 +1133,20 @@ fn validate(body: &WorkoutSubmission) -> ApiResult<()> {
                 set.position
             )));
         }
+
+        if set.drift_reason.is_some() {
+            let drifted = matches!(set.status, SetStatus::Done)
+                && set
+                    .actual_weight
+                    .is_some_and(|actual| actual != set.prescribed_weight);
+
+            if !drifted {
+                return Err(ApiError::Validation(format!(
+                    "set {} carries a reason for a weight that did not change",
+                    set.position
+                )));
+            }
+        }
     }
 
     Ok(())
@@ -1140,6 +1195,33 @@ impl CutReason {
             "equipment" => Ok(Self::Equipment),
             "enough" => Ok(Self::Enough),
             other => Err(drifted("cut_reason", other)),
+        }
+    }
+}
+
+impl DriftReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::TooEasy => "too_easy",
+            Self::TooHeavy => "too_heavy",
+            Self::AlreadyLoaded => "already_loaded",
+            Self::FeltOff => "felt_off",
+        }
+    }
+
+    fn parse(stored: &str) -> ApiResult<Self> {
+        match stored {
+            "too_easy" => Ok(Self::TooEasy),
+            "too_heavy" => Ok(Self::TooHeavy),
+            "already_loaded" => Ok(Self::AlreadyLoaded),
+            "felt_off" => Ok(Self::FeltOff),
+            // Read out of the `text` column, so an unknown value means the
+            // check constraint and this enum have drifted apart. That is our
+            // bug and 500 is the honest answer — unlike an unknown value off a
+            // query string, which is the client's typo.
+            other => Err(ApiError::Internal(format!(
+                "unknown drift reason in the database: {other}"
+            ))),
         }
     }
 }

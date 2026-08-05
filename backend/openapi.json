@@ -1010,6 +1010,16 @@
           "enough"
         ]
       },
+      "DriftReason": {
+        "type": "string",
+        "description": "Why a set was lifted at something other than the prescribed weight (D-07).\n\nOptional in every direction. The chips that produce it are unselected by\ndefault, no tap is a valid answer, and nothing blocks — a default would\nanswer the question on the athlete's behalf and land a claim nobody made in\nthe one signal this product exists to read.",
+        "enum": [
+          "too_easy",
+          "too_heavy",
+          "already_loaded",
+          "felt_off"
+        ]
+      },
       "Enrollment": {
         "type": "object",
         "description": "One athlete's run of one program.",
@@ -1315,6 +1325,17 @@
               "null"
             ],
             "format": "double"
+          },
+          "drift_reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DriftReason",
+                "description": "Why this set drifted, if the athlete said. Null for every set logged\nbefore the chips existed, and for every deviation they walked past."
+              }
+            ]
           },
           "exercise": {
             "type": "string",
@@ -2032,6 +2053,17 @@
             ],
             "format": "double",
             "description": "Required when `status` is `done`; the schema will not record a set as\ndone with no numbers, because that is a hole in every drift query that\nwill ever run over this table."
+          },
+          "drift_reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DriftReason",
+                "description": "Why this set was lifted at something other than its prescription (D-07).\n\nOptional and additively so (D-12). **Only a `done` set may carry one**,\nand only when its weight actually differs — see `validate`. That is not\ntidiness: a reason on a set that was never reached arrives with a null\n`actual_weight`, the check constraint refuses it, and the whole\nsubmission goes down over a chip tapped forty minutes earlier."
+              }
+            ]
           },
           "exercise": {
             "type": "string"
