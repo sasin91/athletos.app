@@ -315,6 +315,169 @@ async fn the_training_max_moves_once_per_cycle_even_when_every_submit_is_retried
     assert!(second_cycle["progress"]["total"].is_null());
 }
 
+// --- the recorded advance refolds clean (D-19) ------------------------------
+
+/// Loads one enrolment's recorded advances exactly as `verify-advances` would
+/// and checks them with `audit` — the round trip the whole D-19 branch exists
+/// for.
+async fn refolded(pool: &PgPool, enrollment: Uuid) -> athletos_api::audit::Audit {
+    let program = athletos_training::programs::find("wendler-531-bbb")
+        .expect("wendler-531-bbb is in the registry");
+
+    let advances = athletos_api::advances::load_advances(pool, enrollment, program)
+        .await
+        .expect("advances load against a database that just wrote them");
+
+    let current_state: serde_json::Value =
+        sqlx::query_scalar("select state from enrollments where id = $1")
+            .bind(enrollment)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+
+    athletos_api::audit::audit(enrollment, &current_state, &advances)
+}
+
+/// `audit` itself is well covered by unit tests in `audit.rs`. What was
+/// missing is the reconstruction it is checked against — `load_advances` and
+/// `logged_session`, which used to live inside the `verify-advances` binary,
+/// where no test could reach them. This is the round trip: submit a real
+/// session, load the row `submit` wrote back through the same code path the
+/// binary runs, refold it, and confirm `audit` finds nothing wrong with data
+/// that is completely healthy.
+#[sqlx::test]
+async fn a_recorded_advance_refolds_to_what_it_recorded(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    log_a_session(&server, &token, enrollment).await;
+
+    let result = refolded(&pool, enrollment).await;
+
+    assert_eq!(result.advances, 1);
+    assert!(result.findings.is_empty(), "{:?}", result.findings);
+}
+
+/// `position` is the canonical order — the training migration calls wire
+/// order "an accident of the wire" for exactly this reason — but nothing
+/// enforced it in `submit` until this branch: the fold ran over `body.sets`
+/// in request order. Submitting the sets in the opposite of position order
+/// and still getting a clean audit is what pins that fix to a test rather
+/// than leaving it as an argument in a comment.
+#[sqlx::test]
+async fn a_session_logged_out_of_position_order_still_refolds_clean(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let session = next_session(&server, &token, enrollment).await;
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["sets"]
+        .as_array_mut()
+        .expect("a submission carries its sets")
+        .reverse();
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let result = refolded(&pool, enrollment).await;
+
+    assert_eq!(result.advances, 1);
+    assert!(result.findings.is_empty(), "{:?}", result.findings);
+}
+
+/// The one place `submit`'s bug (Finding 1: folding `body.sets` in request
+/// order rather than by `position`) can actually change what a fold computes:
+/// `made_the_minimum`'s tie-break, which is `max_by` and therefore returns
+/// the *last* maximum it sees. The test above cannot exercise that —
+/// `logged_as_prescribed` always logs a set as matching its own prescription,
+/// so whichever tied set the fold happens to land on trivially "made the
+/// minimum" regardless of order, tie or no tie. This one builds a genuine
+/// tie by hand: the week-3 AMRAP set and the last Boring But Big set of the
+/// same lift, pinned to the same weight, and only one of them made. Submitted
+/// in the opposite of position order, this diverges without the position
+/// sort in `submit` and refolds clean with it — the fix pinned by a test
+/// rather than left as the argument in that function's comment.
+#[sqlx::test]
+async fn a_tied_amrap_reversed_in_the_wire_still_refolds_by_position(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    // Two full weeks, so the ninth session lands on week 3 — the only week
+    // `advance()` reads `logged` at all.
+    for _ in 0..8 {
+        log_a_session(&server, &token, enrollment).await;
+    }
+
+    let session = next_session(&server, &token, enrollment).await;
+    assert_eq!(session["week"], 3);
+    assert_eq!(session["day"], 1);
+
+    let prescribed = session["prescribed_sets"].as_array().unwrap();
+    assert_eq!(prescribed.len(), 8, "3 main sets and 5 Boring But Big sets");
+
+    // Position 2 is the week-3 AMRAP set; position 7 is the last Boring But
+    // Big set of the same lift. Pinning them to the same weight is what
+    // creates the tie `made_the_minimum`'s `max_by` has to break.
+    let tied_weight = prescribed[2]["prescribed_weight"].clone();
+
+    let mut sets: Vec<serde_json::Value> = prescribed
+        .iter()
+        .map(|set| {
+            json!({
+                "position": set["position"],
+                "exercise": set["exercise"],
+                "prescribed_weight": set["prescribed_weight"],
+                "prescribed_reps": set["prescribed_reps"],
+                "actual_weight": set["prescribed_weight"],
+                "actual_reps": set["prescribed_reps"],
+                "status": "done",
+            })
+        })
+        .collect();
+
+    // Position 2: the AMRAP set, missed outright.
+    sets[2]["actual_reps"] = json!(0);
+
+    // Position 7: the last Boring But Big set, pinned to the AMRAP's weight
+    // and made in full.
+    sets[7]["prescribed_weight"] = tied_weight.clone();
+    sets[7]["actual_weight"] = tied_weight;
+
+    // The opposite of position order — what `submit` used to fold verbatim.
+    sets.reverse();
+
+    let body = json!({
+        "id": Uuid::now_v7(),
+        "enrollment_id": enrollment,
+        "started_at": "2026-07-26T09:00:00Z",
+        "ended_at": "2026-07-26T10:00:00Z",
+        "outcome": "completed",
+        "sets": sets,
+    });
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let result = refolded(&pool, enrollment).await;
+
+    assert_eq!(result.advances, 9);
+    assert!(result.findings.is_empty(), "{:?}", result.findings);
+}
+
 // --- registration ---------------------------------------------------------
 
 #[sqlx::test]
