@@ -121,7 +121,16 @@
 	}
 
 	function numberFrom(event: Event): number | undefined {
-		const value = Number((event.currentTarget as HTMLInputElement).value);
+		// Empty or all-whitespace is "no edit", not zero. `Number('')` is `0`,
+		// finite and indistinguishable from a typed zero, and this fires on
+		// every keystroke: without this check, clearing the field to retype a
+		// number applies `delta = -prescribedWeight` and carries a 0 kg to
+		// every later pending set of the exercise before the athlete finishes
+		// typing the number they meant.
+		const raw = (event.currentTarget as HTMLInputElement).value;
+		if (raw.trim().length === 0) return undefined;
+
+		const value = Number(raw);
 		return Number.isFinite(value) ? value : undefined;
 	}
 </script>
