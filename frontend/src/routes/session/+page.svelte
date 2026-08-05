@@ -23,7 +23,7 @@
 		summarise,
 		toSubmission
 	} from '$lib/session';
-	import type { CutReason, LocalSession, SessionSummary } from '$lib/session';
+	import type { CutReason, LocalSession, SessionSummary, WorkoutReceipt } from '$lib/session';
 	import { clearActiveSession, loadActiveSession, saveActiveSession } from '$lib/storage';
 	import { submitSession } from '$lib/submit';
 
@@ -85,6 +85,12 @@
 	let summary = $state<SessionSummary | null>(null);
 	let recordId = $state<string | null>(null);
 
+	// What the server said about this session, when it landed. Asked for by id
+	// rather than taken off the report as a whole: a flush sends everything
+	// outstanding, and an older session landing at the same moment would
+	// otherwise put its numbers on this ending.
+	let receipt = $state<WorkoutReceipt | null>(null);
+
 	async function finishSession(cutReason: CutReason | null) {
 		if (!session) return;
 
@@ -100,6 +106,7 @@
 		await clearActiveSession();
 		const report = await submitSession(body);
 		session = null;
+		receipt = report.receipts[body.id] ?? null;
 
 		// Asked about *this* id rather than about the report as a whole. A flush
 		// sends everything outstanding, so an older session landing while this
@@ -160,6 +167,63 @@
 				page has anything to show rather than linking into a 404 (D-11).
 			-->
 			{#if phase === 'sent'}
+				{#if receipt}
+					{@const ending = receipt.summary}
+					<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+						<!--
+							Load and drift on the same screen, deliberately. D-08 refused a
+							drift total here because it would have been the first place in
+							the product drift appeared alone; beside the load actually
+							moved and the athlete's own average, it is not alone (D-13).
+						-->
+						<dt class="eyebrow">load moved</dt>
+						<dd class="tabular">{Math.round(ending.load_moved_kg)} kg</dd>
+
+						{#if ending.sets_over > 0 || ending.sets_under > 0}
+							<dt class="eyebrow">against the prescription</dt>
+							<dd class="tabular">
+								{Math.round(ending.load_moved_kg - ending.load_prescribed_kg)} kg
+								{#if ending.sets_over > 0}· over on {ending.sets_over}{/if}
+								{#if ending.sets_under > 0}· under on {ending.sets_under}{/if}
+							</dd>
+						{/if}
+
+						{#if ending.average_duration_seconds !== null && ending.average_duration_seconds !== undefined}
+							<dt class="eyebrow">against your average</dt>
+							<dd class="tabular">
+								{formatElapsed(
+									Math.abs(ending.duration_seconds - ending.average_duration_seconds) * 1000
+								)}
+								{ending.duration_seconds >= ending.average_duration_seconds
+									? 'longer'
+									: 'shorter'}
+							</dd>
+						{/if}
+
+						{#if ending.intervals}
+							<dt class="eyebrow">between sets</dt>
+							<dd class="tabular">
+								{formatElapsed(ending.intervals.min_seconds * 1000)} ·
+								{formatElapsed(ending.intervals.median_seconds * 1000)} ·
+								{formatElapsed(ending.intervals.max_seconds * 1000)}
+							</dd>
+							<!--
+								The middle figure is a median, not a mean: one interval spent
+								talking to somebody moves a mean of twelve by a minute, and
+								the tail of this distribution is not signal (D-10).
+							-->
+							<dt class="sr-only">what those three are</dt>
+							<dd class="col-span-2 text-xs opacity-50">
+								fastest · typical · slowest
+								{#if ending.intervals.discarded > 0}
+									· {ending.intervals.discarded} gap{ending.intervals.discarded === 1
+										? ''
+										: 's'} too long to believe, left out
+								{/if}
+							</dd>
+						{/if}
+					</dl>
+				{/if}
 				<p class="text-sm opacity-70">Recorded. The program has moved on.</p>
 				<a class="btn w-full" href={resolve(`/history/${recordId}`)}> See where the hour went </a>
 			{:else if phase === 'queued'}
