@@ -526,10 +526,23 @@ pub async fn submit(
     // a session because life interrupted it is precisely the guilt loop D-06
     // exists to avoid, and a completeness threshold would force every program
     // author to invent one.
+    //
+    // By `position`, not by the order the phone happened to serialise `sets`
+    // in — the training migration calls wire order "an accident of the wire"
+    // for exactly this reason, and `position` is the one the schema treats as
+    // canonical. `validate` has already confirmed every position is unique,
+    // so this is a total order and the sort is unambiguous. Without it, a
+    // program whose fold reads `LoggedSession.sets` order-sensitively — 5/3/1
+    // BBB's `made_the_minimum` breaks a weight tie with `max_by`, which
+    // returns the *last* maximum — would answer differently depending on
+    // request order alone, which is not a fact about the session.
+    let mut ordered_sets: Vec<&SubmittedSet> = body.sets.iter().collect();
+    ordered_sets.sort_by_key(|set| set.position);
+
     let logged = LoggedSession {
         week: session.week,
         day: session.day,
-        sets: body.sets.iter().map(LoggedSet::from).collect(),
+        sets: ordered_sets.into_iter().map(LoggedSet::from).collect(),
         cut_reason: body.cut_reason.map(Into::into),
     };
 
