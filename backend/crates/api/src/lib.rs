@@ -4,6 +4,7 @@
 //! Exposed as a library so tests can drive the real router in-process with
 //! `axum-test` rather than over a socket (ADR-0015).
 
+pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod error;
