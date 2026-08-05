@@ -170,10 +170,13 @@
 			{/if}
 
 			<!--
-				Whether the permanent record exists yet. The full picture — drift
-				against the prescription, and where the hour went — is computed in
-				Rust and lives on the history page, so this says plainly whether that
-				page has anything to show rather than linking into a 404 (D-11).
+				Whether the permanent record exists yet, and — once it does — the
+				drift against the prescription and where the hour went. Both numbers
+				are computed once, in Rust, off the submission that just landed
+				(D-11), and arrive on `receipt` below; nothing here recomputes them.
+				The history page still holds the per-exercise breakdown behind each
+				number — which set drifted, which gap was long — so that is not
+				duplicated on this screen either.
 			-->
 			{#if phase === 'sent'}
 				{#if receipt}
