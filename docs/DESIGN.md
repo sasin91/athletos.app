@@ -1401,6 +1401,187 @@ healthy**. A snapshot succeeds whether or not the data inside it is fine.
 
 ---
 
+## D-19 · What the fold did
+
+`advance(state, logged) -> state` is a pure fold, and `enrollments.state` keeps
+only its latest result. There is no version on it and no history behind it.
+
+So a wrong fold is not merely undetected — it is **unfixable**. D-09 already
+names the fear in as many words, *"a 5/3/1 training max jumping 5 kg instead of
+2.5, silently, permanently"*, and answers only the half of it where the fold
+runs twice: a client-minted id, one conditional insert, and advancing solely in
+the branch that inserted. For a fold that is wrong for any other reason there is
+no answer at all. The wrong number becomes the only number, because the inputs
+that produced it are gone and the repair is hand-editing JSON in production.
+
+Nothing else in the system has this property. Every other fact is either
+immutable and stored — `workout_sets` is written once and never updated or
+deleted — or derivable from what is stored. `State` is the one place where a
+computation is kept and its inputs are thrown away.
+
+### Event sourcing, evaluated and declined
+
+The pattern fits this domain better than the conclusion suggests, and most of it
+is already here. `advance()` **is** `apply(state, event)` — same signature, same
+purity, and D-15 already makes that purity a fact of the dependency graph rather
+than a discipline. `workout_sets` is already an append-only fact table. The
+offline client is already an event producer: a client-generated UUIDv7, a local
+queue, one idempotent POST, `on conflict do nothing`. That is the deduplication
+machinery event-sourced systems build deliberately, and here it fell out of
+concrete walls (D-09). Even the read side is shaped for it — the *Over time*
+design chose to derive its indicators on read rather than materialise them,
+which is the half of CQRS that usually arrives holding event sourcing's hand.
+
+It is declined on one collision, and the collision is the reason rather than a
+cost.
+
+**Replay means running today's engine over yesterday's sessions**, producing the
+state today's code would have made rather than the state the athlete trained
+under. D-03 has already ruled on precisely this question in the opposite
+direction: a prescriptive program snapshots its maxes into `State` at enrolment,
+because *"editing a max mid-block must not retroactively rewrite sessions the
+athlete was already shown, since drift is measured against the
+`prescribed_weight` that was actually displayed (D-07)"*. Full event sourcing
+makes current state a function of current code by construction. This product's
+central measurement is defined against what was on the screen at the time. The
+two can be reconciled — version the engine, pin every replay to the code that
+produced it — but that is the expensive half of the pattern, bought to defend a
+property that costs nothing today precisely because nothing replays.
+
+Three further objections, none decisive alone and all real. A `jsonb` event
+payload carries none of the check constraints this schema leans on, and those
+constraints are not decoration: `workouts_cut_reason_iff_cut_short` and
+`workout_sets_drift_reason_needs_drift` each caught a genuine bug during the
+change immediately before this one. Event schema versioning is D-12's
+additive-only discipline again, on a second
+surface, permanently — and unlike an API field, an old event can never be
+retired; it is in the log for the life of the system. A projection rebuild
+nobody runs is D-18's *an untested backup is not a backup* wearing a different
+hat. Against all of that, the operational wins — reads and writes scaled apart,
+projections rebuilt on separate infrastructure — need the scale D-16 refuses.
+
+**What is taken from the pattern is the one capability the system actually
+lacks**: the ability to tell that a fold went wrong, and to recompute from a
+point where it had not.
+
+### `enrollment_advances`, which is not an event log
+
+One row per advance — `state_before`, `state_after`, `engine_version`,
+`advanced_at` — keyed by the workout that caused it. The primary key is
+`workout_id` rather than a surrogate, which makes *one advance per workout* a
+schema fact rather than a convention: a retry that somehow reached the advancing
+branch is refused by the database instead of quietly appending a second row. The
+insert sits inside the transaction that already holds the enrolment's
+`for update` lock (D-09), beside the state write it describes and in the same
+branch, so the record and the state it records cannot disagree. The retry
+branches do not advance and therefore write nothing.
+
+Nothing subscribes to it, nothing projects from it, nothing is rebuilt out of
+it. It is an audit of one function.
+
+The `LoggedSession` that drove the fold is deliberately not stored. It is
+recoverable in full — `week`, `day` and `cut_reason` from `workouts`, the sets
+from `workout_sets` — and storing it again would be a copy that can drift from
+the rows it duplicates. The verifier reconstructs it the way every other reader
+does.
+
+### `verify-advances`
+
+An offline binary beside `set-password`: reads `DATABASE_URL`, no API surface,
+not part of the deployed service. Unlike `set-password` it does not run
+migrations, because a tool whose whole purpose is to inspect a database without
+changing it has no business altering its schema on the way in.
+
+Three checks per enrolment, walked in `advanced_at` order, and there are three
+because they fail differently:
+
+- **the chain** — each advance's `state_before` must equal the previous
+  advance's `state_after`. It runs no program code, so it catches a *missing*
+  row — a workout that advanced without being recorded — even when the engine is
+  perfect. The first recorded advance has no predecessor and is exempt, which is
+  the same fact as the table starting mid-history.
+- **the fold** — today's `advance()`, from the stored `state_before` over the
+  reconstructed session, must reproduce the stored `state_after`.
+- **the head** — the last `state_after` must equal the enrolment's current
+  `state`, which is what catches a state moved by something that was not a fold.
+
+Every comparison is **structural**, over parsed values. `jsonb` normalises key
+order and whitespace on the way in and `serde_json::Value` compares by structure
+on the way out, so neither side can report a difference that is only formatting;
+comparing them as text anywhere is the one way this tool cries wolf on every row
+it reads. Comparing two opaque blobs for equality is not interpreting them,
+which is what keeps the verifier on the right side of D-03's rule that only the
+program reads or writes `State`.
+
+**A fold that could not be run is a third outcome and not a disagreement.** A
+stored workout whose `status` or `cut_reason` is a value this binary does not
+recognise fails to reconstruct, and D-12's additive vocabularies make that a
+matter of time rather than a hypothetical: the day a new reason ships, every
+binary built before it is an old binary. Such a row is reported as *could not be
+refolded — nothing is claimed about it*, and the walk continues. Aborting there
+would let one unrecognised string swallow the audit of every other enrolment,
+which is the failure mode of a tool nobody ends up running. Genuine
+infrastructure failures are not per-row problems and still abort.
+
+**It exits `0` with nothing to report, `1` with findings, and `2` when it could
+not run**, and the three are distinguishable on purpose so the tool can be put
+in a cron job or a deploy check without a human reading its output. That is why
+`main` translates exit codes by hand rather than returning a `Result`: the `Err`
+arm of `Termination` is exit `1`, which would make *no `DATABASE_URL`*
+indistinguishable from *here is what does not hold* — the two answers this tool
+exists to keep apart.
+
+### What it costs, and what it does not solve
+
+**It starts mid-history and always will.** The migration is additive with no
+backfill (D-17), so enrolments already running have advanced many times with no
+record and never will have one. The verifier reports that as *no advances
+recorded — nothing to check*, counted and stated separately from clean, because
+a clean report over an empty table is the most dangerous output this tool can
+produce.
+
+**`engine_version` is coarse.** It is the API crate's version from
+`CARGO_PKG_VERSION` — automatic, always populated, and unable to tell two builds
+of one version apart. That is accepted rather than solved because of what the
+field is for: it is a hint for a person investigating a divergence the verifier
+has already found, not the mechanism that finds it. A git SHA embedded at build
+time would be exact and would need a build script, and the exactness would be
+spent on a field a human reads once, after something has already gone wrong. A
+hand-maintained per-program version is more precise in principle and rots in
+practice; a version that is silently stale is worse than one that is honestly
+coarse.
+
+**It reports and does not repair.** There is no `--fix`. The data needed to
+recompute an enrolment forward from a known-good `state_before` now exists, and
+spending it is a deliberate human act — the same instinct as D-04's *watch it,
+do not touch it*: a training max moves through `advance()` or it does not move.
+A divergence is not even necessarily a bug. Deliberately fixing `advance()`
+makes every prior fold diverge, correctly, and telling that case from a
+regression is exactly what `engine_version` is printed for.
+
+**And the gap at the front is the one thing it cannot see.** A row missing from
+the middle breaks the chain and a row missing from the end moves the head, so
+both are found; a row missing from the *beginning* is indistinguishable from the
+table having started there — which is exactly what it did. The audit is
+therefore sound about everything after the first row it holds, and silent about
+whether that row was the first advance.
+
+### One thing it turned out to also do
+
+`readout()` is a pure function of `State` (D-03), so `readout(&state_before)`
+recovers what a program was prescribing from during any recorded session — and
+the *Over time* design therefore takes its training-max line from this table
+instead of the second table it originally specified for it.
+
+That is worth recording as a caution rather than a win. A table justified by one
+purpose acquiring a second is how tables end up serving neither, and the guard
+is that nothing about this schema bends toward the chart: `state_before` and
+`state_after` are here because the fold needs auditing, the verifier reads them
+structurally and cares nothing for what is inside them, and if the chart's needs
+ever pull the schema away from that, the chart gets its own table back.
+
+---
+
 ## Open
 
 - ~~**No Postgres on the dev machine.**~~ **Closed.** Postgres 17.10 runs as a
