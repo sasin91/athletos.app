@@ -166,18 +166,36 @@ function replace(
 /**
  * Records what the athlete actually lifted.
  *
- * A **weight** edit carries to every later *pending* set of the same exercise,
- * and stops at the next exercise — which is a different bar, and possibly not
- * even the same bar, the boundary D-04 already draws for the plate chain.
- * Retyping the same correction five times is the app making an honest answer
- * cost more than a dishonest one (D-07).
+ * Editing the addressed set is always allowed, whatever its status — a
+ * correction to a number mistyped after logging is a correction to the
+ * record, not a falsification of it.
  *
- * A **rep** edit does not carry. It is about that set — an AMRAP that went
- * well, a set cut short at eight — whereas a weight edit is about the bar, and
- * the bar is still loaded when the next set starts.
+ * A **weight** edit carries — but only when the addressed set is itself
+ * `pending`. Correcting an already-logged set changes what happened; it must
+ * not rewrite the plan for sets not yet performed.
  *
- * Only pending sets are rewritten. A set already logged or skipped is a record
- * of what happened, and rewriting it would falsify the log.
+ * What carries is the **difference**, not the weight: `delta = the new weight
+ * minus the edited set's own prescription`, applied to each later pending
+ * set's *own* prescription and clamped at zero. 5/3/1 BBB prescribes a main
+ * lift and its Boring But Big backoff under one `exercise` key at two
+ * different percentages (D-04); carrying the raw weight would pre-fill five
+ * backoff sets at the main lift's number. Carrying the delta instead means
+ * editing set one from 90 to 95 leaves later main-lift sets at their own
+ * prescription +5 and the backoff sets at their own prescription +5, and
+ * editing back to 90 returns every carried set to exactly its own
+ * prescription.
+ *
+ * The carry stops at the next exercise — which is a different bar, and
+ * possibly not even the same bar, the boundary D-04 already draws for the
+ * plate chain. Retyping the same correction five times is the app making an
+ * honest answer cost more than a dishonest one (D-07).
+ *
+ * A **rep** edit never carries. It is about that set — an AMRAP that went
+ * well, a set cut short at eight — whereas a weight edit is about the bar,
+ * and the bar is still loaded when the next set starts.
+ *
+ * The carry only *writes* to pending sets: a set already logged or skipped is
+ * a record of what happened, and rewriting it would falsify the log.
  *
  * `prescribedWeight` is never touched, so drift is still measured against the
  * number the athlete was actually shown.
@@ -190,33 +208,33 @@ export function editSet(
 	const target = session.sets.find((set) => set.position === position);
 	if (!target) return session;
 
-	const carried = values.weight;
+	const edited = replace(session, position, (set) => {
+		const actualWeight = values.weight ?? set.actualWeight;
+		return {
+			...set,
+			actualWeight,
+			actualReps: values.reps ?? set.actualReps,
+			driftReason: actualWeight === set.prescribedWeight ? null : set.driftReason
+		};
+	});
+
+	if (values.weight === undefined || target.status !== 'pending') return edited;
+
+	const delta = values.weight - target.prescribedWeight;
 
 	return {
-		...session,
-		sets: session.sets.map((set) => {
-			if (set.position === position) {
-				const actualWeight = values.weight ?? set.actualWeight;
-				return {
-					...set,
-					actualWeight,
-					actualReps: values.reps ?? set.actualReps,
-					driftReason: actualWeight === set.prescribedWeight ? null : set.driftReason
-				};
-			}
-
+		...edited,
+		sets: edited.sets.map((set) => {
 			const carries =
-				carried !== undefined &&
-				set.exercise === target.exercise &&
-				set.position > position &&
-				set.status === 'pending';
+				set.exercise === target.exercise && set.position > position && set.status === 'pending';
 
 			if (!carries) return set;
 
+			const actualWeight = Math.max(0, set.prescribedWeight + delta);
 			return {
 				...set,
-				actualWeight: carried,
-				driftReason: carried === set.prescribedWeight ? null : target.driftReason
+				actualWeight,
+				driftReason: actualWeight === set.prescribedWeight ? null : target.driftReason
 			};
 		})
 	};
@@ -225,9 +243,18 @@ export function editSet(
 /**
  * Records why this set is not being lifted as prescribed, or clears it.
  *
- * Carries with the weight, to every later pending set of the same exercise
- * holding that same weight — it is one decision continuing, and recording four
- * of five carried sets as unanswered would misreport it.
+ * Only attaches to a set that has actually deviated — `actualWeight !==
+ * prescribedWeight` — the addressed set included. The server refuses a
+ * `drift_reason` on a set sitting at its own prescription with the same check
+ * constraint it refuses one on a pending set with, and a chip tapped on a set
+ * that never drifted must not take the whole submission down with it.
+ *
+ * Carries to the same sets a weight edit carries to — later pending sets of
+ * the same exercise — because it is one decision continuing, and recording
+ * four of five carried sets as unanswered would misreport it. A set among
+ * those whose carried weight happens to land back on its own prescription
+ * gets `null` regardless, since there is nothing left for the reason to be
+ * about.
  */
 export function setDriftReason(
 	session: LocalSession,
@@ -240,14 +267,14 @@ export function setDriftReason(
 	return {
 		...session,
 		sets: session.sets.map((set) => {
-			const carries =
+			const applies =
 				set.position === position ||
-				(set.exercise === target.exercise &&
-					set.position > position &&
-					set.status === 'pending' &&
-					set.actualWeight === target.actualWeight);
+				(set.exercise === target.exercise && set.position > position && set.status === 'pending');
 
-			return carries ? { ...set, driftReason: reason } : set;
+			if (!applies) return set;
+
+			const deviated = set.actualWeight !== set.prescribedWeight;
+			return { ...set, driftReason: deviated ? reason : null };
 		})
 	};
 }

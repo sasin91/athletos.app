@@ -439,6 +439,85 @@ describe('summarise', () => {
 
 const committed = fixture();
 
+/**
+ * Squat's main sets (positions 0-1, 90 kg) followed by BBB backoff sets
+ * (positions 2-3, 50 kg) under the same `exercise` key — the shape a delta
+ * carry has to respect and a flat-weight carry would wreck by pre-filling
+ * the backoff sets at the main lift's number.
+ */
+const peekedWithBackoff: NextSession = {
+	enrollment_id: '018f1f2a-0000-7000-8000-000000000002',
+	program_key: 'wendler-531-bbb',
+	week: 1,
+	day: 4,
+	focus: 'squat',
+	progress: { completed: 0, total: null },
+	pace: {
+		can_project: false,
+		median_seconds_per_set: null,
+		projected_seconds: null,
+		sample_size: 0
+	},
+	blocks: [
+		{
+			exercise: 'squat',
+			label: 'Squat',
+			cues: [],
+			is_primary: true,
+			lifts: [
+				{ sets: 2, reps: 5, amrap: false, weight: 90, plates_per_side: [] },
+				{ sets: 2, reps: 10, amrap: false, weight: 50, plates_per_side: [] }
+			]
+		}
+	],
+	prescribed_sets: [
+		{
+			position: 0,
+			exercise: 'squat',
+			label: 'Squat',
+			prescribed_weight: 90,
+			prescribed_reps: 5,
+			amrap: false,
+			plates_per_side: [],
+			plate_change: null
+		},
+		{
+			position: 1,
+			exercise: 'squat',
+			label: 'Squat',
+			prescribed_weight: 90,
+			prescribed_reps: 5,
+			amrap: false,
+			plates_per_side: [],
+			plate_change: null
+		},
+		{
+			position: 2,
+			exercise: 'squat',
+			label: 'Squat (BBB)',
+			prescribed_weight: 50,
+			prescribed_reps: 10,
+			amrap: false,
+			plates_per_side: [],
+			plate_change: null
+		},
+		{
+			position: 3,
+			exercise: 'squat',
+			label: 'Squat (BBB)',
+			prescribed_weight: 50,
+			prescribed_reps: 10,
+			amrap: false,
+			plates_per_side: [],
+			plate_change: null
+		}
+	]
+};
+
+function bbbFixture(): LocalSession {
+	return commitSession(peekedWithBackoff, options);
+}
+
 describe('a weight edit carries through the exercise', () => {
 	it('rewrites every later pending set of the same exercise', () => {
 		const edited = editSet(committed, 0, { weight: 100 });
@@ -485,6 +564,53 @@ describe('a weight edit carries through the exercise', () => {
 
 		expect(again.sets[2].actualWeight).toBe(105);
 	});
+
+	it('still changes its own weight when the addressed set has already been logged', () => {
+		const logged = logSet(committed, 0, '2026-08-05T10:05:00Z');
+		const edited = editSet(logged, 0, { weight: 100 });
+
+		expect(edited.sets[0].actualWeight).toBe(100);
+	});
+
+	it('does not carry from an addressed set that has already been logged', () => {
+		const logged = logSet(committed, 0, '2026-08-05T10:05:00Z');
+		const edited = editSet(logged, 0, { weight: 100 });
+
+		expect(edited.sets[1].actualWeight).toBe(97.5);
+		expect(edited.sets[2].actualWeight).toBe(97.5);
+	});
+});
+
+describe('a weight edit carries the difference, not the weight', () => {
+	it("applies the delta to each carried set's own prescription, never the edited weight", () => {
+		const session = bbbFixture();
+		const edited = editSet(session, 0, { weight: 95 });
+
+		// +5 on a 90 kg main set: the other main set gets 90 + 5, and both
+		// backoff sets get their own 50 + 5 — never the main lift's 95.
+		expect(edited.sets[1].actualWeight).toBe(95);
+		expect(edited.sets[2].actualWeight).toBe(55);
+		expect(edited.sets[3].actualWeight).toBe(55);
+	});
+
+	it('returns every carried set to exactly its own prescription once the delta is zero', () => {
+		const session = bbbFixture();
+		const edited = editSet(session, 0, { weight: 95 });
+		const back = editSet(edited, 0, { weight: 90 });
+
+		expect(back.sets[1].actualWeight).toBe(90);
+		expect(back.sets[2].actualWeight).toBe(50);
+		expect(back.sets[3].actualWeight).toBe(50);
+	});
+
+	it('clamps a carried weight at zero rather than going negative', () => {
+		const session = bbbFixture();
+		const edited = editSet(session, 0, { weight: 0 });
+
+		// Delta is -90; the backoff sets' own 50 kg would otherwise land at -40.
+		expect(edited.sets[2].actualWeight).toBe(0);
+		expect(edited.sets[3].actualWeight).toBe(0);
+	});
 });
 
 describe('the reason for a drift', () => {
@@ -521,6 +647,20 @@ describe('the reason for a drift', () => {
 		// it would arrive with a null actual_weight, the check constraint would
 		// refuse it, and the whole session would be lost over a chip.
 		expect(body.sets[1].drift_reason).toBeNull();
+	});
+
+	it('does not attach to a set that has not deviated from its own prescription', () => {
+		const reasoned = setDriftReason(committed, 0, 'too_easy');
+
+		expect(reasoned.sets[0].driftReason).toBeNull();
+	});
+
+	it('submits null for a set logged at its own prescription, even after being asked for a reason', () => {
+		const reasoned = setDriftReason(committed, 0, 'too_easy');
+		const logged = logSet(reasoned, 0, '2026-08-05T10:05:00Z');
+		const body = toSubmission(logged, { endedAt: '2026-08-05T11:00:00Z', cutReason: 'enough' });
+
+		expect(body.sets[0].drift_reason).toBeNull();
 	});
 });
 
