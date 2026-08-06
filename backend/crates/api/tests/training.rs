@@ -2889,9 +2889,19 @@ async fn drift_is_signed_and_counted_per_direction(pool: PgPool) {
     let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
     let session = next_session(&server, &token, enrollment).await;
 
+    // Both directions on the same lift in the same session, which is the only
+    // arrangement that can tell a signed sum from an absolute one: these two
+    // sum to +2.5 signed and to 7.5 unsigned, so a drift that forgot its sign
+    // would fail here rather than merely look larger.
     let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
     let first = body["sets"][0]["prescribed_weight"].as_f64().unwrap();
+    let second = body["sets"][1]["prescribed_weight"].as_f64().unwrap();
     body["sets"][0]["actual_weight"] = json!(first + 5.0);
+    body["sets"][1]["actual_weight"] = json!(second - 2.5);
+
+    // The two sets have to belong to the same lift for the point to hold both,
+    // and 5/3/1 opens with three sets of the main lift.
+    assert_eq!(body["sets"][0]["exercise"], body["sets"][1]["exercise"]);
 
     server
         .post("/v1/workouts")
@@ -2903,9 +2913,9 @@ async fn drift_is_signed_and_counted_per_direction(pool: PgPool) {
     let view = progress(&server, &token).await;
     let point = &view["lifts"][0]["points"][0];
 
-    assert_eq!(point["drift_kg"].as_f64(), Some(5.0));
+    assert_eq!(point["drift_kg"].as_f64(), Some(2.5));
     assert_eq!(point["sets_over"].as_u64(), Some(1));
-    assert_eq!(point["sets_under"].as_u64(), Some(0));
+    assert_eq!(point["sets_under"].as_u64(), Some(1));
 }
 
 /// The units are the contract, and nothing else asserted which one is which.
@@ -2938,4 +2948,206 @@ async fn an_indicator_names_the_unit_the_client_must_format_it_in(pool: PgPool) 
 
     assert_eq!(unit("load_moved"), "kg");
     assert_eq!(unit("sessions"), "count");
+}
+
+/// A rival sees an empty screen, and the owner still sees a full one.
+///
+/// The convention every other read endpoint here follows
+/// (`another_athletes_workout_detail_is_not_found` and its siblings), and the
+/// one `/v1/progress` was missing. The 401 test proves an *unauthenticated*
+/// request is refused; it says nothing about an authenticated stranger, which
+/// is the failure that would actually leak training data.
+///
+/// One test covers all four queries: they scope through the same join on
+/// `enrollments`, so a widened predicate in any of them shows up as something
+/// non-empty here. And the assertions are on the *figures* as well as the array
+/// lengths — "the list was empty" and "the list held a stranger's load total"
+/// are the same length to a weaker test.
+#[sqlx::test]
+async fn another_athletes_progress_is_not_in_mine(pool: PgPool) {
+    let server = server(pool);
+
+    let mine = register(&server, EMAIL).await;
+    set_maxes(&server, &mine, full_maxes()).await;
+    let enrollment = enrol(&server, &mine, "wendler-531-bbb").await;
+    log_a_session(&server, &mine, enrollment).await;
+
+    let theirs = register(&server, "rival@example.com").await;
+
+    let load_moved = |view: &serde_json::Value| {
+        view["overall"]
+            .as_array()
+            .expect("overall is a list")
+            .iter()
+            .find(|indicator| indicator["key"] == "load_moved")
+            .expect("load moved is always offered")["value"]
+            .as_f64()
+            .expect("a load is a number")
+    };
+
+    let rival = progress(&server, &theirs).await;
+    assert!(rival["lifts"].as_array().unwrap().is_empty());
+    assert!(rival["sessions"].as_array().unwrap().is_empty());
+    assert!(rival["programs"].as_array().unwrap().is_empty());
+    assert_eq!(load_moved(&rival), 0.0);
+
+    // And the owner still sees it, so "empty" above is a scoping result rather
+    // than an endpoint that answers nothing to anybody.
+    let owner = progress(&server, &mine).await;
+    assert!(!owner["lifts"].as_array().unwrap().is_empty());
+    assert_eq!(owner["sessions"].as_array().unwrap().len(), 1);
+    assert_eq!(owner["programs"].as_array().unwrap().len(), 1);
+    assert!(load_moved(&owner) > 0.0);
+}
+
+/// The asymmetry D-13's second question is asked in: what the program wanted,
+/// against what was actually moved.
+///
+/// `load_prescribed_kg` counts every set the session prescribed, including one
+/// the athlete skipped; `load_moved_kg` counts only what was performed. Making
+/// both sides count the same sets would mean skipping work and still reading as
+/// perfect compliance, which is the one thing this pair exists to catch.
+///
+/// The expected figures are computed from the session's own prescription rather
+/// than written down, so this pins the rule and not 5/3/1's week-one numbers.
+#[sqlx::test]
+async fn the_prescribed_load_counts_a_skipped_set_and_the_moved_load_does_not(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let prescribed = session["prescribed_sets"].as_array().unwrap();
+    let volume = |set: &serde_json::Value| {
+        set["prescribed_weight"].as_f64().unwrap() * set["prescribed_reps"].as_f64().unwrap()
+    };
+
+    // The whole session as prescribed, except one set in the middle of it that
+    // the athlete did not do. `completed` rather than `cut_short`: they
+    // finished the session, they just left a set out — which is freelancing
+    // rather than running out of time, and is exactly the case in question.
+    const SKIPPED: usize = 1;
+    let sets: Vec<serde_json::Value> = prescribed
+        .iter()
+        .enumerate()
+        .map(|(index, set)| {
+            let mut logged = json!({
+                "position": set["position"],
+                "exercise": set["exercise"],
+                "prescribed_weight": set["prescribed_weight"],
+                "prescribed_reps": set["prescribed_reps"],
+                "status": if index == SKIPPED { "skipped" } else { "done" },
+            });
+
+            if index != SKIPPED {
+                logged["actual_weight"] = set["prescribed_weight"].clone();
+                logged["actual_reps"] = set["prescribed_reps"].clone();
+            }
+
+            logged
+        })
+        .collect();
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&json!({
+            "id": Uuid::now_v7(),
+            "enrollment_id": enrollment,
+            "started_at": "2026-07-26T09:00:00Z",
+            "ended_at": "2026-07-26T10:00:00Z",
+            "outcome": "completed",
+            "sets": sets,
+        }))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let view = progress(&server, &token).await;
+    let figures = &view["sessions"][0];
+
+    let asked_for: f64 = prescribed.iter().map(volume).sum();
+    let left_out = volume(&prescribed[SKIPPED]);
+
+    assert!(left_out > 0.0, "the skipped set has to be worth something");
+    assert_eq!(figures["load_prescribed_kg"].as_f64(), Some(asked_for));
+    assert_eq!(
+        figures["load_moved_kg"].as_f64(),
+        Some(asked_for - left_out)
+    );
+    assert!(
+        figures["load_moved_kg"].as_f64() < figures["load_prescribed_kg"].as_f64(),
+        "a skipped set has to show as a shortfall, or the figures say nothing"
+    );
+}
+
+/// A bodyweight lift's record is reps, not kilograms — so it gets no cells.
+///
+/// Six cells all reading `0.0` would be worse than no grid: it looks like six
+/// achievements rather than an absence, and it would sit beside a real squat
+/// record as though it meant the same kind of thing. The lift itself is still
+/// present in the trend, which is what makes this an exclusion from the grid
+/// rather than the exercise being dropped.
+#[sqlx::test]
+async fn a_set_lifted_at_no_weight_earns_no_record(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    let after_the_last = body["sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|set| set["position"].as_u64())
+        .max()
+        .expect("the session prescribes sets")
+        + 1;
+
+    // Fifteen reps at nothing: above every bucket in the grid, so an
+    // implementation that failed to exclude it would fill all six with zeroes.
+    body["sets"].as_array_mut().unwrap().push(json!({
+        "position": after_the_last,
+        "exercise": "hanging-leg-raise",
+        "prescribed_weight": 0.0,
+        "prescribed_reps": 15,
+        "actual_weight": 0.0,
+        "actual_reps": 15,
+        "status": "done",
+    }));
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let view = progress(&server, &token).await;
+    let bodyweight = view["lifts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|lift| lift["exercise"] == "hanging-leg-raise")
+        .expect("the lift was performed and belongs in the trend");
+
+    assert!(
+        bodyweight["bests"].as_array().unwrap().is_empty(),
+        "a zero-kilogram set is not a record: {}",
+        bodyweight["bests"]
+    );
+    // Present in the trend, and honest about the estimate: Brzycki over no
+    // weight is not a one-rep max of zero, it is no answer at all.
+    assert_eq!(bodyweight["points"].as_array().unwrap().len(), 1);
+    assert!(bodyweight["points"][0]["estimate"].is_null());
+
+    // The barbell lift beside it still has its grid, so this excluded a set
+    // rather than the query finding nothing. Whichever lift the program opened
+    // the day with, by position — the assertion is that a loaded set earns
+    // cells, not that 5/3/1 starts on any particular one.
+    let loaded = &view["lifts"][0];
+    assert_ne!(loaded["exercise"], "hanging-leg-raise");
+    assert!(!loaded["bests"].as_array().unwrap().is_empty());
 }
