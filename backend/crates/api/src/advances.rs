@@ -25,12 +25,18 @@ pub async fn load_advances(
     enrollment_id: Uuid,
     program: &dyn Program,
 ) -> Result<Vec<RecordedAdvance>, sqlx::Error> {
-    // `advanced_at, workout_id` rather than `advanced_at` alone. `now()` is
-    // per-transaction and submits serialise on the enrolment's `for update`
-    // lock, so two rows sharing a timestamp is implausible — but the order
-    // the whole chain check rests on should not be the one thing here without
-    // a deterministic tiebreak, and an arbitrary walk of tied rows is exactly
-    // the shape of a false `ChainBroken`.
+    // `advanced_at, workout_id` rather than `advanced_at` alone. The column's
+    // default is `clock_timestamp()` (statement time), not `now()`
+    // (transaction start time) — ordering by `advanced_at` only matches
+    // lock-acquisition order, and therefore fold order, because the insert
+    // that stamps it can only run while holding the enrolment's `for update`
+    // lock (see `routes/workouts.rs`'s module header). Changing that default
+    // back to `now()` for tidiness would silently break this ordering: two
+    // overlapping submits could then be stamped out of lock order, and this
+    // walk would read a healthy chain backwards. Even so, two rows sharing a
+    // timestamp is implausible rather than impossible, so the walk still
+    // wants a deterministic tiebreak — an arbitrary order among tied rows is
+    // exactly the shape of a false `ChainBroken`.
     let rows: Vec<(Uuid, Value, Value, String, DateTime<Utc>)> = sqlx::query_as(
         "select workout_id, state_before, state_after, engine_version, advanced_at
          from enrollment_advances

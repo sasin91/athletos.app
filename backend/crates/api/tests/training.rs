@@ -16,6 +16,7 @@
 use athletos_api::app;
 use athletos_api::state::AppState;
 use axum_test::TestServer;
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -3371,5 +3372,128 @@ async fn a_lift_not_trained_in_a_year_still_carries_its_record(pool: PgPool) {
             .expect("a 5-rep bucket")["weight"]
             .as_f64(),
         Some(200.0)
+    );
+}
+
+// --- `advanced_at` is statement time, not transaction time -----------------
+//
+// Postgres's `now()` is fixed for the lifetime of a transaction; the whole
+// reason `advanced_at` defaults to `clock_timestamp()` instead is that two
+// submits can overlap under the enrolment's `for update` lock, and the row
+// written by the transaction that acquires the lock *second* must not be
+// stamped earlier than the row written first. That specific interleaving —
+// two genuinely concurrent transactions racing on one lock — is not
+// something this crate's `#[sqlx::test]` harness (one pool, no manual
+// connection interleaving) can drive honestly. Both tests below stop short
+// of that: they prove the mechanism the fix relies on, not the race itself.
+
+/// The regression this guards against is literal: someone reverts the
+/// default to `now()` "for tidiness", every existing test still passes
+/// (nothing here submits two overlapping requests), and the false
+/// `ChainBroken` this migration exists to prevent comes back silently. This
+/// reads the column's actual default straight from the catalog so that
+/// revert fails immediately and loudly, without needing a race to trigger it.
+#[sqlx::test]
+async fn advanced_at_still_defaults_to_clock_timestamp(pool: PgPool) {
+    let default_expr: String = sqlx::query_scalar(
+        "select pg_get_expr(d.adbin, d.adrelid)
+         from pg_attrdef d
+         join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+         where d.adrelid = 'enrollment_advances'::regclass
+           and a.attname = 'advanced_at'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("advanced_at has a default");
+
+    assert_eq!(default_expr, "clock_timestamp()");
+}
+
+/// `now()` is frozen at transaction start, so two statements in the same
+/// transaction always see the same value; `clock_timestamp()` is evaluated
+/// per statement. This is what makes lock-acquisition order and insert order
+/// coincide for `advanced_at` — the property `load_advances`'s ordering
+/// comment in `advances.rs` depends on.
+///
+/// This test is honest about what it does and does not show: it inserts two
+/// rows for one enrolment *sequentially within a single transaction*
+/// (`workouts` rows created directly by SQL, since the API only ever writes
+/// one `enrollment_advances` row per transaction) with `pg_sleep` between
+/// them, and asserts the second row's `advanced_at` is strictly later than
+/// the first's. That demonstrates the statement-time behaviour the fix
+/// depends on. It does not exercise two concurrent transactions or the
+/// `for update` lock, and it proves nothing about lock-acquisition order —
+/// only a real race, which this harness cannot drive, would do that.
+#[sqlx::test]
+async fn advanced_at_moves_between_statements_in_one_transaction(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let workout_a = Uuid::now_v7();
+    let workout_b = Uuid::now_v7();
+
+    let mut tx = pool.begin().await.unwrap();
+
+    for workout in [workout_a, workout_b] {
+        sqlx::query(
+            "insert into workouts (id, enrollment_id, week, day, started_at)
+             values ($1, $2, 1, 1, now())",
+        )
+        .bind(workout)
+        .bind(enrollment)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    }
+
+    sqlx::query(
+        "insert into enrollment_advances
+             (workout_id, enrollment_id, state_before, state_after, engine_version)
+         values ($1, $2, '{}'::jsonb, '{}'::jsonb, 'test')",
+    )
+    .bind(workout_a)
+    .bind(enrollment)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+
+    // Long enough to exceed clock resolution comfortably; short enough not to
+    // make the suite noticeably slower.
+    sqlx::query("select pg_sleep(0.05)")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "insert into enrollment_advances
+             (workout_id, enrollment_id, state_before, state_after, engine_version)
+         values ($1, $2, '{}'::jsonb, '{}'::jsonb, 'test')",
+    )
+    .bind(workout_b)
+    .bind(enrollment)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+
+    tx.commit().await.unwrap();
+
+    let stamps: Vec<(Uuid, DateTime<Utc>)> = sqlx::query_as(
+        "select workout_id, advanced_at from enrollment_advances
+         where workout_id = any($1)
+         order by advanced_at",
+    )
+    .bind(vec![workout_a, workout_b])
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(stamps[0].0, workout_a, "inserted first, so sorts first");
+    assert_eq!(stamps[1].0, workout_b, "inserted second, so sorts second");
+    assert!(
+        stamps[1].1 > stamps[0].1,
+        "clock_timestamp() must advance between two statements in one \
+         transaction — if this ties, the default reverted to now()"
     );
 }
