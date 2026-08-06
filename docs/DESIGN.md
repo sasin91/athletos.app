@@ -1129,21 +1129,29 @@ The reference writes a `lift_records` table that nothing reads back.
 > **Amended while building the endpoint behind the screen it refused.** The
 > sentence at the top reads *"Three things, and no dashboard"*, and the three
 > words after the comma no longer hold: `GET /v1/progress` exists, and it
-> returns the whole of a dashboard in one round trip. Everything before the
-> comma survives unchanged. This is a narrow reversal, but it is a reversal, and
-> it is named here rather than left for a reader to find as a contradiction
-> between this document and the product.
+> returns the whole of a dashboard in one round trip. The three things above are
+> all still there and the rule under them still holds, but the list of three is
+> no longer exhaustive and saying otherwise would be the softer, falser version
+> of this paragraph.
 >
 > **What was refused was a grid of whatever happens to be countable, sitting on
-> the screen the athlete opens**, and that is still refused. The screen this
-> serves is one tap from Train and navigated to on purpose, and it carries
-> exactly the three things above — e1RM trend, drift, session duration — plus a
-> table of bests this decision did not ask for and which is answered below. The
-> placement is D-01 applied rather than D-01 changed: a rising line on the
-> screen where the athlete decides how heavy to go today is the one position
-> this decision's own *motivation is accelerant* argument forbids, so the chart
-> is not there. A dashboard the athlete has to choose to look at is a different
-> object from the one the last three words were written against.
+> the screen the athlete opens**, and that is still refused — but the defence is
+> not the count. The screen this serves is one tap from Train and navigated to
+> on purpose, and it carries the three things above, **Load** in a panel of its
+> own, a table of bests, and a row of indicator cards per enrolment and overall,
+> among them the typical gap between sets.
+>
+> Load is the one to argue rather than omit, because it is the strongest case
+> against the countability reading: the athlete asked for a chart of *weight,
+> load and progress*, so load is requested rather than merely available, and it
+> gets a separate panel and a separate scale precisely because roughly 5000
+> against roughly 150 on one axis would be a chart lying about a relationship it
+> had drawn. The bests grid and the indicator cards are answered below, and the
+> line that keeps this from being the refused thing is that every figure here is
+> one somebody asked for, on a screen nobody is made to walk past. The placement
+> is D-01 applied rather than D-01 changed: a rising line on the screen where the
+> athlete decides how heavy to go today is the one position this decision's own
+> *motivation is accelerant* argument forbids, so the chart is not there.
 >
 > **The rule underneath survived contact, and it is the sentence worth keeping.**
 > *Progress is never shown without its cost.* The drift band shares the trend's
@@ -1158,15 +1166,15 @@ The reference writes a `lift_records` table that nothing reads back.
 > rather than sidestepped: *"The reference writes a `lift_records` table that
 > nothing reads back."* The grid is the same idea and the opposite
 > construction. Nothing is written — no detection at submit, no writer, no
-> backfill, and this change carries no migration. Each cell is a query for the
-> heaviest `done` set whose actual reps reach that cell, over the same
-> `workout_sets` rows the logger already wrote and never updates, and the grid
-> exists because a screen renders it. *At least* that many reps rather than
-> exactly, so every cell is still a set that happened and the grid cannot show a
-> 3-rep best below a 5-rep one; gaps are never filled with the estimate, because
-> a records table that mixes what was done with what a formula implies stops
-> meaning anything. The scar recorded above is a write with no reader, not the
-> concept of a record.
+> backfill, and this change carries no migration. One `distinct on` fills the
+> whole grid — not a query a cell — taking the heaviest `done` set whose actual
+> reps reach each bucket, over the same `workout_sets` rows the logger already
+> wrote and never updates, and the grid exists because a screen renders it. *At
+> least* that many reps rather than exactly, so every cell is still a set that
+> happened and the grid cannot show a 3-rep best below a 5-rep one; gaps are
+> never filled with the estimate, because a records table that mixes what was
+> done with what a formula implies stops meaning anything. The scar recorded
+> above is a write with no reader, not the concept of a record.
 >
 > **What it costs, stated rather than glossed.** Every figure on this screen is
 > recomputed on every request, and the derivation is the definition. So there is
@@ -1176,8 +1184,22 @@ The reference writes a `lift_records` table that nothing reads back.
 > trend line can honestly have — a chart quietly mixing points computed under
 > two formulas has a slope that is partly an artifact — but it does mean the
 > numbers here have no past tense, and a screenshot taken last month cannot be
-> reproduced. Adding a metric is a deploy rather than a row. And every load does
-> real work that the indexes have to cover.
+> reproduced. Adding a metric is a deploy rather than a row.
+>
+> And every load does real work against an index that does not exist. `workouts`
+> has no `athlete_id`, so ownership arrives through a join on `enrollments` in
+> all four queries and no index over `workouts` answers the scope — the same
+> shape, and the same accepted cost, that `routes::workouts::history` already
+> documents at length. Three of the four queries are bounded by the twelve-month
+> window. The fourth is not, and deliberately: a record does not expire, so the
+> bests grid reads the athlete's whole training life and that one query's work
+> grows forever. It returns six rows per lift however long the history is, which
+> is what makes the cost bearable — the response is bounded even though the read
+> is not. If either ever stops being cheap the fix is known and is not this
+> table: denormalise `athlete_id` onto `workouts` with an index behind it, which
+> is an additive migration, and doing it now — unmeasured, duplicating a fact
+> `enrollments` owns — is the speculative move the schema comments already argue
+> against.
 >
 > A `performance_indicators` table written at submit was evaluated and declined.
 > It earns its keep when aggregation is expensive, when the inputs will not be
@@ -1185,10 +1207,12 @@ The reference writes a `lift_records` table that nothing reads back.
 > tenant or version, or when the metric set is open-ended. This codebase meets
 > one of the five — the training max's input is the opaque `State`, which keeps
 > only the latest fold (D-19) — and `enrollment_advances` already covers it.
-> Everything else derives from `workout_sets`, and a year of training is roughly
-> two hundred workouts and six thousand set rows: an indexed aggregate, not a
-> scan. D-16 sized this box by measurement rather than estimate, and caching
-> before measuring is the same instinct in reverse. The asymmetry is what
+> Everything else derives from `workout_sets`, which is written once and never
+> deleted, at a volume of one person's training: hundreds of sessions and low
+> thousands of sets in the window, and the whole history for the one query that
+> is not windowed. Neither number is one a stored total is needed to survive.
+> D-16 sized this box by measurement rather than estimate, and caching before
+> measuring is the same instinct in reverse. The asymmetry is what
 > settles it — deriving first costs nothing later, since the derivation is the
 > definition a cache would eventually be built from, while materialising first
 > and then revising a formula means reconciling a table against a rule that has
@@ -1785,6 +1809,23 @@ ever pull the schema away from that, the chart gets its own table back.
   it is needed. What the equivalent is here — how often this runs, from where,
   and who reads its output, which it needs a human for at least once per
   enrolment — is an operations decision and is deliberately not taken in D-19.
+
+- **An entered max is drawn as a training max, and nothing on the wire says
+  so.** `TrendPoint.training_max` is built from `readout()`, keeping the weight
+  and dropping `Readout.label`. For 5/3/1 that label was *Training max* and the
+  field is honest. For a prescriptive program the blanket impl returns the maxes
+  snapshotted at enrolment, labelled *Entered 1RM*, and the handler takes them
+  as a fallback so that such a program draws a line rather than a gap — which
+  means the athlete's own typed number is displayed under a name reserved for
+  the one that moves. A client cannot tell the two apart, because the only thing
+  that could tell it is the label that was dropped. D-03 introduced that label
+  for exactly this: *"Inventing a training max for a program that does not have
+  one would be the same lie as an invented progress denominator."* And
+  `CONTEXT.md` keeps the two terms apart on the grounds that a screen showing
+  both must be able to explain each. The choice — drop the fallback and accept
+  the gap, carry the label onto the wire, or name the series something true of
+  both — is a design decision and is deliberately not taken here. Nothing is
+  changed until it is.
 
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.

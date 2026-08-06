@@ -21,7 +21,9 @@ _Avoid_: Max (ambiguous — see Training max), PR, personal best
 **Estimate**:
 The one-rep max a set that was actually performed implies. Evidence of
 capability, computed rather than entered. Distinct from the Entered 1RM, which
-the athlete owns and types, and which never appears on the progress screen.
+the athlete owns and types, and which is never a series of its own on the
+progress screen — though it stands in for the Training max on the trend where a
+program has none to report.
 _Avoid_: Estimated 1RM, e1RM in prose
 
 **Training max**:
@@ -160,7 +162,9 @@ Intervals aggregated by exercise, plus the Lead-in and the Tail — where an
 hour actually went. Answers "which lift is eating my session".
 
 **Load**:
-Kilograms moved: sets times reps times weight, over work actually done.
+Kilograms moved: sets times reps times weight, over work actually done. The
+prescribed counterpart — the same arithmetic over what was asked for — travels
+beside it, and is what makes the moved figure mean anything.
 
 **Best**:
 The heaviest weight lifted for at least a given number of reps. An observed
