@@ -29,7 +29,6 @@ use axum::Json;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -416,12 +415,50 @@ pub async fn show(
 ) -> ApiResult<Json<ProgressView>> {
     let athlete_id = athlete.athlete_id;
 
-    Ok(Json(assemble(Loaded {
-        sessions: sessions(&state.db, athlete_id).await?,
-        sets: sets(&state.db, athlete_id).await?,
-        training_maxes: training_maxes(&state.db, athlete_id).await?,
-        bests: bests(&state.db, athlete_id).await?,
-    })))
+    // One transaction, `repeatable read`, for two reasons rather than one.
+    //
+    // The first is the shape of the bug without it: run as four separate
+    // implicit transactions (the default, one per statement), a workout
+    // committed while this handler is between awaits is visible to whichever
+    // of the four queries runs after the commit and invisible to whichever
+    // ran before it. `bests` runs last and is unwindowed, so it is the query
+    // most likely to surface a session that `sessions` and `sets` never saw —
+    // one response, describing two different database states. Plain `read
+    // committed` does not close this: it still lets a later statement in the
+    // same transaction see a commit that landed after the transaction began.
+    // `repeatable read` is the level that gives every statement in this
+    // transaction the same MVCC snapshot.
+    //
+    // The second is `now()`. Each of the three windowed queries below computes
+    // `now() - interval '{WINDOW_MONTHS} months'` itself. `now()` is pinned to
+    // a transaction's start regardless of isolation level — but only if the
+    // four queries share one transaction. Run as four separate transactions,
+    // each evaluates `now()` at its own start, so a session sitting exactly on
+    // the twelve-month boundary could fall inside the window for one query and
+    // outside it for another. One transaction gives all four statements the
+    // same `now()` for free; the `repeatable read` above is what additionally
+    // makes them see the same rows.
+    //
+    // A future reader who removes this "because they are only reads" would
+    // reopen both gaps at once.
+    let mut tx = state.db.begin().await?;
+
+    // Must be the first statement in the transaction — Postgres refuses to
+    // change isolation level once any other statement has run.
+    sqlx::query("set transaction isolation level repeatable read")
+        .execute(&mut *tx)
+        .await?;
+
+    let loaded = Loaded {
+        sessions: sessions(&mut tx, athlete_id).await?,
+        sets: sets(&mut tx, athlete_id).await?,
+        training_maxes: training_maxes(&mut tx, athlete_id).await?,
+        bests: bests(&mut tx, athlete_id).await?,
+    };
+
+    tx.commit().await?;
+
+    Ok(Json(assemble(loaded)))
 }
 
 /// Query 1 — every session in the window, oldest first.
@@ -430,7 +467,10 @@ pub async fn show(
 /// unlike `routes::workouts::history` where the newest row is the one the
 /// athlete came to see. `w.id` breaks the tie so two sessions sharing a
 /// `started_at` do not leave the order to the planner.
-async fn sessions(db: &PgPool, athlete_id: Uuid) -> ApiResult<Vec<SessionRow>> {
+async fn sessions(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    athlete_id: Uuid,
+) -> ApiResult<Vec<SessionRow>> {
     Ok(sqlx::query_as(&format!(
         "select w.id, w.enrollment_id, e.program_key, e.status, w.started_at, w.ended_at
          from workouts w
@@ -439,7 +479,7 @@ async fn sessions(db: &PgPool, athlete_id: Uuid) -> ApiResult<Vec<SessionRow>> {
          order by w.started_at, w.id"
     ))
     .bind(athlete_id)
-    .fetch_all(db)
+    .fetch_all(&mut **tx)
     .await?)
 }
 
@@ -454,7 +494,10 @@ async fn sessions(db: &PgPool, athlete_id: Uuid) -> ApiResult<Vec<SessionRow>> {
 ///
 /// `position` order is what [`crate::timing`] requires of its input: it walks a
 /// cursor through the stamps, and a walk of unordered stamps is not a walk.
-async fn sets(db: &PgPool, athlete_id: Uuid) -> ApiResult<HashMap<Uuid, Vec<SetRow>>> {
+async fn sets(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    athlete_id: Uuid,
+) -> ApiResult<HashMap<Uuid, Vec<SetRow>>> {
     let rows: Vec<SetRow> = sqlx::query_as(&format!(
         "select s.workout_id, s.\"position\", s.exercise,
                 s.prescribed_weight::float8, s.prescribed_reps,
@@ -467,7 +510,7 @@ async fn sets(db: &PgPool, athlete_id: Uuid) -> ApiResult<HashMap<Uuid, Vec<SetR
          order by s.workout_id, s.\"position\""
     ))
     .bind(athlete_id)
-    .fetch_all(db)
+    .fetch_all(&mut **tx)
     .await?;
 
     let mut grouped: HashMap<Uuid, Vec<SetRow>> = HashMap::new();
@@ -494,7 +537,7 @@ async fn sets(db: &PgPool, athlete_id: Uuid) -> ApiResult<HashMap<Uuid, Vec<SetR
 /// map, and [`assemble`] turns a missing entry into `None`. A zero would be a
 /// claim that the program was prescribing from nothing.
 async fn training_maxes(
-    db: &PgPool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     athlete_id: Uuid,
 ) -> ApiResult<HashMap<Uuid, HashMap<String, f64>>> {
     let rows: Vec<(Uuid, String, Value)> = sqlx::query_as(&format!(
@@ -505,7 +548,7 @@ async fn training_maxes(
          where e.athlete_id = $1 and w.started_at >= now() - interval '{WINDOW_MONTHS} months'"
     ))
     .bind(athlete_id)
-    .fetch_all(db)
+    .fetch_all(&mut **tx)
     .await?;
 
     let mut per_workout = HashMap::with_capacity(rows.len());
@@ -589,7 +632,10 @@ async fn training_maxes(
 /// row of each group, which the ordering makes the heaviest; ties go to the
 /// earliest, because the athlete lifted it then. `s.id` closes the tie a shared
 /// timestamp would otherwise leave to the planner.
-async fn bests(db: &PgPool, athlete_id: Uuid) -> ApiResult<HashMap<String, Vec<Best>>> {
+async fn bests(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    athlete_id: Uuid,
+) -> ApiResult<HashMap<String, Vec<Best>>> {
     let rows: Vec<BestRow> = sqlx::query_as(
         "select distinct on (s.exercise, b.reps)
                 s.exercise, b.reps, s.actual_weight::float8 as weight, s.actual_reps,
@@ -607,7 +653,7 @@ async fn bests(db: &PgPool, athlete_id: Uuid) -> ApiResult<HashMap<String, Vec<B
     )
     .bind(athlete_id)
     .bind(BEST_REPS)
-    .fetch_all(db)
+    .fetch_all(&mut **tx)
     .await?;
 
     let mut grouped: HashMap<String, Vec<Best>> = HashMap::new();
