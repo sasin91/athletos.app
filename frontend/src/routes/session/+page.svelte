@@ -5,7 +5,9 @@
 	import { formatClock, formatElapsed } from '$lib/time';
 	import { projectedFinish } from '$lib/pace';
 	import {
+		barUnchangedFrom,
 		CUT_REASONS,
+		DRIFT_REASONS,
 		editSet,
 		intervalBefore,
 		isComplete,
@@ -14,13 +16,14 @@
 		noteSet,
 		plateChangeFor,
 		resetSet,
+		setDriftReason,
 		setsDone,
 		setsRemaining,
 		skipSet,
 		summarise,
 		toSubmission
 	} from '$lib/session';
-	import type { CutReason, LocalSession, SessionSummary } from '$lib/session';
+	import type { CutReason, LocalSession, SessionSummary, WorkoutReceipt } from '$lib/session';
 	import { clearActiveSession, loadActiveSession, saveActiveSession } from '$lib/storage';
 	import { submitSession } from '$lib/submit';
 
@@ -82,6 +85,12 @@
 	let summary = $state<SessionSummary | null>(null);
 	let recordId = $state<string | null>(null);
 
+	// What the server said about this session, when it landed. Asked for by id
+	// rather than taken off the report as a whole: a flush sends everything
+	// outstanding, and an older session landing at the same moment would
+	// otherwise put its numbers on this ending.
+	let receipt = $state<WorkoutReceipt | null>(null);
+
 	async function finishSession(cutReason: CutReason | null) {
 		if (!session) return;
 
@@ -97,6 +106,7 @@
 		await clearActiveSession();
 		const report = await submitSession(body);
 		session = null;
+		receipt = report.receipts[body.id] ?? null;
 
 		// Asked about *this* id rather than about the report as a whole. A flush
 		// sends everything outstanding, so an older session landing while this
@@ -111,7 +121,16 @@
 	}
 
 	function numberFrom(event: Event): number | undefined {
-		const value = Number((event.currentTarget as HTMLInputElement).value);
+		// Empty or all-whitespace is "no edit", not zero. `Number('')` is `0`,
+		// finite and indistinguishable from a typed zero, and this fires on
+		// every keystroke: without this check, clearing the field to retype a
+		// number applies `delta = -prescribedWeight` and carries a 0 kg to
+		// every later pending set of the exercise before the athlete finishes
+		// typing the number they meant.
+		const raw = (event.currentTarget as HTMLInputElement).value;
+		if (raw.trim().length === 0) return undefined;
+
+		const value = Number(raw);
 		return Number.isFinite(value) ? value : undefined;
 	}
 </script>
@@ -151,12 +170,69 @@
 			{/if}
 
 			<!--
-				Whether the permanent record exists yet. The full picture — drift
-				against the prescription, and where the hour went — is computed in
-				Rust and lives on the history page, so this says plainly whether that
-				page has anything to show rather than linking into a 404 (D-11).
+				Whether the permanent record exists yet, and — once it does — the
+				drift against the prescription and where the hour went. Both numbers
+				are computed once, in Rust, off the submission that just landed
+				(D-11), and arrive on `receipt` below; nothing here recomputes them.
+				The history page still holds the per-exercise breakdown behind each
+				number — which set drifted, which gap was long — so that is not
+				duplicated on this screen either.
 			-->
 			{#if phase === 'sent'}
+				{#if receipt}
+					{@const ending = receipt.summary}
+					<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+						<!--
+							Load and drift on the same screen, deliberately. D-08 refused a
+							drift total here because it would have been the first place in
+							the product drift appeared alone; beside the load actually
+							moved and the athlete's own average, it is not alone (D-13).
+						-->
+						<dt class="eyebrow">load moved</dt>
+						<dd class="tabular">{Math.round(ending.load_moved_kg)} kg</dd>
+
+						{#if ending.sets_over > 0 || ending.sets_under > 0}
+							<dt class="eyebrow">against the prescription</dt>
+							<dd class="tabular">
+								{Math.round(ending.load_moved_kg - ending.load_prescribed_kg)} kg
+								{#if ending.sets_over > 0}· over on {ending.sets_over}{/if}
+								{#if ending.sets_under > 0}· under on {ending.sets_under}{/if}
+							</dd>
+						{/if}
+
+						{#if ending.average_duration_seconds !== null && ending.average_duration_seconds !== undefined}
+							<dt class="eyebrow">against your average</dt>
+							<dd class="tabular">
+								{formatElapsed(
+									Math.abs(ending.duration_seconds - ending.average_duration_seconds) * 1000
+								)}
+								{ending.duration_seconds >= ending.average_duration_seconds ? 'longer' : 'shorter'}
+							</dd>
+						{/if}
+
+						{#if ending.intervals}
+							<dt class="eyebrow">between sets</dt>
+							<dd class="tabular">
+								{formatElapsed(ending.intervals.min_seconds * 1000)} ·
+								{formatElapsed(ending.intervals.median_seconds * 1000)} ·
+								{formatElapsed(ending.intervals.max_seconds * 1000)}
+							</dd>
+							<!--
+								The middle figure is a median, not a mean: one interval spent
+								talking to somebody moves a mean of twelve by a minute, and
+								the tail of this distribution is not signal (D-10).
+							-->
+							<dt class="sr-only">what those three are</dt>
+							<dd class="col-span-2 text-xs opacity-50">
+								fastest · typical · slowest
+								{#if ending.intervals.discarded > 0}
+									· {ending.intervals.discarded} gap{ending.intervals.discarded === 1 ? '' : 's'} too
+									long to believe, left out
+								{/if}
+							</dd>
+						{/if}
+					</dl>
+				{/if}
 				<p class="text-sm opacity-70">Recorded. The program has moved on.</p>
 				<a class="btn w-full" href={resolve(`/history/${recordId}`)}> See where the hour went </a>
 			{:else if phase === 'queued'}
@@ -242,7 +318,11 @@
 									line correctly, because it carries a `plate_change` with an
 									empty `plates_per_side` rather than no change at all.
 								-->
-								{#if change || set.platesPerSide.length > 0}
+								{@const unchanged = barUnchangedFrom(session, set.position)}
+								{@const showPrescribed =
+									set.actualWeight === set.prescribedWeight && set.platesPerSide.length > 0}
+
+								{#if change || unchanged || showPrescribed}
 									<div class="mt-1 mb-1">
 										{#if change}
 											<!--
@@ -272,13 +352,23 @@
 											{/if}
 
 											<Plates plates={change.plates_per_side} />
+										{:else if unchanged}
+											<!--
+												The plan is gone because this weight was edited, but
+												the bar is where the last set left it and that is the
+												whole instruction. No stack is drawn: nobody computed
+												one for an edited weight, and the words were always
+												the instruction while the picture was the nicety
+												(D-04, D-11).
+											-->
+											<p class="eyebrow">bar is already loaded</p>
 										{:else}
 											<!--
-												The plan assumed a bar that is not the one in front of
-												them, so it is not shown as an instruction. The
-												breakdown of the prescribed weight still is, dimmed and
-												labelled, because it is true about the prescription even
-												when it is not true about the bar.
+												Stale for one of the *other* reasons — an earlier set
+												of this exercise skipped, or logged at a weight other
+												than its own. This set still sits at its own
+												prescription, so the breakdown is true about the
+												weight it names, and it stays dimmed and labelled.
 											-->
 											<div class="opacity-60">
 												<Plates plates={set.platesPerSide} />
@@ -358,6 +448,38 @@
 									<span>reps</span>
 								</label>
 							</div>
+
+							<!--
+								Why the weight changed. Appears only on the set being performed
+								and only once it actually differs; vanishes if it goes back.
+								Nothing is selected, no tap is a valid answer, and Log stays one
+								tap either way — honesty must never cost more than dishonesty
+								(D-07).
+							-->
+							{#if set.position === current && set.actualWeight !== set.prescribedWeight}
+								<fieldset class="flex flex-wrap items-baseline gap-2">
+									<legend class="eyebrow">why</legend>
+									{#each DRIFT_REASONS as reason (reason.value)}
+										<button
+											class="btn btn-xs"
+											class:btn-primary={set.driftReason === reason.value}
+											class:btn-outline={set.driftReason !== reason.value}
+											type="button"
+											aria-pressed={set.driftReason === reason.value}
+											onclick={() =>
+												apply((s) =>
+													setDriftReason(
+														s,
+														set.position,
+														set.driftReason === reason.value ? null : reason.value
+													)
+												)}
+										>
+											{reason.label}
+										</button>
+									{/each}
+								</fieldset>
+							{/if}
 
 							<!--
 								Placed under the current set only, and reopened for a set that

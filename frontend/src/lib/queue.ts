@@ -14,7 +14,7 @@
  * most likely to be wrong.
  */
 
-import type { WorkoutSubmission } from './session';
+import type { WorkoutReceipt, WorkoutSubmission } from './session';
 
 /** A submission waiting to land, and its history of trying. */
 export type QueuedWorkout = {
@@ -36,7 +36,7 @@ export type QueuedWorkout = {
 
 /** What one attempt at sending came to. */
 export type SendOutcome =
-	| { kind: 'accepted'; duplicate: boolean }
+	| { kind: 'accepted'; duplicate: boolean; receipt: WorkoutReceipt | null }
 	| { kind: 'retry'; reason: string }
 	| { kind: 'rejected'; reason: string };
 
@@ -56,9 +56,13 @@ export type SendOutcome =
  *   enrolment is gone), 409 (the id belongs to another enrolment), 413, 422.
  *   No amount of waiting changes any of them.
  */
-export function classifyStatus(status: number, detail: string | null): SendOutcome {
+export function classifyStatus(
+	status: number,
+	detail: string | null,
+	receipt: WorkoutReceipt | null = null
+): SendOutcome {
 	if (status === 200 || status === 201) {
-		return { kind: 'accepted', duplicate: status === 200 };
+		return { kind: 'accepted', duplicate: status === 200, receipt };
 	}
 
 	if (status === 401 || status === 408 || status === 429 || status >= 500) {
@@ -85,6 +89,18 @@ export type FlushReport = {
 	duplicate: string[];
 	retrying: string[];
 	rejected: string[];
+	/**
+	 * What the server said about each workout that landed, keyed by its id.
+	 *
+	 * Keyed rather than a single field, because a flush sends everything
+	 * outstanding: an older session landing alongside this one would otherwise
+	 * have its numbers shown on the ending of the session just finished.
+	 *
+	 * A landed workout with no entry is possible and not an error — the
+	 * response body may not have parsed, and losing the numbers is not losing
+	 * the session.
+	 */
+	receipts: Record<string, WorkoutReceipt>;
 };
 
 export function enqueued(submission: WorkoutSubmission, queuedAt: string): QueuedWorkout {
@@ -110,7 +126,13 @@ export async function flushQueue(
 	store: QueueStore,
 	send: (submission: WorkoutSubmission) => Promise<SendOutcome>
 ): Promise<FlushReport> {
-	const report: FlushReport = { accepted: [], duplicate: [], retrying: [], rejected: [] };
+	const report: FlushReport = {
+		accepted: [],
+		duplicate: [],
+		retrying: [],
+		rejected: [],
+		receipts: {}
+	};
 
 	const pending = (await store.all())
 		.filter((item) => item.state === 'queued')
@@ -121,6 +143,7 @@ export async function flushQueue(
 
 		if (outcome.kind === 'accepted') {
 			await store.remove(item.id);
+			if (outcome.receipt) report.receipts[item.id] = outcome.receipt;
 			(outcome.duplicate ? report.duplicate : report.accepted).push(item.id);
 			continue;
 		}

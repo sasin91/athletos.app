@@ -15,7 +15,7 @@
 import { classifyStatus, enqueued, flushQueue } from './queue';
 import type { FlushReport, SendOutcome } from './queue';
 import { queueStore } from './storage';
-import type { WorkoutSubmission } from './session';
+import type { WorkoutReceipt, WorkoutSubmission } from './session';
 
 export type { FlushReport };
 
@@ -35,18 +35,25 @@ export async function send(submission: WorkoutSubmission): Promise<SendOutcome> 
 	}
 
 	let detail: string | null = null;
+	let receipt: WorkoutReceipt | null = null;
 
 	try {
 		const body: unknown = await response.json();
-		if (typeof body === 'object' && body !== null && 'detail' in body) {
-			const value = (body as { detail: unknown }).detail;
-			if (typeof value === 'string') detail = value;
+
+		if (typeof body === 'object' && body !== null) {
+			if ('detail' in body && typeof body.detail === 'string') {
+				detail = body.detail;
+			}
+			// Trusted as far as the generated type goes and no further: this is
+			// our own API through our own BFF, and a body that is not the shape
+			// it claims is a bug we want loud rather than silently swallowed.
+			if ('summary' in body) receipt = body as WorkoutReceipt;
 		}
 	} catch {
 		// A body that is not JSON tells us nothing the status has not already.
 	}
 
-	return classifyStatus(response.status, detail);
+	return classifyStatus(response.status, detail, receipt);
 }
 
 /**

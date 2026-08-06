@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import TimeSpent from '$lib/TimeSpent.svelte';
 	import { formatDate, formatMinutes } from '$lib/time';
+	import { DRIFT_REASON_LABELS } from '$lib/session';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -55,6 +56,15 @@
 			</span>
 			{#if set.note}
 				<p class="mt-1 w-full text-sm opacity-60">{set.note}</p>
+			{/if}
+			{#if set.drift_reason}
+				<!--
+					Shown beside the drift rather than under the note: it is the answer
+					to "why is this row bold", not a sentence the athlete wrote.
+				-->
+				<p class="mt-1 w-full text-xs opacity-60">
+					{DRIFT_REASON_LABELS[set.drift_reason]}
+				</p>
 			{/if}
 		</li>
 	{/each}

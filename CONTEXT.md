@@ -116,6 +116,13 @@ The gap between what was prescribed and what was done — heavier, lighter, or
 not done at all. The signal the product exists to surface.
 _Avoid_: Deviation, variance, compliance, adherence
 
+**Drift reason**:
+Why a Set was lifted at a weight other than the one prescribed — too easy, too
+heavy, the bar was already loaded, or it felt off. Offered as one optional tap
+at the moment of the change, never asked for, never defaulted, and never
+blocking.
+_Avoid_: Excuse, justification, override reason
+
 **Cut short**:
 Ending a session before its last set, with a stated reason. A first-class
 outcome, not a failure. The program advances regardless.

@@ -16,6 +16,7 @@
 use athletos_api::app;
 use athletos_api::state::AppState;
 use axum_test::TestServer;
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -313,6 +314,169 @@ async fn the_training_max_moves_once_per_cycle_even_when_every_submit_is_retried
     // Open-ended, so there is no denominator to invent (D-03).
     assert_eq!(second_cycle["progress"]["completed"], 16);
     assert!(second_cycle["progress"]["total"].is_null());
+}
+
+// --- the recorded advance refolds clean (D-19) ------------------------------
+
+/// Loads one enrolment's recorded advances exactly as `verify-advances` would
+/// and checks them with `audit` — the round trip the whole D-19 branch exists
+/// for.
+async fn refolded(pool: &PgPool, enrollment: Uuid) -> athletos_api::audit::Audit {
+    let program = athletos_training::programs::find("wendler-531-bbb")
+        .expect("wendler-531-bbb is in the registry");
+
+    let advances = athletos_api::advances::load_advances(pool, enrollment, program)
+        .await
+        .expect("advances load against a database that just wrote them");
+
+    let current_state: serde_json::Value =
+        sqlx::query_scalar("select state from enrollments where id = $1")
+            .bind(enrollment)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+
+    athletos_api::audit::audit(enrollment, &current_state, &advances)
+}
+
+/// `audit` itself is well covered by unit tests in `audit.rs`. What was
+/// missing is the reconstruction it is checked against — `load_advances` and
+/// `logged_session`, which used to live inside the `verify-advances` binary,
+/// where no test could reach them. This is the round trip: submit a real
+/// session, load the row `submit` wrote back through the same code path the
+/// binary runs, refold it, and confirm `audit` finds nothing wrong with data
+/// that is completely healthy.
+#[sqlx::test]
+async fn a_recorded_advance_refolds_to_what_it_recorded(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    log_a_session(&server, &token, enrollment).await;
+
+    let result = refolded(&pool, enrollment).await;
+
+    assert_eq!(result.advances, 1);
+    assert!(result.findings.is_empty(), "{:?}", result.findings);
+}
+
+/// `position` is the canonical order — the training migration calls wire
+/// order "an accident of the wire" for exactly this reason — but nothing
+/// enforced it in `submit` until this branch: the fold ran over `body.sets`
+/// in request order. Submitting the sets in the opposite of position order
+/// and still getting a clean audit is what pins that fix to a test rather
+/// than leaving it as an argument in a comment.
+#[sqlx::test]
+async fn a_session_logged_out_of_position_order_still_refolds_clean(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let session = next_session(&server, &token, enrollment).await;
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["sets"]
+        .as_array_mut()
+        .expect("a submission carries its sets")
+        .reverse();
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let result = refolded(&pool, enrollment).await;
+
+    assert_eq!(result.advances, 1);
+    assert!(result.findings.is_empty(), "{:?}", result.findings);
+}
+
+/// The one place `submit`'s bug (Finding 1: folding `body.sets` in request
+/// order rather than by `position`) can actually change what a fold computes:
+/// `made_the_minimum`'s tie-break, which is `max_by` and therefore returns
+/// the *last* maximum it sees. The test above cannot exercise that —
+/// `logged_as_prescribed` always logs a set as matching its own prescription,
+/// so whichever tied set the fold happens to land on trivially "made the
+/// minimum" regardless of order, tie or no tie. This one builds a genuine
+/// tie by hand: the week-3 AMRAP set and the last Boring But Big set of the
+/// same lift, pinned to the same weight, and only one of them made. Submitted
+/// in the opposite of position order, this diverges without the position
+/// sort in `submit` and refolds clean with it — the fix pinned by a test
+/// rather than left as the argument in that function's comment.
+#[sqlx::test]
+async fn a_tied_amrap_reversed_in_the_wire_still_refolds_by_position(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    // Two full weeks, so the ninth session lands on week 3 — the only week
+    // `advance()` reads `logged` at all.
+    for _ in 0..8 {
+        log_a_session(&server, &token, enrollment).await;
+    }
+
+    let session = next_session(&server, &token, enrollment).await;
+    assert_eq!(session["week"], 3);
+    assert_eq!(session["day"], 1);
+
+    let prescribed = session["prescribed_sets"].as_array().unwrap();
+    assert_eq!(prescribed.len(), 8, "3 main sets and 5 Boring But Big sets");
+
+    // Position 2 is the week-3 AMRAP set; position 7 is the last Boring But
+    // Big set of the same lift. Pinning them to the same weight is what
+    // creates the tie `made_the_minimum`'s `max_by` has to break.
+    let tied_weight = prescribed[2]["prescribed_weight"].clone();
+
+    let mut sets: Vec<serde_json::Value> = prescribed
+        .iter()
+        .map(|set| {
+            json!({
+                "position": set["position"],
+                "exercise": set["exercise"],
+                "prescribed_weight": set["prescribed_weight"],
+                "prescribed_reps": set["prescribed_reps"],
+                "actual_weight": set["prescribed_weight"],
+                "actual_reps": set["prescribed_reps"],
+                "status": "done",
+            })
+        })
+        .collect();
+
+    // Position 2: the AMRAP set, missed outright.
+    sets[2]["actual_reps"] = json!(0);
+
+    // Position 7: the last Boring But Big set, pinned to the AMRAP's weight
+    // and made in full.
+    sets[7]["prescribed_weight"] = tied_weight.clone();
+    sets[7]["actual_weight"] = tied_weight;
+
+    // The opposite of position order — what `submit` used to fold verbatim.
+    sets.reverse();
+
+    let body = json!({
+        "id": Uuid::now_v7(),
+        "enrollment_id": enrollment,
+        "started_at": "2026-07-26T09:00:00Z",
+        "ended_at": "2026-07-26T10:00:00Z",
+        "outcome": "completed",
+        "sets": sets,
+    });
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let result = refolded(&pool, enrollment).await;
+
+    assert_eq!(result.advances, 9);
+    assert!(result.findings.is_empty(), "{:?}", result.findings);
 }
 
 // --- registration ---------------------------------------------------------
@@ -2332,4 +2496,412 @@ async fn a_note_over_the_cap_is_refused(pool: PgPool) {
         .json(&body)
         .await
         .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// The current session logged as prescribed, except that set 0 was lifted
+/// `over` kilograms heavier than asked and says why.
+fn logged_with_drift(
+    id: Uuid,
+    enrollment: Uuid,
+    session: &serde_json::Value,
+    over: f64,
+    reason: &str,
+) -> serde_json::Value {
+    let mut body = logged_as_prescribed(id, enrollment, session);
+    let prescribed = body["sets"][0]["prescribed_weight"]
+        .as_f64()
+        .expect("a prescribed set carries a weight");
+
+    body["sets"][0]["actual_weight"] = json!(prescribed + over);
+    body["sets"][0]["drift_reason"] = json!(reason);
+    body
+}
+
+#[sqlx::test]
+async fn a_drift_reason_round_trips_to_the_history(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let id = Uuid::now_v7();
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&logged_with_drift(
+            id, enrollment, &session, 5.0, "too_easy",
+        ))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let detail: serde_json::Value = server
+        .get(&format!("/v1/workouts/{id}"))
+        .authorization_bearer(&token)
+        .await
+        .json();
+
+    assert_eq!(detail["sets"][0]["drift_reason"], json!("too_easy"));
+    assert_eq!(detail["sets"][1]["drift_reason"], json!(null));
+}
+
+#[sqlx::test]
+async fn a_reason_on_a_set_that_was_not_done_is_refused(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["outcome"] = json!("cut_short");
+    body["cut_reason"] = json!("out_of_time");
+    body["sets"][0]["status"] = json!("pending");
+    body["sets"][0]["actual_weight"] = json!(null);
+    body["sets"][0]["actual_reps"] = json!(null);
+    body["sets"][0]["drift_reason"] = json!("too_easy");
+
+    // 422, not the 500 a raw constraint violation would produce. A client
+    // holding a queued offline workout has to be able to learn why it will
+    // never be accepted.
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test]
+async fn a_reason_on_a_set_that_did_not_drift_is_refused(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    // Logged exactly as prescribed, so there is no deviation for a reason to
+    // be about.
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["sets"][0]["drift_reason"] = json!("too_easy");
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// The athlete's typed weight differs from the prescription only below the
+/// two decimal places the column actually stores. `validate` compares in
+/// `f64`, so it sees a difference and lets the drift reason through; the
+/// insert rounds both sides to `numeric(6,2)`, the constraint sees no drift,
+/// and without this fix Postgres — not the 422 path — is what refuses it.
+#[sqlx::test]
+async fn a_reason_on_a_drift_too_small_to_store_is_refused_as_422_not_500(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let body = logged_with_drift(Uuid::now_v7(), enrollment, &session, 0.001, "too_easy");
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test]
+async fn a_retry_reports_the_same_ending_as_the_first_submit(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let body = logged_with_drift(Uuid::now_v7(), enrollment, &session, 5.0, "too_easy");
+
+    let first: serde_json::Value = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .json();
+
+    let response = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await;
+    response.assert_status(StatusCode::OK);
+    let retry: serde_json::Value = response.json();
+
+    assert_eq!(first["duplicate"], json!(false));
+    assert_eq!(retry["duplicate"], json!(true));
+
+    // A session that finally lands three days later is exactly the one whose
+    // numbers the athlete has not seen. A blank ending on the retry would be
+    // the worst possible time to have one.
+    assert_eq!(first["summary"], retry["summary"]);
+    assert_eq!(first["summary"]["sets_over"], json!(1));
+    assert_eq!(first["summary"]["sets_under"], json!(0));
+}
+
+#[sqlx::test]
+async fn the_ending_has_no_average_before_three_sessions(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    for day in 1..=2 {
+        let session = next_session(&server, &token, enrollment).await;
+        let sets = session["prescribed_sets"].as_array().unwrap().len();
+        log_a_session_lasting(&server, &token, enrollment, &session, day, 3_600, sets).await;
+    }
+
+    let session = next_session(&server, &token, enrollment).await;
+    let receipt: serde_json::Value = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&logged_as_prescribed(Uuid::now_v7(), enrollment, &session))
+        .await
+        .json();
+
+    // Two prior sessions would let one long day *be* the average rather than
+    // merely be in it — D-10's rule for pace, here for the same reason.
+    assert_eq!(receipt["summary"]["average_duration_seconds"], json!(null));
+}
+
+#[sqlx::test]
+async fn the_ending_compares_against_the_sessions_before_it(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    for day in 1..=3 {
+        let session = next_session(&server, &token, enrollment).await;
+        let sets = session["prescribed_sets"].as_array().unwrap().len();
+        log_a_session_lasting(&server, &token, enrollment, &session, day, 3_600, sets).await;
+    }
+
+    // The fourth runs ninety minutes. `logged_as_prescribed` hard-codes an
+    // hour, so both stamps are replaced.
+    let session = next_session(&server, &token, enrollment).await;
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["started_at"] = json!("2026-08-04T09:00:00Z");
+    body["ended_at"] = json!("2026-08-04T10:30:00Z");
+
+    let receipt: serde_json::Value = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .json();
+
+    assert_eq!(receipt["summary"]["duration_seconds"], json!(5_400));
+    // The average of the three before it, and not diluted by its own ninety
+    // minutes — the comparison is against history.
+    assert_eq!(receipt["summary"]["average_duration_seconds"], json!(3_600));
+}
+
+/// The enrolment's state as Postgres holds it, for tests that need to see the
+/// fold from outside the engine.
+async fn stored_state(pool: &PgPool, enrollment: Uuid) -> serde_json::Value {
+    sqlx::query_scalar("select state from enrollments where id = $1")
+        .bind(enrollment)
+        .fetch_one(pool)
+        .await
+        .expect("the enrolment exists")
+}
+
+#[sqlx::test]
+async fn advancing_records_what_the_fold_did(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let before = stored_state(&pool, enrollment).await;
+    let workout = log_a_session(&server, &token, enrollment).await;
+    let after = stored_state(&pool, enrollment).await;
+
+    let (recorded_workout, recorded_enrollment, state_before, state_after, engine_version): (
+        Uuid,
+        Uuid,
+        serde_json::Value,
+        serde_json::Value,
+        String,
+    ) = sqlx::query_as(
+        "select workout_id, enrollment_id, state_before, state_after, engine_version
+         from enrollment_advances",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("exactly one advance was recorded");
+
+    assert_eq!(recorded_workout, workout);
+    assert_eq!(recorded_enrollment, enrollment);
+    // The fold's input is the state as it stood *before* the submit, and its
+    // output is what the submit persisted. Both compared structurally.
+    assert_eq!(state_before, before);
+    assert_eq!(state_after, after);
+    assert!(!engine_version.is_empty());
+}
+
+#[sqlx::test]
+async fn a_retried_submit_records_no_second_advance(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+
+    for _ in 0..2 {
+        server
+            .post("/v1/workouts")
+            .authorization_bearer(&token)
+            .json(&body)
+            .await;
+    }
+
+    // A retry does not advance, so it has nothing to record. The primary key
+    // would refuse a second row anyway, which is the belt to this braces.
+    let advances: i64 = sqlx::query_scalar("select count(*) from enrollment_advances")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(advances, 1);
+}
+
+// --- `advanced_at` is statement time, not transaction time -----------------
+//
+// Postgres's `now()` is fixed for the lifetime of a transaction; the whole
+// reason `advanced_at` defaults to `clock_timestamp()` instead is that two
+// submits can overlap under the enrolment's `for update` lock, and the row
+// written by the transaction that acquires the lock *second* must not be
+// stamped earlier than the row written first. That specific interleaving —
+// two genuinely concurrent transactions racing on one lock — is not
+// something this crate's `#[sqlx::test]` harness (one pool, no manual
+// connection interleaving) can drive honestly. Both tests below stop short
+// of that: they prove the mechanism the fix relies on, not the race itself.
+
+/// The regression this guards against is literal: someone reverts the
+/// default to `now()` "for tidiness", every existing test still passes
+/// (nothing here submits two overlapping requests), and the false
+/// `ChainBroken` this migration exists to prevent comes back silently. This
+/// reads the column's actual default straight from the catalog so that
+/// revert fails immediately and loudly, without needing a race to trigger it.
+#[sqlx::test]
+async fn advanced_at_still_defaults_to_clock_timestamp(pool: PgPool) {
+    let default_expr: String = sqlx::query_scalar(
+        "select pg_get_expr(d.adbin, d.adrelid)
+         from pg_attrdef d
+         join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+         where d.adrelid = 'enrollment_advances'::regclass
+           and a.attname = 'advanced_at'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("advanced_at has a default");
+
+    assert_eq!(default_expr, "clock_timestamp()");
+}
+
+/// `now()` is frozen at transaction start, so two statements in the same
+/// transaction always see the same value; `clock_timestamp()` is evaluated
+/// per statement. This is what makes lock-acquisition order and insert order
+/// coincide for `advanced_at` — the property `load_advances`'s ordering
+/// comment in `advances.rs` depends on.
+///
+/// This test is honest about what it does and does not show: it inserts two
+/// rows for one enrolment *sequentially within a single transaction*
+/// (`workouts` rows created directly by SQL, since the API only ever writes
+/// one `enrollment_advances` row per transaction) with `pg_sleep` between
+/// them, and asserts the second row's `advanced_at` is strictly later than
+/// the first's. That demonstrates the statement-time behaviour the fix
+/// depends on. It does not exercise two concurrent transactions or the
+/// `for update` lock, and it proves nothing about lock-acquisition order —
+/// only a real race, which this harness cannot drive, would do that.
+#[sqlx::test]
+async fn advanced_at_moves_between_statements_in_one_transaction(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let workout_a = Uuid::now_v7();
+    let workout_b = Uuid::now_v7();
+
+    let mut tx = pool.begin().await.unwrap();
+
+    for workout in [workout_a, workout_b] {
+        sqlx::query(
+            "insert into workouts (id, enrollment_id, week, day, started_at)
+             values ($1, $2, 1, 1, now())",
+        )
+        .bind(workout)
+        .bind(enrollment)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    }
+
+    sqlx::query(
+        "insert into enrollment_advances
+             (workout_id, enrollment_id, state_before, state_after, engine_version)
+         values ($1, $2, '{}'::jsonb, '{}'::jsonb, 'test')",
+    )
+    .bind(workout_a)
+    .bind(enrollment)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+
+    // Long enough to exceed clock resolution comfortably; short enough not to
+    // make the suite noticeably slower.
+    sqlx::query("select pg_sleep(0.05)")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "insert into enrollment_advances
+             (workout_id, enrollment_id, state_before, state_after, engine_version)
+         values ($1, $2, '{}'::jsonb, '{}'::jsonb, 'test')",
+    )
+    .bind(workout_b)
+    .bind(enrollment)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+
+    tx.commit().await.unwrap();
+
+    let stamps: Vec<(Uuid, DateTime<Utc>)> = sqlx::query_as(
+        "select workout_id, advanced_at from enrollment_advances
+         where workout_id = any($1)
+         order by advanced_at",
+    )
+    .bind(vec![workout_a, workout_b])
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(stamps[0].0, workout_a, "inserted first, so sorts first");
+    assert_eq!(stamps[1].0, workout_b, "inserted second, so sorts second");
+    assert!(
+        stamps[1].1 > stamps[0].1,
+        "clock_timestamp() must advance between two statements in one \
+         transaction — if this ties, the default reverted to now()"
+    );
 }

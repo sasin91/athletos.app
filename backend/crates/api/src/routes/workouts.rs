@@ -55,6 +55,7 @@ use athletos_training::{
 
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
+use crate::report::{self, ReportedSet, SessionReport};
 use crate::routes::enrollments::{unknown_program, ProgressView};
 use crate::routes::maxes::MAX_WEIGHT_KG;
 use crate::state::AppState;
@@ -165,6 +166,25 @@ pub enum CutReason {
     Enough,
 }
 
+/// Why a set was lifted at something other than the prescribed weight (D-07).
+///
+/// Optional in every direction. The chips that produce it are unselected by
+/// default, no tap is a valid answer, and nothing blocks — a default would
+/// answer the question on the athlete's behalf and land a claim nobody made in
+/// the one signal this product exists to read.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, ToSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum DriftReason {
+    /// The prescription was light. The first chip offered, and never the
+    /// selected one.
+    TooEasy,
+    TooHeavy,
+    /// The bar already held that weight and stripping it was not worth it —
+    /// drift the display caused rather than the athlete (D-04).
+    AlreadyLoaded,
+    FeltOff,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SetStatus {
@@ -222,6 +242,16 @@ pub struct SubmittedSet {
     /// refusing it.
     #[serde(default)]
     pub note: Option<String>,
+
+    /// Why this set was lifted at something other than its prescription (D-07).
+    ///
+    /// Optional and additively so (D-12). **Only a `done` set may carry one**,
+    /// and only when its weight actually differs — see `validate`. That is not
+    /// tidiness: a reason on a set that was never reached arrives with a null
+    /// `actual_weight`, the check constraint refuses it, and the whole
+    /// submission goes down over a chip tapped forty minutes earlier.
+    #[serde(default)]
+    pub drift_reason: Option<DriftReason>,
 }
 
 /// What the server recorded, and where the program stands afterwards.
@@ -240,6 +270,10 @@ pub struct WorkoutReceipt {
     /// Progress *after* the submit. A retry reports the same numbers the first
     /// attempt did, which is the whole point.
     pub progress: ProgressView,
+    /// What this session cost, and how it compares (D-08, amended).
+    ///
+    /// Present on a retry too, and computed the same way — see `recorded_report`.
+    pub summary: SessionReport,
 }
 
 /// One row of the history list.
@@ -327,6 +361,9 @@ pub struct LoggedSetView {
     /// What the athlete wrote about this set. Null for every set logged
     /// before notes existed, and for every set they had nothing to say about.
     pub note: Option<String>,
+    /// Why this set drifted, if the athlete said. Null for every set logged
+    /// before the chips existed, and for every deviation they walked past.
+    pub drift_reason: Option<DriftReason>,
 }
 
 /// Which slice of the history to return.
@@ -426,11 +463,12 @@ pub async fn submit(
             })?;
 
         let progress = program.progress(&program_state)?;
+        let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
         tx.commit().await?;
 
         return Ok((
             StatusCode::OK,
-            Json(receipt(&body, week, day, true, progress.into())),
+            Json(receipt(&body, week, day, true, progress.into(), summary)),
         ));
     };
 
@@ -473,11 +511,12 @@ pub async fn submit(
             })?;
 
         let progress = program.progress(&program_state)?;
+        let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
         tx.commit().await?;
 
         return Ok((
             StatusCode::OK,
-            Json(receipt(&body, week, day, true, progress.into())),
+            Json(receipt(&body, week, day, true, progress.into(), summary)),
         ));
     }
 
@@ -487,12 +526,30 @@ pub async fn submit(
     // a session because life interrupted it is precisely the guilt loop D-06
     // exists to avoid, and a completeness threshold would force every program
     // author to invent one.
+    //
+    // By `position`, not by the order the phone happened to serialise `sets`
+    // in — the training migration calls wire order "an accident of the wire"
+    // for exactly this reason, and `position` is the one the schema treats as
+    // canonical. `validate` has already confirmed every position is unique,
+    // so this is a total order and the sort is unambiguous. Without it, a
+    // program whose fold reads `LoggedSession.sets` order-sensitively — 5/3/1
+    // BBB's `made_the_minimum` breaks a weight tie with `max_by`, which
+    // returns the *last* maximum — would answer differently depending on
+    // request order alone, which is not a fact about the session.
+    let mut ordered_sets: Vec<&SubmittedSet> = body.sets.iter().collect();
+    ordered_sets.sort_by_key(|set| set.position);
+
     let logged = LoggedSession {
         week: session.week,
         day: session.day,
-        sets: body.sets.iter().map(LoggedSet::from).collect(),
+        sets: ordered_sets.into_iter().map(LoggedSet::from).collect(),
         cut_reason: body.cut_reason.map(Into::into),
     };
+
+    // Captured before the fold consumes it. Cloning an already-decoded value is
+    // cheaper than reading the row again, and reading it again would be reading
+    // it at a different moment.
+    let state_before = program_state.as_json().clone();
 
     let advanced = program.advance(program_state, &logged)?;
     let progress = program.progress(&advanced)?;
@@ -515,11 +572,157 @@ pub async fn submit(
         .execute(&mut *tx)
         .await?;
 
+    // What the fold did, so a wrong one can be found later (D-19).
+    //
+    // Inside the transaction that already holds this enrolment's `for update`
+    // lock, beside the state write it describes — so the record and the state
+    // it records can never disagree. Only this branch advances; the two retry
+    // branches have nothing to record.
+    sqlx::query(
+        "insert into enrollment_advances
+             (workout_id, enrollment_id, state_before, state_after, engine_version)
+         values ($1, $2, $3::jsonb, $4::jsonb, $5)",
+    )
+    .bind(body.id)
+    .bind(body.enrollment_id)
+    .bind(&state_before)
+    .bind(advanced.as_json())
+    .bind(env!("CARGO_PKG_VERSION"))
+    .execute(&mut *tx)
+    .await?;
+
+    let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
     tx.commit().await?;
 
     Ok((
         StatusCode::CREATED,
-        Json(receipt(&body, week, day, false, progress.into())),
+        Json(receipt(&body, week, day, false, progress.into(), summary)),
+    ))
+}
+
+/// The athlete's average session length on this enrolment, in seconds.
+///
+/// Excludes the session being reported, so the comparison is against history
+/// rather than diluted by itself, and excludes `auto_closed` sessions — a
+/// three-hour workout closed by the stale-session sweep is a measurement of an
+/// afternoon, not of a session (D-08).
+///
+/// `None` below three, which is D-10's rule for pace and is here for the same
+/// reason: two would let one long session *be* the average rather than merely
+/// be in it.
+async fn average_duration(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    enrollment_id: Uuid,
+    excluding: Uuid,
+) -> ApiResult<Option<i64>> {
+    let row: Option<(i64, Option<f64>)> = sqlx::query_as(
+        "select count(*), avg(extract(epoch from (ended_at - started_at)))::float8
+         from workouts
+         where enrollment_id = $1
+           and id <> $2
+           and ended_at is not null
+           and outcome <> 'auto_closed'",
+    )
+    .bind(enrollment_id)
+    .bind(excluding)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    Ok(match row {
+        Some((count, Some(average))) if count >= 3 => Some(average.round() as i64),
+        _ => None,
+    })
+}
+
+/// One row of `workout_sets`, as `recorded_report` needs it: position, the
+/// numbers prescribed and performed, whether the set was done, and its stamp.
+///
+/// Deliberately not [`StoredSet`] — that row carries `note` and
+/// `drift_reason`, which this query has no use for.
+type ReportedRow = (
+    i16,
+    String,
+    f64,
+    i16,
+    Option<f64>,
+    Option<i16>,
+    String,
+    Option<DateTime<Utc>>,
+);
+
+/// The ending, built from what is recorded rather than from what was sent.
+///
+/// Read back inside the same transaction, on every path including both retry
+/// branches. One piece of code and one guarantee: the ending describes the
+/// workout that is in the database. Building it from `body` would have saved a
+/// query and cost that guarantee — a client reusing an id for different content
+/// would be shown numbers about something that was never stored.
+async fn recorded_report(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workout_id: Uuid,
+    enrollment_id: Uuid,
+) -> ApiResult<SessionReport> {
+    let (started_at, ended_at): (DateTime<Utc>, Option<DateTime<Utc>>) =
+        sqlx::query_as("select started_at, ended_at from workouts where id = $1")
+            .bind(workout_id)
+            .fetch_one(&mut **tx)
+            .await?;
+
+    // `unique (workout_id, "position")` is both the ordering and the index —
+    // and the order matters, because the walk that produces intervals is a
+    // walk in performed order.
+    let rows: Vec<ReportedRow> = sqlx::query_as(
+        "select \"position\", exercise, prescribed_weight::float8, prescribed_reps,
+                    actual_weight::float8, actual_reps, status, logged_at
+             from workout_sets
+             where workout_id = $1
+             order by \"position\"",
+    )
+    .bind(workout_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let reported: Vec<ReportedSet> = rows
+        .iter()
+        .map(
+            |(_, _, prescribed_weight, prescribed_reps, actual_weight, actual_reps, status, _)| {
+                ReportedSet {
+                    prescribed_weight: *prescribed_weight,
+                    prescribed_reps: u32::try_from(*prescribed_reps).unwrap_or_default(),
+                    actual_weight: *actual_weight,
+                    actual_reps: actual_reps.map(|reps| u32::try_from(reps).unwrap_or_default()),
+                    done: status == "done",
+                }
+            },
+        )
+        .collect();
+
+    // `label` is the raw key and is never read: `spread` takes the shape of the
+    // intervals and does not attribute them to exercises. Resolving labels from
+    // the registry here would be work with no consumer.
+    let timed: Vec<(u16, TimedSet)> = rows
+        .iter()
+        .map(|(position, exercise, _, _, _, _, _, logged_at)| {
+            (
+                u16::try_from(*position).unwrap_or_default(),
+                TimedSet {
+                    exercise: exercise.clone(),
+                    label: exercise.clone(),
+                    logged_at: *logged_at,
+                },
+            )
+        })
+        .collect();
+
+    let average = average_duration(tx, enrollment_id, workout_id).await?;
+
+    Ok(report::compute(
+        ended_at
+            .map(|end| (end - started_at).num_seconds())
+            .unwrap_or_default(),
+        average,
+        &reported,
+        timing::spread(started_at, &timed),
     ))
 }
 
@@ -529,6 +732,7 @@ fn receipt(
     day: i16,
     duplicate: bool,
     progress: ProgressView,
+    summary: SessionReport,
 ) -> WorkoutReceipt {
     WorkoutReceipt {
         id: body.id,
@@ -537,6 +741,7 @@ fn receipt(
         day: u32::try_from(day).unwrap_or_default(),
         duplicate,
         progress,
+        summary,
     }
 }
 
@@ -581,6 +786,7 @@ type StoredSet = (
     Option<i16>,
     String,
     Option<DateTime<Utc>>,
+    Option<String>,
     Option<String>,
 );
 
@@ -740,7 +946,8 @@ pub async fn show(
     // `unique (workout_id, "position")` is both the ordering and the index.
     let sets: Vec<StoredSet> = sqlx::query_as(
         "select \"position\", exercise, prescribed_weight::float8, prescribed_reps,
-                actual_weight::float8, actual_reps, status, logged_at, note
+                actual_weight::float8, actual_reps, status, logged_at, note,
+                drift_reason
          from workout_sets
          where workout_id = $1
          order by \"position\"",
@@ -832,6 +1039,7 @@ fn logged_set(
         status,
         logged_at,
         note,
+        drift_reason,
     ): StoredSet,
 ) -> ApiResult<LoggedSetView> {
     let label = exercise::find(&exercise)
@@ -849,6 +1057,10 @@ fn logged_set(
         status: SetStatus::parse(&status)?,
         logged_at,
         note,
+        drift_reason: drift_reason
+            .as_deref()
+            .map(DriftReason::parse)
+            .transpose()?,
     })
 }
 
@@ -916,6 +1128,7 @@ async fn insert_sets(
     let mut statuses: Vec<String> = Vec::with_capacity(sets.len());
     let mut logged_ats: Vec<Option<DateTime<Utc>>> = Vec::with_capacity(sets.len());
     let mut notes: Vec<Option<String>> = Vec::with_capacity(sets.len());
+    let mut drift_reasons: Vec<Option<String>> = Vec::with_capacity(sets.len());
 
     for set in sets {
         exercises.push(set.exercise.trim().to_owned());
@@ -942,12 +1155,13 @@ async fn insert_sets(
                 .filter(|note| !note.is_empty())
                 .map(str::to_owned),
         );
+        drift_reasons.push(set.drift_reason.map(DriftReason::as_str).map(str::to_owned));
     }
 
     sqlx::query(
         "insert into workout_sets
              (workout_id, exercise, \"position\", prescribed_weight, prescribed_reps,
-              actual_weight, actual_reps, status, logged_at, note)
+              actual_weight, actual_reps, status, logged_at, note, drift_reason)
          select $1,
                 logged.exercise,
                 logged.slot,
@@ -957,12 +1171,14 @@ async fn insert_sets(
                 logged.actual_reps,
                 logged.status,
                 logged.logged_at,
-                logged.note
+                logged.note,
+                logged.drift_reason
          from unnest($2::text[], $3::int2[], $4::float8[], $5::int2[],
                      $6::float8[], $7::int2[], $8::text[], $9::timestamptz[],
-                     $10::text[])
+                     $10::text[], $11::text[])
               as logged(exercise, slot, prescribed_weight, prescribed_reps,
-                        actual_weight, actual_reps, status, logged_at, note)",
+                        actual_weight, actual_reps, status, logged_at, note,
+                        drift_reason)",
     )
     .bind(workout_id)
     .bind(&exercises)
@@ -974,6 +1190,7 @@ async fn insert_sets(
     .bind(&statuses)
     .bind(&logged_ats)
     .bind(&notes)
+    .bind(&drift_reasons)
     .execute(&mut **tx)
     .await?;
 
@@ -1092,6 +1309,25 @@ fn validate(body: &WorkoutSubmission) -> ApiResult<()> {
                 set.position
             )));
         }
+
+        if set.drift_reason.is_some() {
+            // Compared at the same two decimal places `numeric(6,2)` stores,
+            // not raw `f64` equality: a difference this predicate cannot see
+            // is one the column cannot see either, and the two need to agree
+            // or the check constraint refuses at insert time — a 500 the
+            // client cannot recover from — instead of here at 422.
+            let drifted = matches!(set.status, SetStatus::Done)
+                && set.actual_weight.is_some_and(|actual| {
+                    (actual * 100.0).round() != (set.prescribed_weight * 100.0).round()
+                });
+
+            if !drifted {
+                return Err(ApiError::Validation(format!(
+                    "set {} carries a reason for a weight that did not change",
+                    set.position
+                )));
+            }
+        }
     }
 
     Ok(())
@@ -1140,6 +1376,27 @@ impl CutReason {
             "equipment" => Ok(Self::Equipment),
             "enough" => Ok(Self::Enough),
             other => Err(drifted("cut_reason", other)),
+        }
+    }
+}
+
+impl DriftReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::TooEasy => "too_easy",
+            Self::TooHeavy => "too_heavy",
+            Self::AlreadyLoaded => "already_loaded",
+            Self::FeltOff => "felt_off",
+        }
+    }
+
+    fn parse(stored: &str) -> ApiResult<Self> {
+        match stored {
+            "too_easy" => Ok(Self::TooEasy),
+            "too_heavy" => Ok(Self::TooHeavy),
+            "already_loaded" => Ok(Self::AlreadyLoaded),
+            "felt_off" => Ok(Self::FeltOff),
+            other => Err(drifted("drift_reason", other)),
         }
     }
 }

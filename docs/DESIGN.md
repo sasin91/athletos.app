@@ -539,6 +539,145 @@ permissive logging:
 
 Design rule: **honesty must never cost more than dishonesty.**
 
+> **Amended after a week of training on it. The weight now says why it
+> changed.** This decision stores two numbers for a set the athlete disagreed
+> with and nothing at all about what the disagreement was. Under the weight
+> input, on the current set only, appearing the moment `actual_weight` differs
+> from `prescribed_weight` and vanishing again if it is edited back:
+>
+> > **too easy · too heavy · bar was loaded · felt off**
+>
+> **This is not the thing the paragraphs above forbid**, and the two sentences
+> that do the forbidding have to be answered separately. The first is *"Going
+> heavier means **editing the number** — possible, deliberate, never blocked and
+> never warned about mid-session"*, and it is a statement about what the app
+> does when the athlete goes heavier. The chips do none of it: nothing is
+> refused, nothing is flagged, no chip disputes the number, and the row does not
+> exist until the weight already differs, so it never appears before a decision,
+> only after one.
+>
+> **The second sentence is the harder one and is answered on its own terms**,
+> because the chips appear exactly where it says nothing may: *"Feedback is
+> **retrospective and calm** — 'you went over on 6 of 12 sets last week' — never
+> a modal at the moment of lifting."* Observing that the row is not a modal
+> answers the weakest word in that sentence. The load-bearing ones are
+> *feedback* and *at the moment of lifting*, and the answer is that the row is
+> not feedback. That sentence governs the product speaking to the athlete —
+> reading their own numbers back at them, which is the thing that has to wait
+> until it can be read against something, and which is why the example in it is
+> a count from last week. The chips are the athlete speaking to the product.
+> Nothing in the row reports, counts, compares or scores; no chip contains a
+> number; there is nothing in it the athlete did not just decide themselves. And
+> it arrives only after the decision to go heavier has been taken — it annotates
+> a choice rather than intervening in one, which is the difference between a
+> question and a verdict. So that sentence stands unamended, and the row is not
+> an exception carved out of it.
+>
+> **No tap is a valid answer**, and Log stays exactly one tap whether a chip was
+> tapped or not, which is this decision's own closing rule satisfied rather than
+> bent: saying what happened costs the same as saying nothing. Structurally it
+> is D-08's single cut-short question asked on the other axis of drift, and made
+> cheaper still, because that one is answered before the session can end and
+> this one can be walked past.
+>
+> **Nothing is pre-selected, and a default would have been the version of this
+> worth refusing.** *Too easy* is the first chip, and making the first chip the
+> selected one saves a tap in the common case — which is exactly the trade to
+> turn down here. Every edit an athlete walked past on the way to Log would
+> then land in the database as *too easy*: a claim nobody made, in the one
+> signal this product exists to read, and indistinguishable afterwards from the
+> ones that were meant. A blank is recoverable and a fabricated majority is
+> not. So the row starts empty, a second tap on a lit chip clears it, and an
+> unanswered edit stays unanswered.
+>
+> **Drift gains a third column.** D-08 records two axes, weight and work not
+> done; a stated reason is the third and it is first-class in the same sense
+> they are — a `drift_reason` on `workout_sets`, queryable forever, constrained
+> in the schema so that a set with no deviation cannot carry one. That last
+> part is why "clearing the drift clears the reason" is a fact rather than a
+> client convention. What it buys is the difference between *the program is
+> light for me* and *the bar was already loaded and I was not going to strip
+> it* — two identical rows of drift with opposite meanings, which until now the
+> database could not tell apart, and which pull the governor in opposite
+> directions.
+>
+> **A fifth chip was weighed and left out.** *Couldn't load it* is the only
+> candidate reason the product could act on rather than merely record, and D-04
+> is where the argument for it lives: the plate planner assumes an unlimited
+> supply of every size, a gym owning four 15s cannot always follow it, and that
+> is drift manufactured by the room rather than chosen by the athlete. It is
+> left out to keep the row at four one-handed taps in a gym. Recorded here so
+> that the next person to want it knows it was weighed rather than missed.
+
+> **Amended in the same pass. A weight edit carries to the rest of the
+> exercise.** Every set is pre-filled from its own prescription at commit, so
+> an athlete who decided 95 kg was light and lifted 100 typed `100` again on
+> set two, and set three, and set four. That is the closing rule above failing
+> in the small: the honest answer cost four edits and the dishonest one cost
+> nothing. A weight edit now carries the **difference** to every later
+> **pending** set sharing the same exercise, and stops at the first set of a
+> different exercise — the same boundary D-04 already draws for the plate
+> chain, because a different exercise is a different bar and possibly not even
+> the same bar. Sets already logged or skipped are not touched; rewriting them
+> would falsify the log, which is the one thing this product cannot do and stay
+> useful. A stated reason travels with the weight it explains: tap *too easy*
+> on set one of five and the four sets the difference reaches carry it too,
+> because that is one decision continuing and recording four of the five as
+> unanswered would misreport it.
+>
+> **The difference and not the weight, and the first draft had that wrong.**
+> Copying the weight forward is the obvious reading, and it is correct for a
+> block of straight sets. It breaks on the program this app was built around.
+> 5/3/1 BBB prescribes its main lift and its Boring But Big backoff as two
+> `Block`s sharing one `exercise` key — that is D-04's own worked squat day —
+> so off a 140 kg training max, week one is 90, 105 and 117.5, and then five
+> sets of ten at 70. Take the top set to 120 because it went up easily, and a
+> rule that copies the weight pre-fills those five sets of ten at **120 kg
+> where 70 was prescribed**, on a screen whose entire design is that one tap
+> logs what it shows. Carrying the difference pre-fills them at 72.5: the same
+> +2.5 kg decision, applied to each set's own prescription.
+>
+> **`prescribed_weight` is never written.** Drift is still measured against the
+> number the athlete was actually shown, which is the property the whole of
+> this decision rests on and the same reason a prescriptive program snapshots
+> its maxes at enrolment rather than re-deriving a block in progress (D-03).
+>
+> **What it costs, first.** This is the same shape as the cross-session carry
+> declined at the end of this amendment: a bump taken on a light set pushes a
+> heavy one further than intended. The squat day above is that case rather than
+> a hypothetical — the +2.5 kg taken on a top set that went up easily also
+> lands on fifty reps of backoff volume, which is the half of the day that
+> costs recovery (D-01). It is accepted deliberately, because here it is
+> bounded to one session, one bar and one exercise, and every set it reaches
+> is still pending and still one edit away from being something else.
+>
+> **And a difference need not be loadable.** Every prescription is rounded down
+> to a loadable weight (D-04); the gap between two numbers an athlete typed is
+> not. Correct 97.5 to 96 and the 70 kg backoff pre-fills at 68.5, which no bar
+> in the room can hold. The client cannot round it — it has no plate arithmetic
+> and is not getting any (D-11) — so the athlete is shown a number they have to
+> edit, on the screen built to stop them having to. Recorded rather than fixed.
+> It arises only from a difference that was not loadable when it was typed, and
+> the fix for it is plate arithmetic on the phone, which is the one thing D-11
+> does not let the client have.
+>
+> **Carrying the number into future sessions was asked for and declined**, on
+> the athlete's own objection: a bump taken on a light day would push a heavy
+> day too far. The objection is the correct one, and the mechanisms behind it
+> are all worse than they look, which is worth recording so the request does
+> not have to be re-argued from scratch. A prescriptive program snapshots its
+> maxes into `State` at enrolment (D-03), and 5/3/1's training max lives in
+> `State` and moves only at a cycle boundary inside `advance()` — so editing an
+> entered 1RM changes nothing about an enrolment already running, and "it
+> carries to next week" would have had to be one of three things: `advance()`
+> learning from drift, which makes the governor follow the athlete upward and
+> is expressible only for adaptive programs; an athlete-owned per-exercise
+> offset, which is exactly the "edit my training max" field D-04 refuses by
+> name; or mid-block re-derivation, which D-03 forbids because drift must be
+> measured against the number that was displayed. If a prescription is reliably
+> light the fault is upstream, in an entered 1RM typed conservatively, and the
+> fix is to correct the number the athlete owns, deliberately, between blocks.
+
 ---
 
 ## D-08 · Session lifecycle
@@ -624,6 +763,76 @@ away, on a page built to hold them.
 **It does not redirect on its own.** A screen that leaves while it is being
 read is a screen that was not shown. The athlete is standing in a gym having
 just finished lifting; the dashboard is one tap away and will still be there.
+
+> **Amended after a week of training on it. The drift total and the timing
+> breakdown are on this screen.** The paragraph above refuses both by name —
+> *"No drift total and no timing breakdown, and both are tempting exactly
+> here"* — and gives two grounds for it. Neither ground is overridden. Both are
+> answered, and if either answer stops being true the refusal comes back.
+>
+> **Drift does not appear alone**, which was the first ground and the serious
+> one. It arrives beside the load actually moved, beside the load prescribed
+> for those same sets, and beside the athlete's own average duration for this
+> enrolment — which is D-13's requirement in the form D-13 asks for, progress
+> never shown without its cost, here on one line rather than one page. Take
+> the 5/3/1 squat day worked in D-04 and again in D-07's carry amendment: 90×5,
+> 105×5, 117.5×5 and five sets of ten at 70 is 5062.5 kg prescribed, and taking
+> the top set to 120 with the carry running makes it 5200 kg moved, over on 6
+> of 8 sets, in a duration standing beside this enrolment's average for the
+> sessions before it. None of that reads as a score. And the count says six
+> because six sets really were heavier than asked for, though one edit is what
+> made them so — the carry amended into D-07 and this line are the same fact
+> seen from two ends.
+>
+> **No number is invented in a client**, which was the second ground, and it
+> was never a claim that the number is uninteresting — it was that a total
+> computed in a client is one the next client has to compute again. So the
+> arithmetic is `report.rs`: pure, over the sets, taking only what it uses, in
+> the same shape as `timing.rs` and testable without a database. It rides back
+> on the `WorkoutReceipt` the phone already reads to find out whether the
+> submit landed. A second client parses a field; it does not reimplement a sum,
+> which is the whole of D-11. A retry gets the same summary rather than a blank
+> screen, because a session that finally lands three days later is exactly the
+> one whose numbers nobody has seen.
+>
+> **The summary is read back out of the database, and that costs a query on
+> every submission.** Not on the retry path — on all three of them: the ordinary
+> accepted submit, the retry, and a submit arriving against an enrolment that
+> has already closed. The alternative was to compute it from the request body,
+> which is free and which the sets are sitting in anyway. What the query buys is
+> that the ending describes the workout that is *stored*: a client that reuses
+> an id for different content is shown the numbers that were recorded rather
+> than numbers about a session nobody has. Given D-09 makes the retry a routine
+> event rather than an error path, an ending that could disagree with the record
+> it links to would be worse than the query is expensive.
+>
+> **The loads count done sets only**, so the gap between moved and prescribed
+> is weight drift and is not contaminated by work not done. The two axes stay
+> apart on the one screen that reports both: the second is the sets done,
+> skipped and not reached line that was already here.
+>
+> **A median rather than a mean** for the intervals, which is D-10's rule
+> applied in D-10's own units. Pace takes a median on the stated grounds that
+> the tail of this distribution is not signal, and one interval spent talking
+> to somebody moves a mean of twelve by a minute. The figures are `timing.rs`'s
+> outright, so the discard-rather-than-clamp rule and the count of what was
+> discarded come with them. The enrolment average is absent below three
+> sessions — same rule and same reason as pace, not shown before there is data
+> to compute it from.
+>
+> **The offline behaviour above is unchanged, and that is what keeps this
+> honest.** The summary renders in the sent phase only. `queued` still says
+> *saved on this device and not sent yet* and still offers the disabled *the
+> full breakdown needs a connection*, which becomes more true rather than less.
+> There is no baseline cached at commit and no aggregation on the phone — which
+> is exactly what stops this becoming a second implementation the native client
+> has to reproduce, and what keeps a session finished underground showing
+> precisely what it showed before.
+>
+> **The history link stays**, because the per-exercise breakdown is not
+> duplicated here. This screen says what the hour cost and how the intervals
+> inside it were spread; the page built to answer *which lift ate my session*
+> is still one tap away, and that is still the right place for it.
 
 ---
 
@@ -1192,6 +1401,205 @@ healthy**. A snapshot succeeds whether or not the data inside it is fine.
 
 ---
 
+## D-19 · What the fold did
+
+`advance(state, logged) -> state` is a pure fold, and `enrollments.state` keeps
+only its latest result. There is no version on it and no history behind it.
+
+So a wrong fold is not merely undetected — it is **unfixable**. D-09 already
+names the fear in as many words, *"a 5/3/1 training max jumping 5 kg instead of
+2.5, silently, permanently"*, and answers only the half of it where the fold
+runs twice: a client-minted id, one conditional insert, and advancing solely in
+the branch that inserted. For a fold that is wrong for any other reason there is
+no answer at all. The wrong number becomes the only number, because the inputs
+that produced it are gone and the repair is hand-editing JSON in production.
+
+Nothing else in the system has this property. Every other fact is either
+immutable and stored — `workout_sets` is written once and never updated or
+deleted — or derivable from what is stored. `State` is the one place where a
+computation is kept and its inputs are thrown away.
+
+### Event sourcing, evaluated and declined
+
+The pattern fits this domain better than the conclusion suggests, and most of it
+is already here. `advance()` **is** `apply(state, event)` — same signature, same
+purity, and D-15 already makes that purity a fact of the dependency graph rather
+than a discipline. `workout_sets` is already an append-only fact table. The
+offline client is already an event producer: a client-generated UUIDv7, a local
+queue, one idempotent POST, `on conflict do nothing`. That is the deduplication
+machinery event-sourced systems build deliberately, and here it fell out of
+concrete walls (D-09). Even the read side is shaped for it — the *Over time*
+design chose to derive its indicators on read rather than materialise them,
+which is the half of CQRS that usually arrives holding event sourcing's hand.
+
+It is declined on one collision, and the collision is the reason rather than a
+cost.
+
+**Replay means running today's engine over yesterday's sessions**, producing the
+state today's code would have made rather than the state the athlete trained
+under. D-03 has already ruled on precisely this question in the opposite
+direction: a prescriptive program snapshots its maxes into `State` at enrolment,
+because *"editing a max mid-block must not retroactively rewrite sessions the
+athlete was already shown, since drift is measured against the
+`prescribed_weight` that was actually displayed (D-07)"*. Full event sourcing
+makes current state a function of current code by construction. This product's
+central measurement is defined against what was on the screen at the time. The
+two can be reconciled — version the engine, pin every replay to the code that
+produced it — but that is the expensive half of the pattern, bought to defend a
+property that costs nothing today precisely because nothing replays.
+
+Three further objections, none decisive alone and all real. A `jsonb` event
+payload carries none of the check constraints this schema leans on, and those
+constraints are not decoration: `workouts_cut_reason_iff_cut_short` and
+`workout_sets_drift_reason_needs_drift` each caught a genuine bug during the
+change immediately before this one. Event schema versioning is D-12's
+additive-only discipline again, on a second
+surface, permanently — and unlike an API field, an old event can never be
+retired; it is in the log for the life of the system. A projection rebuild
+nobody runs is D-18's *an untested backup is not a backup* wearing a different
+hat. Against all of that, the operational wins — reads and writes scaled apart,
+projections rebuilt on separate infrastructure — need the scale D-16 refuses.
+
+**What is taken from the pattern is the one capability the system actually
+lacks**: the ability to tell that a fold went wrong, and to recompute from a
+point where it had not.
+
+### `enrollment_advances`, which is not an event log
+
+One row per advance — `state_before`, `state_after`, `engine_version`,
+`advanced_at` — keyed by the workout that caused it. The primary key is
+`workout_id` rather than a surrogate, which makes *one advance per workout* a
+schema fact rather than a convention: a retry that somehow reached the advancing
+branch is refused by the database instead of quietly appending a second row. The
+insert sits inside the transaction that already holds the enrolment's
+`for update` lock (D-09), beside the state write it describes and in the same
+branch, so the record and the state it records cannot disagree. The retry
+branches do not advance and therefore write nothing.
+
+Nothing subscribes to it, nothing projects from it, nothing is rebuilt out of
+it. It is an audit of one function.
+
+The `LoggedSession` that drove the fold is deliberately not stored. It is
+recoverable in full — `week`, `day` and `cut_reason` from `workouts`, the sets
+from `workout_sets` — and storing it again would be a copy that can drift from
+the rows it duplicates. The verifier reconstructs it the way every other reader
+does.
+
+### `verify-advances`
+
+An offline binary beside `set-password`: reads `DATABASE_URL`, no API surface,
+not part of the deployed service. Unlike `set-password` it does not run
+migrations, because a tool whose whole purpose is to inspect a database without
+changing it has no business altering its schema on the way in.
+
+Three checks per enrolment, walked in `advanced_at` order, and there are three
+because they fail differently:
+
+- **the chain** — each advance's `state_before` must equal the previous
+  advance's `state_after`. It runs no program code, so it catches a *missing*
+  row — a workout that advanced without being recorded — even when the engine is
+  perfect. The first recorded advance has no predecessor and is exempt, which is
+  the same fact as the table starting mid-history.
+- **the fold** — today's `advance()`, from the stored `state_before` over the
+  reconstructed session, must reproduce the stored `state_after`.
+- **the head** — the last `state_after` must equal the enrolment's current
+  `state`, which is what catches a state moved by something that was not a fold.
+
+Every comparison is **structural**, over parsed values. `jsonb` normalises key
+order and whitespace on the way in and `serde_json::Value` compares by structure
+on the way out, so neither side can report a difference that is only formatting;
+comparing them as text anywhere is the one way this tool cries wolf on every row
+it reads. Comparing two opaque blobs for equality is not interpreting them,
+which is what keeps the verifier on the right side of D-03's rule that only the
+program reads or writes `State`.
+
+**A fold that could not be run is a third outcome and not a disagreement.** A
+stored session fails to reconstruct when a set's `status` on `workout_sets`, or
+the workout's own `cut_reason`, is a value this binary does not recognise, and
+D-12's additive vocabularies make that a matter of time rather than a
+hypothetical: the day a new reason ships, every binary built before it is an old
+binary. Such a row is reported as *could not be refolded — nothing is claimed
+about it*, and the walk continues. Aborting there would let one unrecognised
+string swallow the audit of every other enrolment, which is the failure mode of
+a tool nobody ends up running. Genuine infrastructure failures are not per-row
+problems and still abort.
+
+**It exits `0` with nothing to report, `1` with findings, and `2` when it could
+not run**, and the three are distinguishable on purpose so that an unattended
+caller — a cron job, a step in a deploy — can act on the answer without parsing
+stdout. That is why `main` translates exit codes by hand rather than returning a
+`Result`: the `Err` arm of `Termination` is exit `1`, which would make *no
+`DATABASE_URL`* indistinguishable from *here is what does not hold* — the two
+answers this tool exists to keep apart.
+
+**But the codes carry findings, and the absence of records is not a finding.**
+That seam is stated here rather than left to be discovered. An enrolment with
+nothing recorded produces no finding and therefore exits `0`, byte-identical to
+an enrolment whose every fold holds. The alternative was weighed and is worse:
+exiting non-zero for an unrecorded enrolment means failing forever for every
+enrolment that predates the table, and a check that cries every night is a check
+somebody turns off. So the separation the next section rests on — *nothing to
+check* is not *clean* — lives in stdout alone. An unattended run distinguishes
+*something does not hold* from *nothing does not hold*, which is the question
+worth waking someone for; it cannot distinguish *nothing to check* from *all of
+it holds*, and a person has to read the output at least once per enrolment to
+learn which of those two they are looking at.
+
+### What it costs, and what it does not solve
+
+**It starts mid-history and always will.** The migration is additive and
+rollback-safe in D-17's sense, and it carries no backfill — not as a house rule
+but because there is nothing to backfill from. The `state_before` of an advance
+that already happened is precisely the input this decision opens by saying is
+gone; the only values that could be written into those rows are invented ones,
+and a fabricated audit trail is worse than an absent one. So enrolments already
+running have advanced many times with no record and never will have one. The
+verifier reports that as *no advances recorded — nothing to check*, counted and
+stated separately from clean, because a clean report over an empty table is the
+most dangerous output this tool can produce.
+
+**`engine_version` is coarse.** It is the API crate's version from
+`CARGO_PKG_VERSION` — automatic, always populated, and unable to tell two builds
+of one version apart. That is accepted rather than solved because of what the
+field is for: it is a hint for a person investigating a divergence the verifier
+has already found, not the mechanism that finds it. A git SHA embedded at build
+time would be exact and would need a build script, and the exactness would be
+spent on a field a human reads once, after something has already gone wrong. A
+hand-maintained per-program version is more precise in principle and rots in
+practice; a version that is silently stale is worse than one that is honestly
+coarse.
+
+**It reports and does not repair.** There is no `--fix`. The data needed to
+recompute an enrolment forward from a known-good `state_before` now exists, and
+spending it is a deliberate human act — the same instinct as D-04's *watch it,
+do not touch it*: a training max moves through `advance()` or it does not move.
+A divergence is not even necessarily a bug. Deliberately fixing `advance()`
+makes every prior fold diverge, correctly, and telling that case from a
+regression is exactly what `engine_version` is printed for.
+
+**And the gap at the front is the one thing it cannot see.** A row missing from
+the middle breaks the chain and a row missing from the end moves the head, so
+both are found; a row missing from the *beginning* is indistinguishable from the
+table having started there — which is exactly what it did. The audit is
+therefore sound about everything after the first row it holds, and silent about
+whether that row was the first advance.
+
+### One thing it turned out to also do
+
+`readout()` is a pure function of `State` (D-03), so `readout(&state_before)`
+recovers what a program was prescribing from during any recorded session — and
+the *Over time* design therefore takes its training-max line from this table
+instead of the second table it originally specified for it.
+
+That is worth recording as a caution rather than a win. A table justified by one
+purpose acquiring a second is how tables end up serving neither, and the guard
+is that nothing about this schema bends toward the chart: `state_before` and
+`state_after` are here because the fold needs auditing, the verifier reads them
+structurally and cares nothing for what is inside them, and if the chart's needs
+ever pull the schema away from that, the chart gets its own table back.
+
+---
+
 ## Open
 
 - ~~**No Postgres on the dev machine.**~~ **Closed.** Postgres 17.10 runs as a
@@ -1238,6 +1646,17 @@ healthy**. A snapshot succeeds whether or not the data inside it is fine.
   `plate_change` on `PrescribedSet` and the `note` on a set. That last one is
   the one worth noting, because a machine now checks D-12 rather than a
   reviewer remembering it.
+
+- **Nothing schedules `verify-advances`.** D-19 declines event sourcing partly
+  on the grounds that a projection rebuild nobody runs is D-18's untested backup
+  in a different hat, and it refuses to abort on one unreadable row because that
+  is the failure mode of a tool nobody ends up running. Both arguments now point
+  at the verifier itself: it is written and it is tested, and no cron entry, no
+  deploy step and no release job triggers it. D-18 answered the same question
+  for backups by making the restore procedure a script that is run once before
+  it is needed. What the equivalent is here — how often this runs, from where,
+  and who reads its output, which it needs a human for at least once per
+  enrolment — is an operations decision and is deliberately not taken in D-19.
 
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.
