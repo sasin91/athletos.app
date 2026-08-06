@@ -724,6 +724,24 @@ describe('numberFromText', () => {
 		expect(numberFromText('100')).toBe(100);
 		expect(numberFromText('0')).toBe(0);
 	});
+
+	it('is undefined for a trailing separator, which is half a typed number', () => {
+		// `Number('142.')` is `142`. Reporting that as an edit would move the
+		// state, and the controlled `value` binding would write `142` back into
+		// the field and eat the point before the athlete typed the digit after
+		// it. The field is `type="text"`, so this function sees the half-typed
+		// state that a number input used to hide — and has to recognise it.
+		expect(numberFromText('142.')).toBeUndefined();
+		expect(numberFromText('142,')).toBeUndefined();
+		expect(numberFromText('.')).toBeUndefined();
+	});
+
+	it('reads the number once the digit after the separator arrives', () => {
+		// The other half of the keystroke sequence above: `142.` is refused,
+		// `142.5` is not, so the point survives long enough to be used.
+		expect(numberFromText('142.5')).toBe(142.5);
+		expect(numberFromText('142,5')).toBe(142.5);
+	});
 });
 
 describe('snap', () => {

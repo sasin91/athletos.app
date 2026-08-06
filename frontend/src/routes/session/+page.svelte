@@ -446,34 +446,43 @@
 									would land back before the athlete had finished the number.
 									`change` fires once, when the number is finished.
 
-									That last hazard is currently blunted by something worth
-									writing down, because it is the reason the decimal point is
-									not already being eaten by the controlled `value` binding.
-									A `type="number"` field reports `""` from `.value` for any
-									text that is not a valid floating-point number, and `142.`
-									is not one — measured, not assumed: Chromium answers `""`
-									with `validity.badInput` true. So the intermediate state
-									never reaches this handler at all; the empty-field guard in
-									`numberFromText` reads it as "no edit", the state does not
-									move, nothing re-renders, and the dot the athlete just typed
-									survives. The guard was written for a cleared field and
-									happens to cover this too. It is not a guarantee to lean on
-									for a field that stops being `type="number"`, which is why
-									snapping stays on `change`.
+									**This is `type="text"`, and that is the fix rather than a
+									regression.** It was `type="number" step="0.5" min="0"`, and
+									that field silently ate the thing this whole change was
+									about. A number input reports `""` from `.value` for any text
+									it does not consider a valid floating-point number, and
+									whether a comma qualifies is the engine's business, not ours:
+									measured, not assumed, Chromium on Windows normalises `99,5`
+									to `"99.5"` at every locale tried, and Chromium on Linux
+									hands back `""` with `validity.badInput`. On the second one
+									the athlete's typing never reached our parser at all — the
+									field showed `99,5`, the state kept the old weight, and the
+									set logged at the prescription. Fixing `numberFromText` to
+									accept a comma could not close that, because the comma never
+									got there. CI on Linux is what caught it; this machine never
+									would have.
+
+									`step` and `min` went with it and are not missed. `step`
+									constrained the spinner arrows and `checkValidity()`, and
+									this screen uses neither; `min="0"` never stopped anyone
+									typing a negative either. `inputmode="decimal"` is what
+									actually summons the numeric keypad on a phone, and it stays.
+
+									What `type="number"` was accidentally protecting is now
+									`numberFromText`'s job: `142.` is a half-typed number, not
+									the number 142, and returning `undefined` for a trailing
+									separator is what keeps the controlled `value` binding from
+									rewriting the field and eating the point mid-typing.
 
 									`snap` is applied again in `logSet`, which is the
 									place that cannot be bypassed; see the exception to D-11
-									written out there. `step="0.5"` finally means something —
-									until now it constrained the spinner arrows and
-									`checkValidity()`, and this screen uses neither.
+									written out there.
 								-->
 								<label class="flex items-center gap-1">
 									<span class="sr-only">Weight in kilograms</span>
 									<input
-										type="number"
+										type="text"
 										inputmode="decimal"
-										step="0.5"
-										min="0"
 										class="input-bordered input w-24 text-lg"
 										value={set.actualWeight}
 										oninput={(event) => {

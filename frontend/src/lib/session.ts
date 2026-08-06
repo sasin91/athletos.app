@@ -181,14 +181,29 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
  * is not a number anybody meant, and it stays `NaN` and stays refused rather
  * than being quietly reinterpreted as something else.
  *
+ * A **trailing separator is half a number, not a number**, and this is
+ * load-bearing rather than tidy. `Number('142.')` is `142`, so without this
+ * guard the athlete typing `142.5` would have the field rewritten to `142` the
+ * instant they pressed the point: the state would move, the controlled `value`
+ * binding would write the canonical `142` back into the input, and the point
+ * would be gone before the `5` arrived. The field used to be `type="number"`,
+ * which reported `""` for `142.` and hid this — until that same behaviour was
+ * found to be dropping comma-typed weights on the engine CI runs, and the
+ * field became `type="text"` so that what the athlete types actually reaches
+ * this function. Owning the half-typed state is the price of that, and it is
+ * the right price: the browser was never going to agree with itself about it
+ * across platforms.
+ *
  * Junk — a stray letter, two separators, a lone sign — still returns
  * `undefined` through the `Number.isFinite` guard, which is the honest answer
  * for a string that names no number.
  */
 export function numberFromText(raw: string): number | undefined {
-	if (raw.trim().length === 0) return undefined;
+	const trimmed = raw.trim();
+	if (trimmed.length === 0) return undefined;
+	if (trimmed.endsWith('.') || trimmed.endsWith(',')) return undefined;
 
-	const value = Number(raw.replace(',', '.'));
+	const value = Number(trimmed.replace(',', '.'));
 	return Number.isFinite(value) ? value : undefined;
 }
 

@@ -251,6 +251,37 @@ typed and never blurred cannot slip past.
 
 `step="0.5"` stops being decorative — the arrows and the typing finally agree.
 
+> **Corrected during implementation, and the first draft did not close the
+> defect it was written for.** This specified the field as it stood,
+> `type="number" step="0.5" min="0"`, and assumed the athlete's string reaches
+> `numberFrom`. Whether it does is the engine's business. Measured on three
+> locales, Chromium on Windows normalises `99,5` to `"99.5"`; Chromium on Linux
+> reports `""` with `validity.badInput`. On the second, the comma never arrives
+> at the parser at all, so teaching the parser about commas fixes nothing —
+> the field shows `99,5`, the state keeps the old weight, and the set logs at
+> the prescription. That is the defect this section exists to close, still
+> open, on an engine nobody had run.
+>
+> **CI on Linux is what caught it.** The end-to-end test written for this
+> section passed on the machine it was written on and failed on the runner.
+> The failure was the product, not the test.
+>
+> The field is therefore **`type="text" inputmode="decimal"`**. `inputmode` is
+> what summons the numeric keypad on a phone; `type="number"` was contributing
+> a keyboard nobody needed and a parse nobody could predict. `step` and `min`
+> go with it: `step` constrained the spinner arrows and `checkValidity()`,
+> which this screen uses neither of, and `min="0"` never stopped anyone typing
+> a negative.
+>
+> The cost is that `numberFromText` inherits the half-typed state a number
+> input used to hide. `Number('142.')` is `142`, so an athlete typing `142.5`
+> would have the point eaten the moment they pressed it — the state would move,
+> and the controlled `value` binding would write `142` back into the field. A
+> **trailing separator therefore returns `undefined`**: half a number is not a
+> number. This was the "suspected pre-existing bug" listed under Verification;
+> it was never reachable through `type="number"`, and making the field honest
+> made it reachable.
+
 ### The D-11 exception, stated rather than smuggled
 
 `frontend/CLAUDE.md` is unambiguous: "If you find yourself working out a weight,

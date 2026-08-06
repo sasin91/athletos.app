@@ -351,14 +351,21 @@ test('a weight typed with a comma is recorded rather than dropped', async ({ pag
 	// Typed key by key rather than filled, because the separator is the whole
 	// point and `fill` would hand the field a string it never had to parse.
 	//
-	// Where the comma is normalised is the browser's business and differs by
-	// engine and locale: Chromium reports `142,5` back as `"142.5"` from
-	// `input.value` even at an en-US locale, so on this engine `numberFromText`
-	// never sees the comma at all. That is exactly why this is an end-to-end
-	// assertion about the *record* and not about the parser — the unit test in
-	// `session.test.ts` is what pins the comma path itself down, for the
-	// engines and locales that do hand it over unnormalised. Before the fix,
-	// those produced a set logged at 100 kg here.
+	// This test failed on CI and passed on the machine it was written on, and
+	// the difference was the browser, not the code. While the field was
+	// `type="number"`, where a comma goes was the engine's business: Chromium
+	// on Windows normalises `99,5` to `"99.5"` at every locale tried, and
+	// Chromium on Linux reports `""` with `validity.badInput`. On the second,
+	// the comma never reached `numberFromText` at all, so accepting commas
+	// there fixed nothing — the field showed `99,5` and the set logged at the
+	// 100 kg prescription, which is precisely the defect this change exists to
+	// close.
+	//
+	// The field is `type="text" inputmode="decimal"` now, so what the athlete
+	// typed reaches our parser on every engine and this assertion means the
+	// same thing everywhere. Keep it typed key by key: `fill` sets the value in
+	// one shot and would not exercise the half-typed `99,` state that
+	// `numberFromText` has to refuse.
 	await seedSession(page, session([set()]));
 	await page.goto('/session');
 

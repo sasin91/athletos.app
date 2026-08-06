@@ -1092,6 +1092,25 @@ and becomes load-bearing the moment a second client exists.
 > what it shows (D-07). The separator now parses; nothing typed can be dropped
 > without saying so.
 >
+> **Which took a second attempt, and the first one was not a fix.** Teaching the
+> parser to read a comma only helps if the comma reaches it, and whether it does
+> is the engine's business rather than ours. Measured across three locales:
+> Chromium on Windows normalises `99,5` to `"99.5"`, and Chromium on Linux
+> reports `""` with `validity.badInput`. On the second, `type="number"` ate the
+> keystrokes before any code here ran — the field showed `99,5`, the state kept
+> the old weight, and the set logged at the prescription. The defect was still
+> open on an engine nobody had run, and CI is what said so.
+>
+> The weight field is therefore **`type="text" inputmode="decimal"`**.
+> `inputmode` is what raises the numeric keypad on a phone; `type="number"` was
+> contributing a parse that differs by platform, a `step` that constrained only
+> the spinner arrows and `checkValidity()` — neither of which this screen uses —
+> and a `min` that never stopped anyone typing a negative. The price is that the
+> parser inherits the half-typed state the number input was hiding:
+> `Number('142.')` is `142`, so a trailing separator has to be refused or the
+> decimal point is eaten the instant it is pressed. Half a number is not a
+> number.
+>
 > The snap itself is defended on the ground that it is not loading arithmetic.
 > It computes nothing about what can be put on a bar, never asks what exercise
 > it is looking at, and returns the same answer for a barbell, a dumbbell and a
