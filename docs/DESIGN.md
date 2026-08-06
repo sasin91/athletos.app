@@ -1269,6 +1269,24 @@ The reference writes a `lift_records` table that nothing reads back.
 > rule does not carry over — it was aimed at an invented figure, and a cap
 > invents nothing. It stays the direction this product wants its arithmetic to
 > be wrong in (D-01): understating a big set, never flattering one.
+>
+> **The label travels onto the wire now, and it used to be dropped.**
+> `TrendPoint.training_max` was built from `readout()` by keeping the weight
+> and discarding `Readout.label` — so a 5/3/1 point and a Smolov Jr point
+> looked identical on the wire, one a governor the program moves on its own,
+> the other the athlete's own typed number standing in so the chart draws a
+> line instead of a gap. Nothing distinguished them; the field name claimed
+> both were the same kind of number. `TrendPoint` now carries
+> `training_max_label` alongside it, present exactly when `training_max` is,
+> holding `Readout::TRAINING_MAX` or `Readout::ENTERED_MAX` verbatim — the same
+> two constants `ReadoutView.label` already puts on the wire elsewhere, so a
+> client that already switches on one string switches on the other the same
+> way. This is what D-04's labelling was for: *"so the two can sit on one
+> screen without either being mistaken for the other."* An optional string
+> alongside an optional weight is additive (D-12) and costs one more field to
+> carry per point; it settles only the narrower question of whether the number
+> announces itself, not the wider one of whether a prescriptive program's
+> trend should carry an entered max at all.
 
 ---
 
@@ -1830,23 +1848,6 @@ ever pull the schema away from that, the chart gets its own table back.
   it is needed. What the equivalent is here — how often this runs, from where,
   and who reads its output, which it needs a human for at least once per
   enrolment — is an operations decision and is deliberately not taken in D-19.
-
-- **An entered max is drawn as a training max, and nothing on the wire says
-  so.** `TrendPoint.training_max` is built from `readout()`, keeping the weight
-  and dropping `Readout.label`. For 5/3/1 that label was *Training max* and the
-  field is honest. For a prescriptive program the blanket impl returns the maxes
-  snapshotted at enrolment, labelled *Entered 1RM*, and the handler takes them
-  as a fallback so that such a program draws a line rather than a gap — which
-  means the athlete's own typed number is displayed under a name reserved for
-  the one that moves. A client cannot tell the two apart, because the only thing
-  that could tell it is the label that was dropped. D-03 introduced that label
-  for exactly this: *"Inventing a training max for a program that does not have
-  one would be the same lie as an invented progress denominator."* And
-  `CONTEXT.md` keeps the two terms apart on the grounds that a screen showing
-  both must be able to explain each. The choice — drop the fallback and accept
-  the gap, carry the label onto the wire, or name the series something true of
-  both — is a design decision and is deliberately not taken here. Nothing is
-  changed until it is.
 
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.

@@ -2870,6 +2870,34 @@ async fn a_logged_session_produces_a_trend_point_with_a_training_max(pool: PgPoo
     // The training max comes from readout(state_before), which this session
     // recorded — so it is present rather than a gap.
     assert!(point["training_max"].as_f64().is_some());
+    // 5/3/1 is adaptive: the number is one the program derived and moves on
+    // its own, and the wire says so rather than leaving a client to guess.
+    assert_eq!(point["training_max_label"], "Training max");
+}
+
+/// The other arm: a prescriptive program has no training max, and
+/// `readout()` falls back to the athlete's entered 1RM so the chart still
+/// draws a line. The label must say so — an entered number arriving in a
+/// field called `training_max` with nothing to distinguish it from 5/3/1's
+/// is exactly the confusion D-04's labelling exists to prevent.
+#[sqlx::test]
+async fn a_prescriptive_programs_trend_point_is_labelled_as_an_entered_max(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "smolov-jr").await;
+    log_a_recent_session(&server, &token, enrollment).await;
+
+    let view = progress(&server, &token).await;
+
+    let lifts = view["lifts"].as_array().unwrap();
+    assert!(!lifts.is_empty(), "one session should produce one lift");
+
+    let point = &lifts[0]["points"][0];
+    // Smolov Jr takes the entered maxes straight and never moves them, but
+    // the fallback still draws a line rather than a gap.
+    assert!(point["training_max"].as_f64().is_some());
+    assert_eq!(point["training_max_label"], "Entered 1RM");
 }
 
 #[sqlx::test]

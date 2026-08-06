@@ -1476,7 +1476,10 @@ export interface components {
             /**
              * Format: double
              * @description The best estimate across that session's done sets of this lift. `None`
-             *     when every set was skipped, or every set was above the rep ceiling.
+             *     only when every set was skipped, or a done set carries no weight or no
+             *     reps — [`athletos_training::estimate`]'s own two absence cases. A set
+             *     above the rep ceiling still contributes an estimate: the ceiling caps
+             *     what the formula reads rather than refusing the set (D-13, amended).
              */
             estimate?: number | null;
             /**
@@ -1496,6 +1499,23 @@ export interface components {
              *     must draw a gap rather than a zero.
              */
             training_max?: number | null;
+            /**
+             * @description What kind of number `training_max` is — `Readout::TRAINING_MAX` when
+             *     the program derived it and moves it on its own, `Readout::ENTERED_MAX`
+             *     when a prescriptive program has none to report and the athlete's own
+             *     typed number stands in so the chart draws a line rather than a gap.
+             *     Present exactly when `training_max` is, and absent in exactly the same
+             *     cases — never one without the other.
+             *
+             *     Not decoration: without this field the two numbers are indistinguishable
+             *     on the wire, which is precisely the confusion D-04 introduced the label
+             *     to prevent — "so the two can sit on one screen without either being
+             *     mistaken for the other." A client that dropped this field would render
+             *     an entered 1RM under the name reserved for a governor that climbs on its
+             *     own.
+             * @example Training max
+             */
+            training_max_label?: string | null;
             /** Format: uuid */
             workout_id: string;
         };

@@ -2517,7 +2517,7 @@
               "null"
             ],
             "format": "double",
-            "description": "The best estimate across that session's done sets of this lift. `None`\nwhen every set was skipped, or every set was above the rep ceiling."
+            "description": "The best estimate across that session's done sets of this lift. `None`\nonly when every set was skipped, or a done set carries no weight or no\nreps — [`athletos_training::estimate`]'s own two absence cases. A set\nabove the rep ceiling still contributes an estimate: the ceiling caps\nwhat the formula reads rather than refusing the set (D-13, amended)."
           },
           "reasons": {
             "type": "array",
@@ -2543,6 +2543,14 @@
             ],
             "format": "double",
             "description": "What the program was prescribing from during that session. `None` for\nevery session logged before `enrollment_advances` existed — the chart\nmust draw a gap rather than a zero."
+          },
+          "training_max_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What kind of number `training_max` is — `Readout::TRAINING_MAX` when\nthe program derived it and moves it on its own, `Readout::ENTERED_MAX`\nwhen a prescriptive program has none to report and the athlete's own\ntyped number stands in so the chart draws a line rather than a gap.\nPresent exactly when `training_max` is, and absent in exactly the same\ncases — never one without the other.\n\nNot decoration: without this field the two numbers are indistinguishable\non the wire, which is precisely the confusion D-04 introduced the label\nto prevent — \"so the two can sit on one screen without either being\nmistaken for the other.\" A client that dropped this field would render\nan entered 1RM under the name reserved for a governor that climbs on its\nown.",
+            "example": "Training max"
           },
           "workout_id": {
             "type": "string",
