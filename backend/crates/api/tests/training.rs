@@ -3151,3 +3151,170 @@ async fn a_set_lifted_at_no_weight_earns_no_record(pool: PgPool) {
     assert_ne!(loaded["exercise"], "hanging-leg-raise");
     assert!(!loaded["bests"].as_array().unwrap().is_empty());
 }
+
+/// Submits one session at a chosen instant, with the first set taken heavy.
+///
+/// The date is a parameter rather than the fixture's fixed day because these
+/// two tests are *about* the window, and a hard-coded 2026 date would test the
+/// window's edge only until the calendar moved past it.
+async fn log_a_heavy_session_at(
+    server: &TestServer,
+    token: &str,
+    enrollment: Uuid,
+    at: chrono::DateTime<chrono::Utc>,
+    weight: f64,
+    reps: u64,
+) -> (Uuid, String) {
+    let session = next_session(server, token, enrollment).await;
+    let workout = Uuid::now_v7();
+
+    let mut body = logged_as_prescribed(workout, enrollment, &session);
+    body["started_at"] = json!(at.to_rfc3339());
+    body["ended_at"] = json!((at + chrono::Duration::hours(1)).to_rfc3339());
+    body["sets"][0]["actual_weight"] = json!(weight);
+    body["sets"][0]["actual_reps"] = json!(reps);
+
+    let exercise = body["sets"][0]["exercise"]
+        .as_str()
+        .expect("a set names its lift")
+        .to_owned();
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    (workout, exercise)
+}
+
+/// A record does not expire, and the trend around it still does.
+///
+/// Spec section 6 puts bests "over all history and all programs", against the
+/// twelve-month window the other three queries carry. An athlete who pulled
+/// their best five fourteen months ago and has been running a hypertrophy block
+/// since must not open the grid and be shown a *lower* number labelled as their
+/// best — every cell is meant to be backed by a set that actually happened, so
+/// a windowed grid would state something false rather than merely be incomplete.
+///
+/// The test pins the **asymmetry**, not only the fix: the same out-of-window
+/// session that supplies the record is asserted absent from `sessions` and from
+/// the lift's `points`. Anybody later tidying the queries into consistency by
+/// re-applying the window to all four fails here, and anybody dropping it from
+/// all four fails here too.
+#[sqlx::test]
+async fn a_record_outlives_the_window_that_bounds_the_trend(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    // Fifteen months ago: outside the window by three months, measured from
+    // now rather than from a date written into the test.
+    let long_ago = chrono::Utc::now() - chrono::Duration::days(455);
+    let (old_workout, lift) =
+        log_a_heavy_session_at(&server, &token, enrollment, long_ago, 200.0, 5).await;
+
+    // 5/3/1 BBB runs four days to the week, so four more sessions bring the
+    // same lift around again — inside the window, and much lighter.
+    for day in 1..=4 {
+        let recent = chrono::Utc::now() - chrono::Duration::days(20 - day);
+        log_a_heavy_session_at(&server, &token, enrollment, recent, 60.0, 5).await;
+    }
+
+    let view = progress(&server, &token).await;
+
+    // The sessions series is windowed: four recent, and not the old one.
+    let sessions = view["sessions"].as_array().unwrap();
+    assert_eq!(
+        sessions.len(),
+        4,
+        "the fifteen-month-old session is outside"
+    );
+    assert!(
+        !sessions
+            .iter()
+            .any(|session| session["workout_id"] == old_workout.to_string()),
+        "a windowed series must not carry the old session"
+    );
+
+    let trend = view["lifts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["exercise"] == lift.as_str())
+        .unwrap_or_else(|| panic!("{lift} was trained inside the window"));
+
+    // The trend is windowed too, so nothing plots at fifteen months.
+    assert!(
+        !trend["points"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|point| point["workout_id"] == old_workout.to_string()),
+        "the trend is a series and is bounded"
+    );
+
+    // And the record is not. 200 kg for five, from the session the trend has
+    // correctly forgotten.
+    let at_five = trend["bests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|best| best["reps"].as_u64() == Some(5))
+        .expect("a 5-rep bucket");
+
+    assert_eq!(at_five["weight"].as_f64(), Some(200.0));
+    assert_eq!(
+        at_five["workout_id"],
+        old_workout.to_string(),
+        "the record must still name the out-of-window set that set it"
+    );
+}
+
+/// A lift untouched for over a year still shows its record.
+///
+/// The companion hole to the query fix, and the reason dropping the window from
+/// the SQL is not on its own enough: `lifts` is assembled from the trend points,
+/// so a lift with a record and no recent session would have had its record
+/// fetched and then dropped on the way out. The athlete would see nothing —
+/// which is the same wrong answer the window gave, arriving by a different
+/// route.
+#[sqlx::test]
+async fn a_lift_not_trained_in_a_year_still_carries_its_record(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let long_ago = chrono::Utc::now() - chrono::Duration::days(455);
+    let (_, lift) = log_a_heavy_session_at(&server, &token, enrollment, long_ago, 200.0, 5).await;
+
+    let view = progress(&server, &token).await;
+
+    // Nothing inside the window at all: no sessions, and no program totals.
+    assert!(view["sessions"].as_array().unwrap().is_empty());
+    assert!(view["programs"].as_array().unwrap().is_empty());
+
+    let trend = view["lifts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["exercise"] == lift.as_str())
+        .unwrap_or_else(|| panic!("{lift} holds a record and must still be listed"));
+
+    // No trend to draw — the series is empty and honest about it — but the
+    // record survives, which is the whole distinction.
+    assert!(trend["points"].as_array().unwrap().is_empty());
+    assert_eq!(
+        trend["bests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|best| best["reps"].as_u64() == Some(5))
+            .expect("a 5-rep bucket")["weight"]
+            .as_f64(),
+        Some(200.0)
+    );
+}

@@ -255,18 +255,20 @@ pub fn median(values: &mut [i64]) -> Option<i64> {
 
 // --- loading it, and the four queries that do ------------------------------
 
-/// How far back the screen looks.
+/// How far back the three **series** look.
 ///
-/// Twelve months, written into each query rather than bound as a parameter:
+/// Twelve months, written into those queries rather than bound as a parameter:
 /// `interval '12 months'` is calendar arithmetic Postgres does correctly across
 /// leap days and month lengths, and a `now() - $2` with a duration computed in
 /// Rust would be the same window measured worse. It is a `const` and never a
 /// caller's string, so the formatting below cannot become an injection.
 ///
-/// A window rather than the whole history because every figure here is a
-/// statement about how the athlete is training *now*. A rep-max grid reaching
-/// back to a stronger year is a museum, and a load total summed over five years
-/// answers no question anyone asked.
+/// It bounds the trend, the sessions and the training maxes because each of
+/// those grows one row per session forever, and a chart of five years of
+/// training is neither drawable nor a statement about how somebody trains now.
+///
+/// **[`bests`] does not use it, and that is the point rather than an oversight.**
+/// See that function: a record is not a series and does not expire.
 const WINDOW: &str = "12 months";
 
 /// The rep buckets the grid offers.
@@ -526,12 +528,28 @@ async fn training_maxes(
 /// bodyweight work earns a record it needs a different shape, not this one with
 /// a zero in it.
 ///
+/// # This query is deliberately **not** windowed
+///
+/// The other three carry `WINDOW`; this one does not, and a reader who
+/// "consistently" adds it back would be removing a feature. Spec section 6 asks
+/// for the heaviest weight lifted for at least N reps **over all history and
+/// all programs**, and the reason is that *a record does not expire*. An
+/// athlete who pulled a best five at 140 kg fourteen months ago and has been
+/// running a hypertrophy block since would open a windowed grid and be shown a
+/// lower number labelled as their best — and since every cell is meant to be
+/// backed by a set that actually happened, that is the screen stating something
+/// false about their training rather than merely being incomplete.
+///
+/// The window exists to bound things that grow one row per session forever. A
+/// rep-max grid is six rows whatever the history, so it has nothing to bound:
+/// the cost of dropping the window is a wider index scan, not a wider response.
+///
 /// `distinct on (exercise, reps)` with the matching `order by` takes the first
 /// row of each group, which the ordering makes the heaviest; ties go to the
 /// earliest, because the athlete lifted it then. `s.id` closes the tie a shared
 /// timestamp would otherwise leave to the planner.
 async fn bests(db: &PgPool, athlete_id: Uuid) -> ApiResult<HashMap<String, Vec<Best>>> {
-    let rows: Vec<BestRow> = sqlx::query_as(&format!(
+    let rows: Vec<BestRow> = sqlx::query_as(
         "select distinct on (s.exercise, b.reps)
                 s.exercise, b.reps, s.actual_weight::float8 as weight, s.actual_reps,
                 coalesce(s.logged_at, w.started_at) as at, w.id as workout_id
@@ -540,13 +558,12 @@ async fn bests(db: &PgPool, athlete_id: Uuid) -> ApiResult<HashMap<String, Vec<B
          join enrollments e on e.id = w.enrollment_id
          cross join unnest($2::int[]) as b(reps)
          where e.athlete_id = $1
-           and w.started_at >= now() - interval '{WINDOW}'
            and s.status = 'done'
            and s.actual_weight > 0
            and s.actual_reps >= b.reps
          order by s.exercise, b.reps, s.actual_weight desc,
-                  coalesce(s.logged_at, w.started_at), s.id"
-    ))
+                  coalesce(s.logged_at, w.started_at), s.id",
+    )
     .bind(athlete_id)
     .bind(BEST_REPS)
     .fetch_all(db)
@@ -803,6 +820,24 @@ fn assemble(loaded: Loaded) -> ProgressView {
             status: run.status,
         })
         .collect();
+
+    // A lift last trained more than twelve months ago has a record and no trend
+    // points, because `bests` is not windowed and the other three queries are.
+    // `lift_order` is built from the points, so without this the record would be
+    // fetched and then silently dropped on the way out — the query change alone
+    // does not deliver the feature.
+    //
+    // Appended after everything actually trained in the window, because this
+    // list is somebody walking back through their own training and a lift they
+    // have not touched in a year does not belong above one they did on Tuesday.
+    // Sorted, so the order does not come from a hash map's iteration.
+    let mut dormant: Vec<String> = bests
+        .keys()
+        .filter(|exercise| !points.contains_key(*exercise))
+        .cloned()
+        .collect();
+    dormant.sort();
+    lift_order.extend(dormant);
 
     let lifts = lift_order
         .into_iter()
