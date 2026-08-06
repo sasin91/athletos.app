@@ -9,12 +9,14 @@ import {
 	logSet,
 	nextSetPosition,
 	noteSet,
+	numberFromText,
 	plateChangeFor,
 	resetSet,
 	setDriftReason,
 	setsDone,
 	setsRemaining,
 	skipSet,
+	snap,
 	summarise,
 	toSubmission
 } from './session';
@@ -690,5 +692,137 @@ describe('barUnchangedFrom', () => {
 		// 97.5, that the bar is already loaded: nobody touched it.
 		const skipped = skipSet(committed, 0, '2026-08-05T10:05:00Z');
 		expect(barUnchangedFrom(skipped, 1)).toBe(false);
+	});
+});
+
+describe('numberFromText', () => {
+	it('reads a comma and a period as the same decimal separator', () => {
+		// The comma path used to answer `NaN` and therefore `undefined`, which
+		// the logger reads as "no edit" — so the number was accepted by the
+		// field, discarded by the state, and the previous weight was logged
+		// instead. On a Danish keyboard that is a live risk (D-07).
+		expect(numberFromText('142,5')).toBe(142.5);
+		expect(numberFromText('142.5')).toBe(142.5);
+		expect(numberFromText('142,555556')).toBe(numberFromText('142.555556'));
+	});
+
+	it('is undefined for an empty or all-whitespace field, which is not a typed zero', () => {
+		// `Number('')` is `0`, finite and indistinguishable from a zero the
+		// athlete meant. Clearing the field to retype would otherwise carry a
+		// 0 kg to every later pending set of the exercise.
+		expect(numberFromText('')).toBeUndefined();
+		expect(numberFromText('   ')).toBeUndefined();
+	});
+
+	it('is undefined for junk, including a string with two separators', () => {
+		expect(numberFromText('abc')).toBeUndefined();
+		expect(numberFromText('142,5,5')).toBeUndefined();
+		expect(numberFromText('-')).toBeUndefined();
+	});
+
+	it('still reads a plain integer and a zero the athlete actually typed', () => {
+		expect(numberFromText('100')).toBe(100);
+		expect(numberFromText('0')).toBe(0);
+	});
+});
+
+describe('snap', () => {
+	it('rounds to the nearest half kilo, halves going up', () => {
+		expect(snap(142.555556)).toBe(142.5);
+		expect(snap(97.6)).toBe(97.5);
+		expect(snap(0.25)).toBe(0.5);
+		expect(snap(0.75)).toBe(1);
+		expect(snap(102.3)).toBe(102.5);
+	});
+
+	it('leaves a multiple of half a kilo exactly where it is', () => {
+		for (const kg of [0.5, 2.5, 20, 97.5, 100, 142.5, 227.5]) {
+			expect(snap(kg)).toBe(kg);
+		}
+	});
+
+	it('handles zero, which is what bodyweight work is prescribed at', () => {
+		expect(snap(0)).toBe(0);
+	});
+
+	/**
+	 * The claim the D-11 exception rests on: snapping cannot disturb a weight
+	 * the program is able to prescribe. Every loading mode in the catalogue
+	 * resolves to a multiple of 0.5 — the barbell at 2.5
+	 * (`loading.rs`, `BARBELL_RESOLUTION`, on top of a 20 kg bar), the dumbbell
+	 * rack at 2.0 (`exercise.rs`, `RACK`), bodyweight at 0 — so no correct
+	 * number is ever changed behind the athlete's back. If a future loading
+	 * mode breaks that, this test is where it surfaces.
+	 */
+	it('leaves every weight the catalogue can prescribe unchanged', () => {
+		for (let i = 0; i <= 120; i++) {
+			const barbell = 20 + 2.5 * i;
+			expect(snap(barbell)).toBe(barbell);
+
+			const dumbbell = 2 * i;
+			expect(snap(dumbbell)).toBe(dumbbell);
+		}
+
+		// And the ones the fixtures actually carry, end to end.
+		for (const set of fixture().sets) {
+			expect(snap(set.prescribedWeight)).toBe(set.prescribedWeight);
+		}
+		for (const set of bbbFixture().sets) {
+			expect(snap(set.prescribedWeight)).toBe(set.prescribedWeight);
+		}
+	});
+});
+
+describe('logging snaps the weight where it cannot be bypassed', () => {
+	it('rounds a six-decimal weight to the nearest half kilo as the set is logged', () => {
+		// `change` on the field snaps too, but `change` only fires when the
+		// field is left, and one tap on Log without blurring is the normal way
+		// this screen is used.
+		const edited = editSet(committed, 0, { weight: 142.555556 });
+		const logged = logSet(edited, 0, AT);
+
+		expect(logged.sets[0].actualWeight).toBe(142.5);
+	});
+
+	it('leaves a weight already on a half kilo alone', () => {
+		const logged = logSet(editSet(committed, 0, { weight: 110 }), 0, AT);
+		expect(logged.sets[0].actualWeight).toBe(110);
+	});
+
+	it('drops the drift reason when snapping lands back on the prescription', () => {
+		// 97.6 shows the chips, 97.5 is the prescription. A reason travelling
+		// on a set the submission reports as sitting at its own prescription is
+		// what the server's check constraint refuses — and it would take the
+		// whole session down over a chip.
+		const reasoned = setDriftReason(editSet(committed, 0, { weight: 97.6 }), 0, 'too_heavy');
+		const logged = logSet(reasoned, 0, AT);
+
+		expect(logged.sets[0].actualWeight).toBe(97.5);
+		expect(logged.sets[0].driftReason).toBeNull();
+	});
+
+	it('keeps the drift reason when the snapped weight is still a deviation', () => {
+		const reasoned = setDriftReason(editSet(committed, 0, { weight: 110.2 }), 0, 'too_easy');
+		const logged = logSet(reasoned, 0, AT);
+
+		expect(logged.sets[0].actualWeight).toBe(110);
+		expect(logged.sets[0].driftReason).toBe('too_easy');
+	});
+
+	it('does not touch the carried weights of sets that have not been logged yet', () => {
+		// Snapping is what the *record* gets. A pending set still holds whatever
+		// the carry made it until it is logged in its own right.
+		const edited = editSet(committed, 0, { weight: 142.555556 });
+		const logged = logSet(edited, 0, AT);
+
+		// Carried through the delta, so it is the same number give or take the
+		// last bit of a double — and still not a weight anybody can load.
+		expect(logged.sets[1].actualWeight).toBeCloseTo(142.555556, 6);
+		expect(logSet(logged, 1, AT).sets[1].actualWeight).toBe(142.5);
+	});
+
+	it('never touches the prescription, which is still what drift is measured against', () => {
+		const logged = logSet(editSet(committed, 0, { weight: 142.555556 }), 0, AT);
+		expect(logged.sets[0].prescribedWeight).toBe(97.5);
 	});
 });

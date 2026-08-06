@@ -152,6 +152,86 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
 	};
 }
 
+/**
+ * What the athlete typed, as a number, or `undefined` when there is nothing to
+ * apply.
+ *
+ * Lifted out of the logger's `numberFrom` so that the rule it encodes can be
+ * tested without a DOM. Everything below is a fact about a string; the input
+ * event is only where the string came from.
+ *
+ * Empty or all-whitespace is "no edit", not zero. `Number('')` is `0`, finite
+ * and indistinguishable from a typed zero, and this fires on every keystroke:
+ * without this check, clearing the field to retype a number applies `delta =
+ * -prescribedWeight` and carries a 0 kg to every later pending set of the
+ * exercise before the athlete finishes typing the number they meant.
+ *
+ * A comma is read as a decimal separator before `Number()` sees it.
+ * `Number('142,5')` is `NaN`, and `NaN` used to leave here as `undefined` —
+ * the same answer an empty field gets — so the edit was **silently dropped**.
+ * The field went on showing what was typed, the state kept the previous
+ * weight, and the previous weight is what got logged: a set recorded at a
+ * weight nobody lifted, with no error and no visible sign, on the screen whose
+ * entire premise is that one tap logs what it shows (D-07). Whether the
+ * browser hands the separator over unnormalised depends on the locale it is
+ * running in; on a Danish keyboard that is a live risk rather than a
+ * theoretical one, and accepting the separator costs nothing.
+ *
+ * Only the first comma is rewritten, deliberately. A string with two of them
+ * is not a number anybody meant, and it stays `NaN` and stays refused rather
+ * than being quietly reinterpreted as something else.
+ *
+ * Junk — a stray letter, two separators, a lone sign — still returns
+ * `undefined` through the `Number.isFinite` guard, which is the honest answer
+ * for a string that names no number.
+ */
+export function numberFromText(raw: string): number | undefined {
+	if (raw.trim().length === 0) return undefined;
+
+	const value = Number(raw.replace(',', '.'));
+	return Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * The nearest half kilo — a named, bounded exception to D-11.
+ *
+ * `frontend/CLAUDE.md` is unambiguous: "If you find yourself working out a
+ * weight, stop." This works out a weight in the client, so it is written down
+ * here rather than smuggled in.
+ *
+ * The defence is that this is not plate math. It computes nothing about what
+ * can be loaded, asks nothing about the exercise, and gives the same answer
+ * for a barbell, a dumbbell and a machine. It is input hygiene: the field
+ * declining to hold a number the athlete cannot have meant. `142.555556` is
+ * not a weight that exists in any gym, and the only reason it ever reached the
+ * record was that `type="number" step="0.5"` constrains the spinner arrows and
+ * `checkValidity()`, neither of which this screen uses.
+ *
+ * It was checked against the catalogue rather than assumed safe. Every loading
+ * mode resolves to a multiple of 0.5 — the barbell at 2.5
+ * (`training/src/loading.rs`, `BARBELL_RESOLUTION`), the dumbbell rack at 2.0
+ * (`training/src/exercise.rs`, `RACK`), bodyweight at 0 — so no weight the
+ * program can prescribe is disturbed by snapping, and no correct number is
+ * ever changed behind the athlete's back. The unit tests hold that claim down.
+ *
+ * The cost is stated rather than hidden: a `Loading::Machine { increment }`
+ * with a stack that is not a multiple of 0.5 could not be logged exactly.
+ * Nothing in the catalogue is like that today, and the alternative — refusing
+ * the value and blocking the log — is worse on the screen that gets used
+ * mid-set, offline, with chalk on your hands.
+ *
+ * What it is not: this does not round a weight to something *loadable*. The
+ * carried difference an edit propagates is still whatever the athlete's edit
+ * made it, a multiple of 0.5 and not necessarily a multiple of 2.5, because
+ * the client has no plate arithmetic and is not getting any (D-11).
+ *
+ * It incidentally closes a gap on the way out. Every multiple of 0.5 is exact
+ * in two decimal places, so nothing that survives the field can be altered by
+ * the `numeric(6,2)` column it lands in, and the log can no longer disagree
+ * with what was on screen. That was true before only by luck.
+ */
+export const snap = (kg: number) => Math.round(kg * 2) / 2;
+
 function replace(
 	session: LocalSession,
 	position: number,
@@ -306,9 +386,31 @@ export function noteSet(session: LocalSession, position: number, note: string): 
  * `at` is passed in rather than read from the clock in here, so that this stays
  * a pure function of its arguments and the timing rules can be tested without
  * faking a global. Every caller passes `new Date().toISOString()`.
+ *
+ * The weight is `snap`ped on the way in — the last place it can be, and the
+ * one place that cannot be bypassed. The field snaps on `change`, but `change`
+ * only fires when the field is left, and the whole point of this screen is
+ * that a set can be logged with a thumb without anything else being touched
+ * first. A number typed and never blurred would otherwise go into the record
+ * with six decimals on it.
+ *
+ * Snapping can move a weight back onto its own prescription — 97.6 becomes
+ * 97.5 — and the drift reason has to go with it, exactly as it does in
+ * `editSet`. Without that, a chip tapped while the field read 97.6 would
+ * travel on a set the submission reports as sitting at its prescription, and
+ * the server's check constraint would refuse the whole session over it.
  */
 export function logSet(session: LocalSession, position: number, at: string): LocalSession {
-	return replace(session, position, (set) => ({ ...set, status: 'done', loggedAt: at }));
+	return replace(session, position, (set) => {
+		const actualWeight = snap(set.actualWeight);
+		return {
+			...set,
+			actualWeight,
+			driftReason: actualWeight === set.prescribedWeight ? null : set.driftReason,
+			status: 'done',
+			loggedAt: at
+		};
+	});
 }
 
 /**
