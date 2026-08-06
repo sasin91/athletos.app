@@ -82,10 +82,34 @@ wrong direction to be wrong in.
 
 **A rep ceiling, and it is a real rule rather than input validation.** An
 estimate off a set of twenty is not evidence about a single, and the formula's
-error grows monotonically with reps. Sets above the ceiling contribute **no estimate at
-all** rather than a clamped one — the same instinct as `timing.rs` discarding an
-interval it cannot believe instead of folding it in at an invented value. The
-ceiling is a constant in the training crate with the reasoning beside it.
+error grows monotonically with reps. Sets above the ceiling are capped at it
+rather than reporting no estimate at all — see the correction below for why
+this reverses what this section originally specified. The ceiling is a
+constant in the training crate with the reasoning beside it.
+
+> **Reversed after the screen this feeds was built, and the sentence above used
+> to end the opposite way.** It read *"Sets above the ceiling contribute no
+> estimate at all rather than a clamped one — the same instinct as `timing.rs`
+> discarding an interval it cannot believe instead of folding it in at an
+> invented value."* That refusal broke the property the trend needed: eleven
+> reps at a weight is at least as good a single as ten at it, so a set that
+> crossed the ceiling should never estimate less than one that stopped short of
+> it, and refusal did exactly that. 5/3/1 week one's AMRAP set landing at
+> eleven reps instead of ten dropped the headline estimate by about a quarter —
+> to the session's second-best set — for doing one rep *more*, and the screen
+> renders drift reasons on downward moves, inviting the athlete to explain a
+> number that was an artifact of the estimator rather than a fact about their
+> training. `docs/DESIGN.md`'s `## Open` list carried this as an unsettled
+> question; it is now answered in **D-13**'s amendment block.
+>
+> The `timing.rs` comparison does not survive the reversal, and it is worth
+> saying why: an interval `timing.rs` cannot believe is discarded because there
+> is no honest number to report for it, but a set past the rep ceiling has an
+> honest number sitting inside it — what its first ten reps already proved.
+> Capping reads that number instead of throwing it away. It is a lower bound
+> rather than a guess, which is a different thing from the invented value the
+> original sentence was refusing to fold in, and understating a long set is the
+> direction this product wants its arithmetic to be wrong in (D-01).
 
 ### Which set
 
@@ -220,9 +244,11 @@ reconciling a table against a rule that has moved, with no marker for where.
 
 `training_max` is nullable per point — every session logged before
 `enrollment_advances` existed has no `state_before` to read a training max from,
-and the chart must draw a gap rather than a zero. `estimate` is nullable for the same reason from the other direction: a
-session where every set of that lift was skipped, or where the only sets
-performed were above the rep ceiling, contributes no estimate.
+and the chart must draw a gap rather than a zero. `estimate` is nullable for
+a narrower reason, now that [section 2](#2--the-estimate) caps rather than
+refuses a set above the rep ceiling: a session where every set of that lift
+was skipped, or where the sets performed carried no weight, contributes no
+estimate. A high rep count alone no longer does — it is capped, not discarded.
 
 `drift_kg` is signed: **positive means heavier than prescribed**, negative
 lighter, zero run as written. Summed over that session's done sets for that

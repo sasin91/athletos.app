@@ -1248,6 +1248,27 @@ The reference writes a `lift_records` table that nothing reads back.
 > attached because a rule with somebody behind it survives a redesign, and one
 > derived from principles gets re-derived the other way by the next reader who
 > wants a badge.
+>
+> **The rep ceiling caps rather than refuses, and that reverses what this file
+> said when it was written.** A set above `ESTIMATE_REP_CEILING` used to return
+> no estimate at all rather than a clamped one, on the argument that a number
+> present but untrustworthy is worse than an absent one. It also made the trend
+> fall on the athlete's best day: 5/3/1 week one's AMRAP set landing at eleven
+> reps instead of ten crossed the ceiling and contributed nothing, so the
+> headline estimate fell back to the session's second-best set — about a
+> quarter lower — for doing one rep *more*, and the screen renders drift
+> reasons on downward moves, inviting an explanation for a number that was an
+> artifact of the estimator rather than a fact about the athlete's training.
+> `estimate()` now caps the reps it reads at the ceiling instead of discarding
+> the set past it, which makes the estimate monotone non-decreasing in reps —
+> the property the trend needed all along, since more work can then only raise
+> the number or leave it where it was. What it costs, stated rather than
+> hidden: a set past the ceiling is deliberately understated, reporting what
+> the first ten reps of it already proved rather than what all of them did.
+> That is a lower bound, not a guess, so the objection that retired the old
+> rule does not carry over — it was aimed at an invented figure, and a cap
+> invents nothing. It stays the direction this product wants its arithmetic to
+> be wrong in (D-01): understating a big set, never flattering one.
 
 ---
 
@@ -1826,31 +1847,6 @@ ever pull the schema away from that, the chart gets its own table back.
   the gap, carry the label onto the wire, or name the series something true of
   both — is a design decision and is deliberately not taken here. Nothing is
   changed until it is.
-
-- **The rep ceiling makes the trend fall on the athlete's best day.** 5/3/1
-  week 1 prescribes 65/75/85% with the last set AMRAP. Ten reps at 85% gives
-  an estimate of `0.85 × 36/27 = 1.133 × TM` — the headline of the session.
-  **Eleven** reps at 85%, one more than that and nothing else different, is
-  above `ESTIMATE_REP_CEILING` and contributes no estimate at all, so the best
-  *surviving* set of the same session is the second one, 75% for five:
-  `0.75 × 36/32 = 0.844 × TM`. The trend line drops about 26% because the
-  athlete did one rep *more* — and the screen renders drift reasons on
-  downward moves (`TrendPoint.reasons`), which invites an explanation for a
-  number that is an artifact of the estimator, not a fact about the athlete's
-  training. The code matches the spec exactly here; this is a hole in the
-  design, not a defect in the build, and it should be settled before the
-  progress screen is built, since the screen is what makes it visible.
-  Candidates, none chosen: raise `ESTIMATE_REP_CEILING`; cap reps at the
-  ceiling instead of refusing past it, which understates the estimate and is
-  therefore safe in this product's direction (D-01); or keep the refusal and
-  have the screen itself mark a session whose top set was unreadable, rather
-  than silently falling back to a lighter one. `estimate.rs`'s own module
-  documentation argued the opposite of this — that BBB's "AMRAP top sets are
-  where estimates will actually come from" — which is backwards: an AMRAP set
-  is exactly the set most likely to exceed the ceiling, since the whole point
-  of AMRAP is reps left unconstrained. That sentence has been corrected in the
-  module doc; recorded here because the design question it was covering for is
-  still open.
 
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.

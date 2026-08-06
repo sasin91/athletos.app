@@ -300,11 +300,13 @@ const WINDOW_MONTHS: u32 = 12;
 /// [`athletos_training::ESTIMATE_REP_CEILING`], but that is a coincidence
 /// rather than a reason the two share a number: buckets are "at least N", so a
 /// set of any rep count still fills the 10 cell, including one past the
-/// ceiling. A 15-rep set at 200 kg fills it despite `estimate(200.0, 15)`
-/// returning `None` — the grid reports what was actually lifted for at least N
-/// reps, and the estimator separately refuses a rep count it does not trust as
-/// evidence of a single. Both are right; they are simply not the same
-/// question, and a set can answer one while the other has nothing to say.
+/// ceiling. A 15-rep set at 200 kg fills that cell with the 200 kg actually
+/// lifted, while `estimate(200.0, 15)` reads it as *ten* reps at 200 kg — the
+/// grid reports what was actually done for at least N reps, and the estimator
+/// caps what it will read as evidence of a single. Both are right; they are
+/// simply not the same question, and the two numbers a 15-rep set produces —
+/// one exact, one deliberately understated — can disagree without either
+/// being wrong.
 const BEST_REPS: &[i32] = &[1, 2, 3, 5, 8, 10];
 
 /// One session, as the sessions query returns it.
