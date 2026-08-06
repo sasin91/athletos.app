@@ -1,0 +1,25 @@
+-- `now()` is transaction start time, not statement time — every statement in
+-- one transaction sees the same value. The submit handler (see
+-- `routes/workouts.rs`'s module header) takes `select ... for update` on the
+-- enrolment specifically so two overlapping submits serialise; the insert
+-- into `enrollment_advances` only runs while holding that lock. But a
+-- transaction that *began* earlier and then blocked on the lock still has an
+-- earlier `now()` than one that began later and got the lock first — so the
+-- row written second can be stamped earlier than the row written first.
+--
+-- `verify-advances` (`advances.rs`) orders by `advanced_at, workout_id` and
+-- treats that order as fold order, checking each row's `state_before`
+-- against the previous row's `state_after`. Two advances stamped out of
+-- lock-acquisition order make a perfectly healthy chain look broken —
+-- exactly the false `ChainBroken` this tool exists to never produce.
+--
+-- `clock_timestamp()` is evaluated at statement execution rather than
+-- transaction start, so it reflects when the insert actually ran — which,
+-- because it can only run under the enrolment's lock, is the lock-acquisition
+-- order the verifier needs.
+--
+-- Additive (D-17): only the column default changes. Rows already written
+-- keep the transaction-start timestamps they were stamped with — there is no
+-- way to recover the true order retroactively, so this does not attempt to.
+alter table enrollment_advances
+    alter column advanced_at set default clock_timestamp();
