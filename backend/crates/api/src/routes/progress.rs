@@ -66,13 +66,35 @@ pub struct Indicator {
 pub struct TrendPoint {
     pub workout_id: Uuid,
     pub at: DateTime<Utc>,
-    /// The best estimate across that session's done sets of this lift. `None`
-    /// when every set was skipped, or every set was above the rep ceiling.
+    /// The best (highest) estimate across that session's done sets of this
+    /// lift. A point with no done sets is never emitted, so this is `None`
+    /// only when every done set failed to produce an estimate — each one
+    /// carrying no weight or no reps, [`athletos_training::estimate`]'s own
+    /// two absence cases. One weightless set among several does not null this
+    /// field; the max is taken across sets, so a single done set with a real
+    /// weight and rep count is enough. A set above the rep ceiling still
+    /// contributes an estimate: the ceiling caps what the formula reads
+    /// rather than refusing the set (D-13, amended).
     pub estimate: Option<f64>,
     /// What the program was prescribing from during that session. `None` for
     /// every session logged before `enrollment_advances` existed — the chart
     /// must draw a gap rather than a zero.
     pub training_max: Option<f64>,
+    /// What kind of number `training_max` is — `Readout::TRAINING_MAX` when
+    /// the program derived it and moves it on its own, `Readout::ENTERED_MAX`
+    /// when a prescriptive program has none to report and the athlete's own
+    /// typed number stands in so the chart draws a line rather than a gap.
+    /// Present exactly when `training_max` is, and absent in exactly the same
+    /// cases — never one without the other.
+    ///
+    /// Not decoration: without this field the two numbers are indistinguishable
+    /// on the wire, which is precisely the confusion D-04 introduced the label
+    /// to prevent — "so the two can sit on one screen without either being
+    /// mistaken for the other." A client that dropped this field would render
+    /// an entered 1RM under the name reserved for a governor that climbs on its
+    /// own.
+    #[schema(example = "Training max")]
+    pub training_max_label: Option<String>,
     /// Signed: positive is heavier than prescribed, negative lighter. Summed
     /// over that session's done sets of this lift, against the same sets'
     /// prescriptions, so it is weight drift uncontaminated by work not done.
@@ -300,11 +322,13 @@ const WINDOW_MONTHS: u32 = 12;
 /// [`athletos_training::ESTIMATE_REP_CEILING`], but that is a coincidence
 /// rather than a reason the two share a number: buckets are "at least N", so a
 /// set of any rep count still fills the 10 cell, including one past the
-/// ceiling. A 15-rep set at 200 kg fills it despite `estimate(200.0, 15)`
-/// returning `None` — the grid reports what was actually lifted for at least N
-/// reps, and the estimator separately refuses a rep count it does not trust as
-/// evidence of a single. Both are right; they are simply not the same
-/// question, and a set can answer one while the other has nothing to say.
+/// ceiling. A 15-rep set at 200 kg fills that cell with the 200 kg actually
+/// lifted, while `estimate(200.0, 15)` reads it as *ten* reps at 200 kg — the
+/// grid reports what was actually done for at least N reps, and the estimator
+/// caps what it will read as evidence of a single. Both are right; they are
+/// simply not the same question, and the two numbers a 15-rep set produces —
+/// one exact, one deliberately understated — can disagree without either
+/// being wrong.
 const BEST_REPS: &[i32] = &[1, 2, 3, 5, 8, 10];
 
 /// One session, as the sessions query returns it.
@@ -359,9 +383,11 @@ struct Loaded {
     /// Keyed by workout, each in `position` order. A workout with no sets is
     /// absent rather than present and empty.
     sets: HashMap<Uuid, Vec<SetRow>>,
-    /// Keyed by workout, then by exercise. A workout with no recorded advance
-    /// is absent — a gap in the chart, never a zero.
-    training_maxes: HashMap<Uuid, HashMap<String, f64>>,
+    /// Keyed by workout, then by exercise, carrying the weight and the label
+    /// naming what kind of number it is — `Readout::TRAINING_MAX` or
+    /// `Readout::ENTERED_MAX`. A workout with no recorded advance is absent —
+    /// a gap in the chart, never a zero.
+    training_maxes: HashMap<Uuid, HashMap<String, (f64, &'static str)>>,
     /// Keyed by exercise, buckets ascending.
     bests: HashMap<String, Vec<Best>>,
 }
@@ -539,7 +565,7 @@ async fn sets(
 async fn training_maxes(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     athlete_id: Uuid,
-) -> ApiResult<HashMap<Uuid, HashMap<String, f64>>> {
+) -> ApiResult<HashMap<Uuid, HashMap<String, (f64, &'static str)>>> {
     let rows: Vec<(Uuid, String, Value)> = sqlx::query_as(&format!(
         "select a.workout_id, e.program_key, a.state_before
          from enrollment_advances a
@@ -567,27 +593,23 @@ async fn training_maxes(
         // training max wins where a future one does, because that is the number
         // the field is named for and the only one that moves; the entered max
         // is a fallback so a prescriptive program still draws a line rather
-        // than a gap.
-        let mut per_exercise: HashMap<String, (f64, bool)> = HashMap::new();
+        // than a gap. The label travels with the weight it names, all the way
+        // to the wire, so a client can tell which arm it received.
+        let mut per_exercise: HashMap<String, (f64, &'static str)> = HashMap::new();
         for readout in readouts {
             let is_training_max = readout.label == Readout::TRAINING_MAX;
             let weight = readout.weight;
+            let label = readout.label;
             let slot = per_exercise
                 .entry(readout.exercise)
-                .or_insert((weight, is_training_max));
+                .or_insert((weight, label));
 
-            if is_training_max && !slot.1 {
-                *slot = (weight, is_training_max);
+            if is_training_max && slot.1 != Readout::TRAINING_MAX {
+                *slot = (weight, label);
             }
         }
 
-        per_workout.insert(
-            workout_id,
-            per_exercise
-                .into_iter()
-                .map(|(exercise, (weight, _))| (exercise, weight))
-                .collect(),
-        );
+        per_workout.insert(workout_id, per_exercise);
     }
 
     Ok(per_workout)
@@ -806,6 +828,8 @@ fn assemble(loaded: Loaded) -> ProgressView {
                 lift_order.push(exercise.to_owned());
             }
 
+            let readout = maxes.and_then(|maxes| maxes.get(exercise));
+
             points
                 .entry(exercise.to_owned())
                 .or_default()
@@ -813,7 +837,8 @@ fn assemble(loaded: Loaded) -> ProgressView {
                     workout_id,
                     at: started_at,
                     estimate: tally.estimate,
-                    training_max: maxes.and_then(|maxes| maxes.get(exercise)).copied(),
+                    training_max: readout.map(|(weight, _)| *weight),
+                    training_max_label: readout.map(|(_, label)| (*label).to_owned()),
                     drift_kg: tally.drift_kg,
                     sets_over: tally.sets_over,
                     sets_under: tally.sets_under,

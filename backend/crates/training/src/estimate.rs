@@ -29,39 +29,62 @@
 //! so the choice costs nothing at the ceiling and only matters in between,
 //! where Brzycki is the more conservative and this product prefers that.
 //!
-//! # The ceiling is a rule, not input validation
+//! # The ceiling caps, and it used to refuse
 //!
 //! An estimate off a set of twenty is not evidence about a single, and Epley's
-//! error grows monotonically with reps. A set above the ceiling contributes
-//! **no estimate at all** rather than a clamped one — the same instinct as
-//! `timing.rs` discarding an interval it cannot believe instead of folding it
-//! in at an invented value. A number that is present but untrustworthy is
-//! worse than an absent one, because only one of the two is visible.
+//! error grows monotonically with reps — but refusing the set outright, as
+//! this module first did, broke a stronger property than it protected: eleven
+//! reps at a weight is at least as good a single as ten at it, so a set that
+//! crossed the ceiling should never estimate *less* than one that stopped
+//! short of it. Refusal did exactly that. On the progress screen the estimate
+//! feeds, the AMRAP top set of 5/3/1 week one landing at eleven reps instead
+//! of ten made the headline number fall by a quarter for doing more work — a
+//! drop the screen then invited the athlete to explain, as if it were
+//! training rather than an artifact of this file. [`ESTIMATE_REP_CEILING`] now
+//! caps the reps the formula sees instead of rejecting the set, so
+//! [`estimate`] is monotone non-decreasing in reps by construction: more work
+//! can raise the number or leave it, never lower it.
+//!
+//! **This reverses the module's original rule, and the reversal is worth
+//! naming rather than quietly overwritten.** That rule read: *a number that is
+//! present but untrustworthy is worse than an absent one, because only one of
+//! the two is visible.* True of a guess. Not true of a cap. A capped estimate
+//! is not a guess at what the eleventh rep was worth — it is exactly what the
+//! first ten reps of that same set demonstrably implied, which the athlete
+//! proved by lifting one more on top of them. It understates a long set
+//! rather than inventing anything about it, and understating is the direction
+//! this product wants its arithmetic to be wrong in (D-01): the failure mode
+//! this guards against is over-reaching, and a lower bound can only undersell
+//! a big set, never flatter one.
 
-/// The most reps an estimate will be taken from.
+/// The most reps the formula is trusted to read directly.
 ///
 /// Ten. Every program's fixed-rep sets in the catalogue prescribe within it —
 /// 5/3/1's Boring But Big sets of ten are the ceiling exactly. Its AMRAP top
 /// sets are the opposite case, not an example of this working well: the whole
 /// point of AMRAP is reps left unconstrained, so those are the sets most
-/// likely to land past ten and contribute no estimate at all, not the sets
-/// estimates will reliably come from. Beyond ten, the formula is describing
-/// muscular endurance and reporting it as a single.
+/// likely to land past ten and be capped rather than read exactly — not the
+/// sets a precise estimate will reliably come from. Beyond ten, the formula is
+/// describing muscular endurance, and a capped estimate reports only what the
+/// first ten of those reps already proved, not what all of them did.
 ///
 /// It also keeps Brzycki's pole at 37 reps more than three times out of reach,
 /// which is what makes that formula's one flaw irrelevant here.
 pub const ESTIMATE_REP_CEILING: u32 = 10;
 
-/// The one-rep max a set implies, or `None` when it implies nothing.
+/// The one-rep max a set implies, or `None` when the set says nothing.
 ///
-/// `None` for zero reps, for no weight, and for anything above
-/// [`ESTIMATE_REP_CEILING`] — see the module documentation for why each of
-/// those is an absence rather than a number.
+/// Reps above [`ESTIMATE_REP_CEILING`] are capped at it rather than refused —
+/// see the module documentation for why that is a lower bound and not a
+/// guess. `None` only for zero reps and for weight at or below zero: a set
+/// that did not happen, or one with no kilograms to speak of, is an absence a
+/// cap cannot rescue, which is a different thing from a set the cap can.
 pub fn estimate(weight: f64, reps: u32) -> Option<f64> {
-    if reps == 0 || reps > ESTIMATE_REP_CEILING || weight <= 0.0 {
+    if reps == 0 || weight <= 0.0 {
         return None;
     }
 
+    let reps = reps.min(ESTIMATE_REP_CEILING);
     Some(weight * 36.0 / (37.0 - f64::from(reps)))
 }
 
@@ -105,9 +128,35 @@ mod tests {
     }
 
     #[test]
-    fn a_set_above_the_ceiling_estimates_nothing() {
-        assert_eq!(estimate(60.0, ESTIMATE_REP_CEILING + 1), None);
-        assert!(estimate(60.0, ESTIMATE_REP_CEILING).is_some());
+    fn a_set_above_the_ceiling_estimates_from_the_ceiling() {
+        // Reversed: this asserted `None` before the ceiling capped instead of
+        // refused. Eleven reps and twenty reps at the same weight both read as
+        // exactly what ten reps at that weight would — the cap, not a guess at
+        // what the extra reps were worth.
+        let at_ceiling = estimate(60.0, ESTIMATE_REP_CEILING).expect("within the ceiling");
+        assert_eq!(estimate(60.0, ESTIMATE_REP_CEILING + 1), Some(at_ceiling));
+        assert_eq!(estimate(60.0, 20), Some(at_ceiling));
+    }
+
+    #[test]
+    fn more_reps_never_estimate_less() {
+        // The property that motivated capping instead of refusing: the trend
+        // this feeds cannot be allowed to fall because the athlete did more
+        // work. Spans the ceiling deliberately, 1 through 15 — this is the
+        // regression guard for that reversal. Reinstating the old refusal
+        // would fail it: reps 11 through 15 would drop to `None` and every
+        // comparison against reps 10 would break.
+        let mut previous = estimate(100.0, 1).expect("a single estimates itself");
+        for reps in 2..=15 {
+            let current =
+                estimate(100.0, reps).expect("zero reps and zero weight are the only absences");
+            assert!(
+                current >= previous,
+                "reps {reps} estimated {current}, less than reps {} at {previous}",
+                reps - 1
+            );
+            previous = current;
+        }
     }
 
     #[test]
