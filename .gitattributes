@@ -1,0 +1,25 @@
+# LF everywhere — in the repository and in the working tree.
+#
+# `core.autocrlf=true` on a Windows checkout was writing CRLF into the working
+# tree while the repository held LF. That is not cosmetic here; it broke two
+# things, and the second one badly.
+#
+#   * `npm run lint` failed repo-wide. Prettier compares against LF and saw
+#     every file as misformatted, including files no branch had touched — so
+#     the signal was useless and the obvious fix, `npm run format`, would have
+#     rewritten ~55 files and buried whatever diff was actually under review.
+#
+#   * `sqlx::migrate!` embeds each migration's checksum at **compile** time. A
+#     migration written with LF, applied, then re-checked-out as CRLF produced
+#     a different checksum on the next build — for a file git considered
+#     unchanged. Migrations stopped applying, and the failure presented as
+#     schema corruption rather than as a line-ending artifact, which is the
+#     expensive kind of wrong.
+#
+# Nothing in the repository has ever held CRLF: `git ls-files --eol` reported
+# zero such files in the index when this was added, against 141 of 173 in the
+# working tree. So this file changes no committed content. It stops the
+# checkout from introducing a difference that was never there.
+#
+# `text=auto` still lets git detect binaries and leave them alone.
+* text=auto eol=lf
