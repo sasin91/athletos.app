@@ -206,9 +206,7 @@
 								{formatElapsed(
 									Math.abs(ending.duration_seconds - ending.average_duration_seconds) * 1000
 								)}
-								{ending.duration_seconds >= ending.average_duration_seconds
-									? 'longer'
-									: 'shorter'}
+								{ending.duration_seconds >= ending.average_duration_seconds ? 'longer' : 'shorter'}
 							</dd>
 						{/if}
 
@@ -228,9 +226,8 @@
 							<dd class="col-span-2 text-xs opacity-50">
 								fastest · typical · slowest
 								{#if ending.intervals.discarded > 0}
-									· {ending.intervals.discarded} gap{ending.intervals.discarded === 1
-										? ''
-										: 's'} too long to believe, left out
+									· {ending.intervals.discarded} gap{ending.intervals.discarded === 1 ? '' : 's'} too
+									long to believe, left out
 								{/if}
 							</dd>
 						{/if}

@@ -27,7 +27,8 @@ async function seedSession(page: Page, session: LocalSession) {
 			request.onupgradeneeded = () => {
 				const db = request.result;
 				if (!db.objectStoreNames.contains('active')) db.createObjectStore('active');
-				if (!db.objectStoreNames.contains('queue')) db.createObjectStore('queue', { keyPath: 'id' });
+				if (!db.objectStoreNames.contains('queue'))
+					db.createObjectStore('queue', { keyPath: 'id' });
 			};
 
 			request.onsuccess = () => {
@@ -167,9 +168,7 @@ test('a previous skipped set at the same weight does not say the bar is loaded',
 // Arm 3 — the dimmed absolute breakdown.
 // ---------------------------------------------------------------------------
 
-test('a stale plan at the set’s own prescription shows the dimmed breakdown', async ({
-	page
-}) => {
+test('a stale plan at the set’s own prescription shows the dimmed breakdown', async ({ page }) => {
 	await seedSession(
 		page,
 		session([
