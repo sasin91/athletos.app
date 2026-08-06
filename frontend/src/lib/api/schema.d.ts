@@ -364,6 +364,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where a year of training went.
+         * @description # One round trip, and nothing stored
+         *
+         *     Four queries, no writes, and no table behind any of it (D-13, amended). The
+         *     estimate is [`athletos_training::estimate`] over stored sets, load and drift
+         *     are sums over the same rows, the training max is `readout()` applied to the
+         *     `state_before` [`crate::advances`] already records, and the intervals come
+         *     off [`crate::timing`]'s own walk. Every figure here is implied by rows that
+         *     exist for other reasons, which is exactly why a metrics table was declined:
+         *     a stored total is a second copy of an arithmetic fact, and the day it
+         *     disagrees with the rows there is no way to tell which one is wrong.
+         *
+         *     # The scope, and the index that does not serve it
+         *
+         *     `workouts` has no `athlete_id`, so ownership arrives through the join on
+         *     `enrollments` in all four queries — the same shape, and the same accepted
+         *     cost, that [`crate::routes::workouts::history`] documents at length. The
+         *     window bounds it: this is one person's twelve months, which is hundreds of
+         *     sessions and low thousands of sets at the volume this product is designed
+         *     for.
+         *
+         *     # A deviation from the spec: fixed, not overridable
+         *
+         *     The spec calls the window "twelve months by default, overridable". This
+         *     ships the default and not the override — no query parameter — because
+         *     building one was out of scope for this pass. What it does carry is
+         *     [`ProgressView::window_months`], so a client rendering `overall.sessions`
+         *     can caption it correctly without knowing [`WINDOW_MONTHS`] exists. That
+         *     closes the half of the gap that would otherwise force a client to hardcode
+         *     a server-side constant (D-11); it does not close the other half, and an
+         *     athlete cannot yet ask this endpoint for eighteen months instead of twelve.
+         */
+        get: operations["athlete_progress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workouts": {
         parameters: {
             query?: never;
@@ -442,6 +491,39 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * @description The whole screen, in one round trip.
+         *
+         *     # Why the component is called `AthleteProgress`
+         *
+         *     `routes::enrollments::ProgressView` — sessions completed out of a block —
+         *     has been shipping under the component name `ProgressView` since the first
+         *     release, and utoipa names a component after the type's last path segment.
+         *     Registering a second `ProgressView` does not collide loudly; it overwrites,
+         *     and the generated TypeScript would silently start describing this screen
+         *     wherever an enrolment's `progress` field is read. D-12 forbids changing what
+         *     an existing `/v1` field means, so the older name stays with the older type
+         *     and the newcomer takes an alias. The Rust name is unchanged and the JSON on
+         *     the wire is unaffected: this renames a schema, not a field.
+         */
+        AthleteProgress: {
+            lifts: components["schemas"]["LiftTrend"][];
+            overall: components["schemas"]["Indicator"][];
+            programs: components["schemas"]["ProgramTotals"][];
+            sessions: components["schemas"]["SessionFigures"][];
+            /**
+             * Format: int32
+             * @description How many months of history `lifts`, `sessions` and `overall` cover —
+             *     [`WINDOW_MONTHS`], carried onto the wire. `bests` is the one exception
+             *     and is not bounded by it (see that function). Named rather than left
+             *     implicit so a client can caption `overall`'s `sessions` figure as
+             *     "Sessions (last N months)" without hardcoding a number only the server
+             *     knows — the same reason `indicators_from`'s doc comment gives for why
+             *     the client is never told what a metric means beyond its `unit` (D-11).
+             * @example 12
+             */
+            window_months: number;
+        };
+        /**
          * @description A verified athlete.
          *
          *     Deliberately just the id: v1 has one athlete per account and no teams
@@ -453,6 +535,28 @@ export interface components {
         AuthenticatedAthlete: {
             /** Format: uuid */
             athlete_id: string;
+        };
+        /**
+         * @description One cell of the rep-max grid: the heaviest weight lifted for **at least**
+         *     `reps` reps, and the set it came from.
+         */
+        Best: {
+            /**
+             * Format: int32
+             * @description What was actually done at that weight — always at least `reps`.
+             */
+            actual_reps: number;
+            /** Format: date-time */
+            at: string;
+            /**
+             * Format: int32
+             * @description The bucket, not the reps performed.
+             */
+            reps: number;
+            /** Format: double */
+            weight: number;
+            /** Format: uuid */
+            workout_id: string;
         };
         /** @description One exercise and everything prescribed for it in this session. */
         BlockView: {
@@ -602,6 +706,19 @@ export interface components {
             /** @example ok */
             status: string;
         };
+        /**
+         * @description One card. Every figure on the screen is one of these, so the client has one
+         *     component and a new metric touches no client code.
+         */
+        Indicator: {
+            /** @example load_moved */
+            key: string;
+            /** @example Load moved */
+            label: string;
+            unit: components["schemas"]["Unit"];
+            /** Format: double */
+            value: number;
+        };
         /** @description The shape of one session's intervals: fastest, typical, slowest. */
         IntervalSpread: {
             /**
@@ -652,6 +769,14 @@ export interface components {
         /** @description A JSON Web Key Set (RFC 7517). */
         Jwks: {
             keys: components["schemas"]["Jwk"][];
+        };
+        LiftTrend: {
+            bests: components["schemas"]["Best"][];
+            /** @example squat */
+            exercise: string;
+            /** @example Squat */
+            label: string;
+            points: components["schemas"]["TrendPoint"][];
         };
         /** @description A number of sets at one weight and rep count. */
         LiftView: {
@@ -1036,6 +1161,17 @@ export interface components {
              */
             required_maxes: components["schemas"]["RequiredMax"][];
         };
+        ProgramTotals: {
+            /** Format: uuid */
+            enrollment_id: string;
+            indicators: components["schemas"]["Indicator"][];
+            /** @example wendler-531-bbb */
+            program_key: string;
+            /** @example 5/3/1 Boring But Big */
+            program_name: string;
+            /** @example active */
+            status: string;
+        };
         /** @description Sessions completed, and the denominator if there is an honest one. */
         ProgressView: {
             /** Format: int32 */
@@ -1130,6 +1266,37 @@ export interface components {
             exercise: string;
             /** @example Military Press */
             label: string;
+        };
+        /** @description One session, for the load panel and the drift band. */
+        SessionFigures: {
+            /** Format: date-time */
+            at: string;
+            /** Format: int64 */
+            duration_seconds?: number | null;
+            /** Format: uuid */
+            enrollment_id: string;
+            /** Format: double */
+            load_moved_kg: number;
+            /**
+             * Format: double
+             * @description Summed over **every** set the session prescribed, whatever its status —
+             *     unlike [`crate::report::SessionReport::load_prescribed_kg`], which sums
+             *     only the done sets on the finish-screen receipt. That field answers
+             *     "how far did the weight I actually lifted drift from what was asked?",
+             *     uncontaminated by work not done. This one answers a different question:
+             *     "how much did the program ask for, whether or not I did it?" — so a
+             *     session with half its sets skipped reads as a shortfall here rather
+             *     than as perfect compliance. Both are correct for their own panel, which
+             *     is exactly why they carry different names on `/v1` rather than one
+             *     field meaning two things depending which endpoint sent it.
+             */
+            load_planned_kg: number;
+            /** Format: int32 */
+            sets_over: number;
+            /** Format: int32 */
+            sets_under: number;
+            /** Format: uuid */
+            workout_id: string;
         };
         /** @description What the finish screen says, computed here so no client has to (D-11). */
         SessionReport: {
@@ -1295,6 +1462,49 @@ export interface components {
             /** @example Bearer */
             token_type: string;
         };
+        /** @description One session's contribution to a lift's trend. */
+        TrendPoint: {
+            /** Format: date-time */
+            at: string;
+            /**
+             * Format: double
+             * @description Signed: positive is heavier than prescribed, negative lighter. Summed
+             *     over that session's done sets of this lift, against the same sets'
+             *     prescriptions, so it is weight drift uncontaminated by work not done.
+             */
+            drift_kg: number;
+            /**
+             * Format: double
+             * @description The best estimate across that session's done sets of this lift. `None`
+             *     when every set was skipped, or every set was above the rep ceiling.
+             */
+            estimate?: number | null;
+            /**
+             * @description Every reason the athlete gave on this lift that session. Travels on
+             *     every point; the screen renders them only on downward moves, and that
+             *     test is presentation rather than a fact about training.
+             */
+            reasons: string[];
+            /** Format: int32 */
+            sets_over: number;
+            /** Format: int32 */
+            sets_under: number;
+            /**
+             * Format: double
+             * @description What the program was prescribing from during that session. `None` for
+             *     every session logged before `enrollment_advances` existed — the chart
+             *     must draw a gap rather than a zero.
+             */
+            training_max?: number | null;
+            /** Format: uuid */
+            workout_id: string;
+        };
+        /**
+         * @description What a figure is measured in. A tag, not a display string — the client
+         *     decides whether 3600 seconds reads as "1:00" or "60 min" (D-04).
+         * @enum {string}
+         */
+        Unit: "kg" | "count" | "seconds";
         /**
          * @description One workout, expanded.
          *
@@ -2020,6 +2230,35 @@ export interface operations {
             };
             /** @description No program has that key */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    athlete_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A year of training, derived */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AthleteProgress"];
+                };
+            };
+            /** @description Missing or invalid access token */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

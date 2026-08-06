@@ -53,18 +53,29 @@ Create `backend/crates/training/src/estimate.rs` with the module doc and tests o
 //! from what the athlete actually lifted, which means turning a set of reps
 //! into the one-rep max it implies.
 //!
-//! # Epley, and why not Brzycki
+//! # Brzycki, and why not Epley
 //!
-//! `weight × (1 + reps / 30)`. A single returns the weight itself, which is
-//! the property that matters most: the heaviest thing the athlete has actually
-//! done must never be understated by an estimate of it.
+//! `weight × 36 / (37 − reps)`. A single returns the weight itself —
+//! `36 / 36` — and that is the property that decided it: an estimate is
+//! evidence about what the athlete can do, and a formula that reports a 140 kg
+//! single as 144.7 is inventing 4.7 kg of evidence that does not exist. On a
+//! screen built for an athlete whose failure mode is over-reaching (D-01),
+//! a systematic overstatement is the wrong direction to be wrong in.
 //!
-//! Brzycki — `weight × 36 / (37 − reps)` — is the usual alternative and is
-//! slightly kinder at low reps. It is not used here because it has a pole at
-//! 37 reps and goes negative past it, so it is a formula that must be guarded
-//! rather than one that degrades. Epley grows without a discontinuity; it
-//! merely grows optimistic, and [`ESTIMATE_REP_CEILING`] is where that stops
-//! being tolerable.
+//! Epley — `weight × (1 + reps / 30)` — is the usual alternative and is the
+//! one this module was first written around, on the mistaken belief that it
+//! had the property above. It does not: at one rep it returns 31/30 of the
+//! weight. It is also the more optimistic of the two everywhere between,
+//! which compounds the same objection.
+//!
+//! Brzycki's known flaw is a pole at 37 reps, where the denominator reaches
+//! zero and the estimate goes negative past it. [`ESTIMATE_REP_CEILING`] puts
+//! that at more than three times the highest rep count this will ever see, so
+//! the one argument against Brzycki is unreachable here by construction.
+//!
+//! The two agree exactly at ten reps — `36/27` and `1 + 10/30` are both 4/3 —
+//! so the choice costs nothing at the ceiling and only matters in between,
+//! where Brzycki is the more conservative and this product prefers that.
 //!
 //! # The ceiling is a rule, not input validation
 //!
@@ -81,7 +92,8 @@ mod tests {
 
     #[test]
     fn a_single_estimates_itself() {
-        // The property that chose Epley over its alternatives.
+        // The property that chose Brzycki: 36 / (37 - 1) is exactly 1, so an
+        // estimate never invents evidence about a set that was performed.
         assert_eq!(estimate(140.0, 1), Some(140.0));
     }
 
@@ -91,8 +103,24 @@ mod tests {
         let five = estimate(100.0, 5).expect("within the ceiling");
 
         assert!(five > three);
-        assert!((three - 110.0).abs() < 1e-9, "100 x (1 + 3/30) = 110");
-        assert!((five - 116.666_666_666_666_67).abs() < 1e-9);
+        assert!((three - 105.882_352_941_176_47).abs() < 1e-9, "100 x 36/34");
+        assert!((five - 112.5).abs() < 1e-9, "100 x 36/32");
+    }
+
+    #[test]
+    fn it_agrees_with_epley_at_the_ceiling_and_is_kinder_below_it() {
+        // 36/27 and 1 + 10/30 are both 4/3, so the choice of formula costs
+        // nothing at the ceiling. Below it Brzycki is the more conservative,
+        // which is the direction this product wants to be wrong in (D-01).
+        let epley = |weight: f64, reps: u32| weight * (1.0 + f64::from(reps) / 30.0);
+
+        let at_ceiling = estimate(100.0, ESTIMATE_REP_CEILING).expect("at the ceiling");
+        assert!((at_ceiling - epley(100.0, ESTIMATE_REP_CEILING)).abs() < 1e-9);
+
+        for reps in 1..ESTIMATE_REP_CEILING {
+            let ours = estimate(100.0, reps).expect("within the ceiling");
+            assert!(ours <= epley(100.0, reps), "at {reps} reps");
+        }
     }
 
     #[test]
@@ -132,8 +160,11 @@ Add `pub mod estimate;` to `backend/crates/training/src/lib.rs` beside `pub mod 
 ///
 /// Ten. Every program in the catalogue prescribes within it — 5/3/1's Boring
 /// But Big sets of ten are the ceiling exactly, and its AMRAP top sets are
-/// where estimates will actually come from. Beyond ten, Epley is describing
-/// muscular endurance and reporting it as a single.
+/// where estimates will actually come from. Beyond ten, the formula is
+/// describing muscular endurance and reporting it as a single.
+///
+/// It also keeps Brzycki's pole at 37 reps more than three times out of reach,
+/// which is what makes that formula's one flaw irrelevant here.
 pub const ESTIMATE_REP_CEILING: u32 = 10;
 
 /// The one-rep max a set implies, or `None` when it implies nothing.
@@ -146,7 +177,7 @@ pub fn estimate(weight: f64, reps: u32) -> Option<f64> {
         return None;
     }
 
-    Some(weight * (1.0 + f64::from(reps) / 30.0))
+    Some(weight * 36.0 / (37.0 - f64::from(reps)))
 }
 ```
 
@@ -239,7 +270,11 @@ mod tests {
             intervals: Vec::new(),
         };
 
-        let keys: Vec<&str> = indicators_from(&empty)
+        // Bound to a local first: borrowing `&str` out of an unbound temporary
+        // `Vec<Indicator>` is E0716, since the vector dies at the end of the
+        // statement while `keys` outlives it.
+        let indicators = indicators_from(&empty);
+        let keys: Vec<&str> = indicators
             .iter()
             .map(|indicator| indicator.key.as_str())
             .collect();
@@ -250,7 +285,8 @@ mod tests {
 
     #[test]
     fn the_shipped_set_is_present_when_there_is_data() {
-        let keys: Vec<&str> = indicators_from(&totals())
+        let indicators = indicators_from(&totals());
+        let keys: Vec<&str> = indicators
             .iter()
             .map(|indicator| indicator.key.as_str())
             .collect();

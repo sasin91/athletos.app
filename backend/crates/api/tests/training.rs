@@ -164,6 +164,35 @@ async fn log_a_session(server: &TestServer, token: &str, enrollment: Uuid) -> Uu
     id
 }
 
+/// Logs the enrolment's current session exactly as prescribed, at `now()`
+/// rather than the fixture's fixed day.
+///
+/// `/v1/progress` windows to the last twelve months, measured from `now()`
+/// (`progress::WINDOW_MONTHS`). `logged_as_prescribed`'s hard-coded
+/// `started_at` cannot be moved — `a_submission_that_contradicts_itself_is_refused`
+/// depends on it staying fixed to build an "ends before it starts" case — so
+/// any test that reads `/v1/progress` needs its own session pinned to `now()`
+/// instead, the same rule `log_a_heavy_session_at` already follows by taking
+/// `at` as a parameter rather than reusing the fixture's date.
+async fn log_a_recent_session(server: &TestServer, token: &str, enrollment: Uuid) -> Uuid {
+    let session = next_session(server, token, enrollment).await;
+    let id = Uuid::now_v7();
+    let now = chrono::Utc::now();
+
+    let mut body = logged_as_prescribed(id, enrollment, &session);
+    body["started_at"] = json!(now.to_rfc3339());
+    body["ended_at"] = json!((now + chrono::Duration::hours(1)).to_rfc3339());
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    id
+}
+
 async fn workout_count(pool: &PgPool) -> i64 {
     sqlx::query_scalar("select count(*) from workouts")
         .fetch_one(pool)
@@ -1410,6 +1439,12 @@ async fn the_training_endpoints_all_require_a_token(pool: PgPool) {
         .assert_status_unauthorized();
     server
         .get(&format!("/v1/enrollments/{}/next-session", Uuid::now_v7()))
+        .await
+        .assert_status_unauthorized();
+    // Derived or not, it is somebody's training data and is scoped like
+    // everything else — the athlete comes from the token and from nowhere else.
+    server
+        .get("/v1/progress")
         .await
         .assert_status_unauthorized();
 }
@@ -2781,6 +2816,563 @@ async fn a_retried_submit_records_no_second_advance(pool: PgPool) {
         .unwrap();
 
     assert_eq!(advances, 1);
+}
+
+// --- the progress screen: a year of training, derived (D-13) ---------------
+
+/// The whole screen in one round trip.
+async fn progress(server: &TestServer, token: &str) -> serde_json::Value {
+    server
+        .get("/v1/progress")
+        .authorization_bearer(token)
+        .await
+        .json()
+}
+
+#[sqlx::test]
+async fn progress_is_empty_for_an_athlete_who_has_logged_nothing(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+
+    let view = progress(&server, &token).await;
+
+    assert_eq!(view["lifts"].as_array().unwrap().len(), 0);
+    assert_eq!(view["sessions"].as_array().unwrap().len(), 0);
+    assert_eq!(view["programs"].as_array().unwrap().len(), 0);
+    // No sessions means no median to report — the card is absent, not zero.
+    let overall: Vec<String> = view["overall"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|indicator| indicator["key"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(!overall.contains(&"median_duration".to_owned()));
+}
+
+#[sqlx::test]
+async fn a_logged_session_produces_a_trend_point_with_a_training_max(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    log_a_recent_session(&server, &token, enrollment).await;
+
+    let view = progress(&server, &token).await;
+
+    let lifts = view["lifts"].as_array().unwrap();
+    assert!(!lifts.is_empty(), "one session should produce one lift");
+
+    let point = &lifts[0]["points"][0];
+    // Logged exactly as prescribed, so the estimate exists and drift is zero.
+    assert!(point["estimate"].as_f64().is_some());
+    assert_eq!(point["drift_kg"].as_f64(), Some(0.0));
+    assert_eq!(point["sets_over"].as_u64(), Some(0));
+    // The training max comes from readout(state_before), which this session
+    // recorded — so it is present rather than a gap.
+    assert!(point["training_max"].as_f64().is_some());
+}
+
+#[sqlx::test]
+async fn a_best_is_the_heaviest_weight_for_at_least_that_many_reps(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    // One set taken well past its prescription, so there is an unambiguous
+    // best: heavier than anything else that day, at five reps.
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["sets"][0]["actual_weight"] = json!(200.0);
+    body["sets"][0]["actual_reps"] = json!(5);
+
+    // `/v1/progress` windows to the last twelve months measured from `now()`;
+    // the fixture's fixed date cannot move (see `log_a_recent_session`), so this
+    // overrides it the same way that helper does.
+    let now = chrono::Utc::now();
+    body["started_at"] = json!(now.to_rfc3339());
+    body["ended_at"] = json!((now + chrono::Duration::hours(1)).to_rfc3339());
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let view = progress(&server, &token).await;
+    let bests = view["lifts"][0]["bests"].as_array().unwrap();
+
+    let at_three = bests
+        .iter()
+        .find(|best| best["reps"].as_u64() == Some(3))
+        .expect("a 3-rep bucket");
+    let at_five = bests
+        .iter()
+        .find(|best| best["reps"].as_u64() == Some(5))
+        .expect("a 5-rep bucket");
+
+    // Five reps at 200 proves three reps at 200: "at least", not "exactly".
+    assert_eq!(at_three["weight"].as_f64(), Some(200.0));
+    assert_eq!(at_five["weight"].as_f64(), Some(200.0));
+    assert_eq!(at_five["actual_reps"].as_u64(), Some(5));
+}
+
+#[sqlx::test]
+async fn drift_is_signed_and_counted_per_direction(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    // Both directions on the same lift in the same session, which is the only
+    // arrangement that can tell a signed sum from an absolute one: these two
+    // sum to +2.5 signed and to 7.5 unsigned, so a drift that forgot its sign
+    // would fail here rather than merely look larger.
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    let first = body["sets"][0]["prescribed_weight"].as_f64().unwrap();
+    let second = body["sets"][1]["prescribed_weight"].as_f64().unwrap();
+    body["sets"][0]["actual_weight"] = json!(first + 5.0);
+    body["sets"][1]["actual_weight"] = json!(second - 2.5);
+
+    // The two sets have to belong to the same lift for the point to hold both,
+    // and 5/3/1 opens with three sets of the main lift.
+    assert_eq!(body["sets"][0]["exercise"], body["sets"][1]["exercise"]);
+
+    // `/v1/progress` windows to the last twelve months measured from `now()`;
+    // the fixture's fixed date cannot move (see `log_a_recent_session`), so this
+    // overrides it the same way that helper does.
+    let now = chrono::Utc::now();
+    body["started_at"] = json!(now.to_rfc3339());
+    body["ended_at"] = json!((now + chrono::Duration::hours(1)).to_rfc3339());
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let view = progress(&server, &token).await;
+    let point = &view["lifts"][0]["points"][0];
+
+    assert_eq!(point["drift_kg"].as_f64(), Some(2.5));
+    assert_eq!(point["sets_over"].as_u64(), Some(1));
+    assert_eq!(point["sets_under"].as_u64(), Some(1));
+}
+
+/// The units are the contract, and nothing else asserted which one is which.
+///
+/// `progress.rs`'s own test only checks that every indicator has *a* unit,
+/// which can fail only if a fourth variant appears. This pins the two that a
+/// client formats differently: kilograms are weight and get D-04's treatment,
+/// a session count is a bare integer. Swapping them would render "12 kg
+/// sessions" and no existing test would notice.
+#[sqlx::test]
+async fn an_indicator_names_the_unit_the_client_must_format_it_in(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    log_a_recent_session(&server, &token, enrollment).await;
+
+    let view = progress(&server, &token).await;
+    let unit = |key: &str| {
+        view["overall"]
+            .as_array()
+            .expect("overall is a list")
+            .iter()
+            .find(|indicator| indicator["key"] == key)
+            .unwrap_or_else(|| panic!("{key} is an indicator"))["unit"]
+            .as_str()
+            .expect("a unit is a string")
+            .to_owned()
+    };
+
+    assert_eq!(unit("load_moved"), "kg");
+    assert_eq!(unit("sessions"), "count");
+}
+
+/// A rival sees an empty screen, and the owner still sees a full one.
+///
+/// The convention every other read endpoint here follows
+/// (`another_athletes_workout_detail_is_not_found` and its siblings), and the
+/// one `/v1/progress` was missing. The 401 test proves an *unauthenticated*
+/// request is refused; it says nothing about an authenticated stranger, which
+/// is the failure that would actually leak training data.
+///
+/// One test covers all four queries: they scope through the same join on
+/// `enrollments`, so a widened predicate in any of them shows up as something
+/// non-empty here. And the assertions are on the *figures* as well as the array
+/// lengths — "the list was empty" and "the list held a stranger's load total"
+/// are the same length to a weaker test.
+#[sqlx::test]
+async fn another_athletes_progress_is_not_in_mine(pool: PgPool) {
+    let server = server(pool);
+
+    let mine = register(&server, EMAIL).await;
+    set_maxes(&server, &mine, full_maxes()).await;
+    let enrollment = enrol(&server, &mine, "wendler-531-bbb").await;
+    log_a_recent_session(&server, &mine, enrollment).await;
+
+    let theirs = register(&server, "rival@example.com").await;
+
+    let load_moved = |view: &serde_json::Value| {
+        view["overall"]
+            .as_array()
+            .expect("overall is a list")
+            .iter()
+            .find(|indicator| indicator["key"] == "load_moved")
+            .expect("load moved is always offered")["value"]
+            .as_f64()
+            .expect("a load is a number")
+    };
+
+    let rival = progress(&server, &theirs).await;
+    assert!(rival["lifts"].as_array().unwrap().is_empty());
+    assert!(rival["sessions"].as_array().unwrap().is_empty());
+    assert!(rival["programs"].as_array().unwrap().is_empty());
+    assert_eq!(load_moved(&rival), 0.0);
+
+    // And the owner still sees it, so "empty" above is a scoping result rather
+    // than an endpoint that answers nothing to anybody.
+    let owner = progress(&server, &mine).await;
+    assert!(!owner["lifts"].as_array().unwrap().is_empty());
+    assert_eq!(owner["sessions"].as_array().unwrap().len(), 1);
+    assert_eq!(owner["programs"].as_array().unwrap().len(), 1);
+    assert!(load_moved(&owner) > 0.0);
+}
+
+/// The asymmetry D-13's second question is asked in: what the program wanted,
+/// against what was actually moved.
+///
+/// `load_planned_kg` counts every set the session prescribed, including one
+/// the athlete skipped; `load_moved_kg` counts only what was performed. Making
+/// both sides count the same sets would mean skipping work and still reading as
+/// perfect compliance, which is the one thing this pair exists to catch.
+///
+/// The expected figures are computed from the session's own prescription rather
+/// than written down, so this pins the rule and not 5/3/1's week-one numbers.
+#[sqlx::test]
+async fn the_prescribed_load_counts_a_skipped_set_and_the_moved_load_does_not(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let prescribed = session["prescribed_sets"].as_array().unwrap();
+    let volume = |set: &serde_json::Value| {
+        set["prescribed_weight"].as_f64().unwrap() * set["prescribed_reps"].as_f64().unwrap()
+    };
+
+    // The whole session as prescribed, except one set in the middle of it that
+    // the athlete did not do. `completed` rather than `cut_short`: they
+    // finished the session, they just left a set out — which is freelancing
+    // rather than running out of time, and is exactly the case in question.
+    const SKIPPED: usize = 1;
+    let sets: Vec<serde_json::Value> = prescribed
+        .iter()
+        .enumerate()
+        .map(|(index, set)| {
+            let mut logged = json!({
+                "position": set["position"],
+                "exercise": set["exercise"],
+                "prescribed_weight": set["prescribed_weight"],
+                "prescribed_reps": set["prescribed_reps"],
+                "status": if index == SKIPPED { "skipped" } else { "done" },
+            });
+
+            if index != SKIPPED {
+                logged["actual_weight"] = set["prescribed_weight"].clone();
+                logged["actual_reps"] = set["prescribed_reps"].clone();
+            }
+
+            logged
+        })
+        .collect();
+
+    // `/v1/progress` windows to the last twelve months measured from `now()`;
+    // this test's own literal date cannot be the fixture's fixed day (see
+    // `log_a_recent_session`), so it is computed here instead.
+    let now = chrono::Utc::now();
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&json!({
+            "id": Uuid::now_v7(),
+            "enrollment_id": enrollment,
+            "started_at": now.to_rfc3339(),
+            "ended_at": (now + chrono::Duration::hours(1)).to_rfc3339(),
+            "outcome": "completed",
+            "sets": sets,
+        }))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let view = progress(&server, &token).await;
+    let figures = &view["sessions"][0];
+
+    let asked_for: f64 = prescribed.iter().map(volume).sum();
+    let left_out = volume(&prescribed[SKIPPED]);
+
+    assert!(left_out > 0.0, "the skipped set has to be worth something");
+    assert_eq!(figures["load_planned_kg"].as_f64(), Some(asked_for));
+    assert_eq!(
+        figures["load_moved_kg"].as_f64(),
+        Some(asked_for - left_out)
+    );
+    assert!(
+        figures["load_moved_kg"].as_f64() < figures["load_planned_kg"].as_f64(),
+        "a skipped set has to show as a shortfall, or the figures say nothing"
+    );
+}
+
+/// A bodyweight lift's record is reps, not kilograms — so it gets no cells.
+///
+/// Six cells all reading `0.0` would be worse than no grid: it looks like six
+/// achievements rather than an absence, and it would sit beside a real squat
+/// record as though it meant the same kind of thing. The lift itself is still
+/// present in the trend, which is what makes this an exclusion from the grid
+/// rather than the exercise being dropped.
+#[sqlx::test]
+async fn a_set_lifted_at_no_weight_earns_no_record(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    let after_the_last = body["sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|set| set["position"].as_u64())
+        .max()
+        .expect("the session prescribes sets")
+        + 1;
+
+    // Fifteen reps at nothing: above every bucket in the grid, so an
+    // implementation that failed to exclude it would fill all six with zeroes.
+    body["sets"].as_array_mut().unwrap().push(json!({
+        "position": after_the_last,
+        "exercise": "hanging-leg-raise",
+        "prescribed_weight": 0.0,
+        "prescribed_reps": 15,
+        "actual_weight": 0.0,
+        "actual_reps": 15,
+        "status": "done",
+    }));
+
+    // `/v1/progress` windows to the last twelve months measured from `now()`;
+    // the fixture's fixed date cannot move (see `log_a_recent_session`), so this
+    // overrides it the same way that helper does.
+    let now = chrono::Utc::now();
+    body["started_at"] = json!(now.to_rfc3339());
+    body["ended_at"] = json!((now + chrono::Duration::hours(1)).to_rfc3339());
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let view = progress(&server, &token).await;
+    let bodyweight = view["lifts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|lift| lift["exercise"] == "hanging-leg-raise")
+        .expect("the lift was performed and belongs in the trend");
+
+    assert!(
+        bodyweight["bests"].as_array().unwrap().is_empty(),
+        "a zero-kilogram set is not a record: {}",
+        bodyweight["bests"]
+    );
+    // Present in the trend, and honest about the estimate: Brzycki over no
+    // weight is not a one-rep max of zero, it is no answer at all.
+    assert_eq!(bodyweight["points"].as_array().unwrap().len(), 1);
+    assert!(bodyweight["points"][0]["estimate"].is_null());
+
+    // The barbell lift beside it still has its grid, so this excluded a set
+    // rather than the query finding nothing. Whichever lift the program opened
+    // the day with, by position — the assertion is that a loaded set earns
+    // cells, not that 5/3/1 starts on any particular one.
+    let loaded = &view["lifts"][0];
+    assert_ne!(loaded["exercise"], "hanging-leg-raise");
+    assert!(!loaded["bests"].as_array().unwrap().is_empty());
+}
+
+/// Submits one session at a chosen instant, with the first set taken heavy.
+///
+/// The date is a parameter rather than the fixture's fixed day because these
+/// two tests are *about* the window, and a hard-coded 2026 date would test the
+/// window's edge only until the calendar moved past it.
+async fn log_a_heavy_session_at(
+    server: &TestServer,
+    token: &str,
+    enrollment: Uuid,
+    at: chrono::DateTime<chrono::Utc>,
+    weight: f64,
+    reps: u64,
+) -> (Uuid, String) {
+    let session = next_session(server, token, enrollment).await;
+    let workout = Uuid::now_v7();
+
+    let mut body = logged_as_prescribed(workout, enrollment, &session);
+    body["started_at"] = json!(at.to_rfc3339());
+    body["ended_at"] = json!((at + chrono::Duration::hours(1)).to_rfc3339());
+    body["sets"][0]["actual_weight"] = json!(weight);
+    body["sets"][0]["actual_reps"] = json!(reps);
+
+    let exercise = body["sets"][0]["exercise"]
+        .as_str()
+        .expect("a set names its lift")
+        .to_owned();
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    (workout, exercise)
+}
+
+/// A record does not expire, and the trend around it still does.
+///
+/// Spec section 6 puts bests "over all history and all programs", against the
+/// twelve-month window the other three queries carry. An athlete who pulled
+/// their best five fourteen months ago and has been running a hypertrophy block
+/// since must not open the grid and be shown a *lower* number labelled as their
+/// best — every cell is meant to be backed by a set that actually happened, so
+/// a windowed grid would state something false rather than merely be incomplete.
+///
+/// The test pins the **asymmetry**, not only the fix: the same out-of-window
+/// session that supplies the record is asserted absent from `sessions` and from
+/// the lift's `points`. Anybody later tidying the queries into consistency by
+/// re-applying the window to all four fails here, and anybody dropping it from
+/// all four fails here too.
+#[sqlx::test]
+async fn a_record_outlives_the_window_that_bounds_the_trend(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    // Fifteen months ago: outside the window by three months, measured from
+    // now rather than from a date written into the test.
+    let long_ago = chrono::Utc::now() - chrono::Duration::days(455);
+    let (old_workout, lift) =
+        log_a_heavy_session_at(&server, &token, enrollment, long_ago, 200.0, 5).await;
+
+    // 5/3/1 BBB runs four days to the week, so four more sessions bring the
+    // same lift around again — inside the window, and much lighter.
+    for day in 1..=4 {
+        let recent = chrono::Utc::now() - chrono::Duration::days(20 - day);
+        log_a_heavy_session_at(&server, &token, enrollment, recent, 60.0, 5).await;
+    }
+
+    let view = progress(&server, &token).await;
+
+    // The sessions series is windowed: four recent, and not the old one.
+    let sessions = view["sessions"].as_array().unwrap();
+    assert_eq!(
+        sessions.len(),
+        4,
+        "the fifteen-month-old session is outside"
+    );
+    assert!(
+        !sessions
+            .iter()
+            .any(|session| session["workout_id"] == old_workout.to_string()),
+        "a windowed series must not carry the old session"
+    );
+
+    let trend = view["lifts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["exercise"] == lift.as_str())
+        .unwrap_or_else(|| panic!("{lift} was trained inside the window"));
+
+    // The trend is windowed too, so nothing plots at fifteen months.
+    assert!(
+        !trend["points"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|point| point["workout_id"] == old_workout.to_string()),
+        "the trend is a series and is bounded"
+    );
+
+    // And the record is not. 200 kg for five, from the session the trend has
+    // correctly forgotten.
+    let at_five = trend["bests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|best| best["reps"].as_u64() == Some(5))
+        .expect("a 5-rep bucket");
+
+    assert_eq!(at_five["weight"].as_f64(), Some(200.0));
+    assert_eq!(
+        at_five["workout_id"],
+        old_workout.to_string(),
+        "the record must still name the out-of-window set that set it"
+    );
+}
+
+/// A lift untouched for over a year still shows its record.
+///
+/// The companion hole to the query fix, and the reason dropping the window from
+/// the SQL is not on its own enough: `lifts` is assembled from the trend points,
+/// so a lift with a record and no recent session would have had its record
+/// fetched and then dropped on the way out. The athlete would see nothing —
+/// which is the same wrong answer the window gave, arriving by a different
+/// route.
+#[sqlx::test]
+async fn a_lift_not_trained_in_a_year_still_carries_its_record(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let long_ago = chrono::Utc::now() - chrono::Duration::days(455);
+    let (_, lift) = log_a_heavy_session_at(&server, &token, enrollment, long_ago, 200.0, 5).await;
+
+    let view = progress(&server, &token).await;
+
+    // Nothing inside the window at all: no sessions, and no program totals.
+    assert!(view["sessions"].as_array().unwrap().is_empty());
+    assert!(view["programs"].as_array().unwrap().is_empty());
+
+    let trend = view["lifts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["exercise"] == lift.as_str())
+        .unwrap_or_else(|| panic!("{lift} holds a record and must still be listed"));
+
+    // No trend to draw — the series is empty and honest about it — but the
+    // record survives, which is the whole distinction.
+    assert!(trend["points"].as_array().unwrap().is_empty());
+    assert_eq!(
+        trend["bests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|best| best["reps"].as_u64() == Some(5))
+            .expect("a 5-rep bucket")["weight"]
+            .as_f64(),
+        Some(200.0)
+    );
 }
 
 // --- `advanced_at` is statement time, not transaction time -----------------

@@ -49,6 +49,7 @@
 #![forbid(unsafe_code)]
 
 mod error;
+pub mod estimate;
 pub mod exercise;
 mod loading;
 mod maxes;
@@ -59,6 +60,7 @@ mod session;
 pub mod testing;
 
 pub use error::{ProgramError, Result};
+pub use estimate::{estimate, ESTIMATE_REP_CEILING};
 pub use exercise::Exercise;
 pub use loading::{plan, Load, Loading, PlateChange, BARBELL_RESOLUTION, BAR_WEIGHT, PLATES};
 pub use maxes::Maxes;

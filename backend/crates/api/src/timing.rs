@@ -366,6 +366,28 @@ pub fn spread(started_at: DateTime<Utc>, sets: &[(u16, TimedSet)]) -> Option<Int
     })
 }
 
+/// Every believable gap between two answered sets, unaggregated.
+///
+/// The third reader of [`walk`], and deliberately not a fourth walk written
+/// somewhere else: `compute` attributes these gaps to exercises, `spread` takes
+/// their shape, and this hands them over raw for a caller pooling many sessions
+/// together. A median across a year is not a median of per-session medians —
+/// a session of three sets would weigh as much as a session of thirty — so the
+/// caller needs the sample itself, and the only alternative to this function is
+/// restating the ceiling and the cursor discipline outside this module.
+///
+/// **The lead-in is excluded**, for the reason [`spread`] gives: it is walking
+/// in and changing rather than a gap between two lifts, and D-10 holds it apart
+/// precisely so it cannot be ranked against work.
+pub fn intervals(started_at: DateTime<Utc>, sets: &[(u16, TimedSet)]) -> Vec<i64> {
+    walk(started_at, sets)
+        .intervals
+        .iter()
+        .filter(|interval| !interval.lead_in)
+        .map(|interval| interval.seconds)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -559,5 +581,31 @@ mod tests {
     fn there_is_no_spread_without_a_gap_between_two_sets() {
         let sets = vec![(0_u16, set("squat", Some(at(2, 0))))];
         assert!(spread(at(0, 0), &sets).is_none());
+    }
+
+    /// The raw sample and the shape taken of it come off the same walk, so
+    /// this pins the walk rather than an agreement between two copies of it.
+    #[test]
+    fn the_raw_intervals_are_the_ones_the_spread_is_taken_of() {
+        // Lead-in 0:00 -> 2:00, then 60, 180, 120. Then a gap over the ceiling,
+        // which neither reading may keep.
+        let sets = vec![
+            (0_u16, set("squat", Some(at(2, 0)))),
+            (1, set("squat", Some(at(3, 0)))),
+            (2, set("squat", Some(at(6, 0)))),
+            (3, set("squat", Some(at(8, 0)))),
+            (4, set("squat", Some(at(90, 0)))),
+        ];
+
+        let raw = intervals(at(0, 0), &sets);
+        let spread = spread(at(0, 0), &sets).expect("stamps exist");
+
+        // The 120-second lead-in is not among them: it is not a gap between two
+        // lifts, and pooling it into a year's sample would drag the median
+        // toward the changing room.
+        assert_eq!(raw, vec![60, 180, 120]);
+        assert_eq!(raw.iter().copied().min(), Some(spread.min_seconds));
+        assert_eq!(raw.iter().copied().max(), Some(spread.max_seconds));
+        assert_eq!(spread.discarded, 1);
     }
 }

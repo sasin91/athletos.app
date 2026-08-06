@@ -720,6 +720,43 @@
         ]
       }
     },
+    "/v1/progress": {
+      "get": {
+        "tags": [
+          "progress"
+        ],
+        "summary": "Where a year of training went.",
+        "description": "# One round trip, and nothing stored\n\nFour queries, no writes, and no table behind any of it (D-13, amended). The\nestimate is [`athletos_training::estimate`] over stored sets, load and drift\nare sums over the same rows, the training max is `readout()` applied to the\n`state_before` [`crate::advances`] already records, and the intervals come\noff [`crate::timing`]'s own walk. Every figure here is implied by rows that\nexist for other reasons, which is exactly why a metrics table was declined:\na stored total is a second copy of an arithmetic fact, and the day it\ndisagrees with the rows there is no way to tell which one is wrong.\n\n# The scope, and the index that does not serve it\n\n`workouts` has no `athlete_id`, so ownership arrives through the join on\n`enrollments` in all four queries — the same shape, and the same accepted\ncost, that [`crate::routes::workouts::history`] documents at length. The\nwindow bounds it: this is one person's twelve months, which is hundreds of\nsessions and low thousands of sets at the volume this product is designed\nfor.\n\n# A deviation from the spec: fixed, not overridable\n\nThe spec calls the window \"twelve months by default, overridable\". This\nships the default and not the override — no query parameter — because\nbuilding one was out of scope for this pass. What it does carry is\n[`ProgressView::window_months`], so a client rendering `overall.sessions`\ncan caption it correctly without knowing [`WINDOW_MONTHS`] exists. That\ncloses the half of the gap that would otherwise force a client to hardcode\na server-side constant (D-11); it does not close the other half, and an\nathlete cannot yet ask this endpoint for eighteen months instead of twelve.",
+        "operationId": "athlete_progress",
+        "responses": {
+          "200": {
+            "description": "A year of training, derived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AthleteProgress"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
     "/v1/workouts": {
       "get": {
         "tags": [
@@ -949,6 +986,50 @@
   },
   "components": {
     "schemas": {
+      "AthleteProgress": {
+        "type": "object",
+        "description": "The whole screen, in one round trip.\n\n# Why the component is called `AthleteProgress`\n\n`routes::enrollments::ProgressView` — sessions completed out of a block —\nhas been shipping under the component name `ProgressView` since the first\nrelease, and utoipa names a component after the type's last path segment.\nRegistering a second `ProgressView` does not collide loudly; it overwrites,\nand the generated TypeScript would silently start describing this screen\nwherever an enrolment's `progress` field is read. D-12 forbids changing what\nan existing `/v1` field means, so the older name stays with the older type\nand the newcomer takes an alias. The Rust name is unchanged and the JSON on\nthe wire is unaffected: this renames a schema, not a field.",
+        "required": [
+          "lifts",
+          "sessions",
+          "programs",
+          "overall",
+          "window_months"
+        ],
+        "properties": {
+          "lifts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiftTrend"
+            }
+          },
+          "overall": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Indicator"
+            }
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProgramTotals"
+            }
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionFigures"
+            }
+          },
+          "window_months": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many months of history `lifts`, `sessions` and `overall` cover —\n[`WINDOW_MONTHS`], carried onto the wire. `bests` is the one exception\nand is not bounded by it (see that function). Named rather than left\nimplicit so a client can caption `overall`'s `sessions` figure as\n\"Sessions (last N months)\" without hardcoding a number only the server\nknows — the same reason `indicators_from`'s doc comment gives for why\nthe client is never told what a metric means beyond its `unit` (D-11).",
+            "example": 12,
+            "minimum": 0
+          }
+        }
+      },
       "AuthenticatedAthlete": {
         "type": "object",
         "description": "A verified athlete.\n\nDeliberately just the id: v1 has one athlete per account and no teams\n(D-14), so there is nothing else an authorization decision needs. Coaching\narrives in v2 as a coach↔athlete relation, which is a different shape from\nthe generic team roles this replaced — so there is nothing here to keep\nwarm for it either.",
@@ -957,6 +1038,43 @@
         ],
         "properties": {
           "athlete_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "Best": {
+        "type": "object",
+        "description": "One cell of the rep-max grid: the heaviest weight lifted for **at least**\n`reps` reps, and the set it came from.",
+        "required": [
+          "reps",
+          "weight",
+          "actual_reps",
+          "at",
+          "workout_id"
+        ],
+        "properties": {
+          "actual_reps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "What was actually done at that weight — always at least `reps`.",
+            "minimum": 0
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The bucket, not the reps performed.",
+            "minimum": 0
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "workout_id": {
             "type": "string",
             "format": "uuid"
           }
@@ -1195,6 +1313,33 @@
           }
         }
       },
+      "Indicator": {
+        "type": "object",
+        "description": "One card. Every figure on the screen is one of these, so the client has one\ncomponent and a new metric touches no client code.",
+        "required": [
+          "key",
+          "label",
+          "value",
+          "unit"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "load_moved"
+          },
+          "label": {
+            "type": "string",
+            "example": "Load moved"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/Unit"
+          },
+          "value": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "IntervalSpread": {
         "type": "object",
         "description": "The shape of one session's intervals: fastest, typical, slowest.",
@@ -1279,6 +1424,37 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Jwk"
+            }
+          }
+        }
+      },
+      "LiftTrend": {
+        "type": "object",
+        "required": [
+          "exercise",
+          "label",
+          "points",
+          "bests"
+        ],
+        "properties": {
+          "bests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Best"
+            }
+          },
+          "exercise": {
+            "type": "string",
+            "example": "squat"
+          },
+          "label": {
+            "type": "string",
+            "example": "Squat"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrendPoint"
             }
           }
         }
@@ -1875,6 +2051,40 @@
           }
         }
       },
+      "ProgramTotals": {
+        "type": "object",
+        "required": [
+          "enrollment_id",
+          "program_key",
+          "program_name",
+          "status",
+          "indicators"
+        ],
+        "properties": {
+          "enrollment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "indicators": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Indicator"
+            }
+          },
+          "program_key": {
+            "type": "string",
+            "example": "wendler-531-bbb"
+          },
+          "program_name": {
+            "type": "string",
+            "example": "5/3/1 Boring But Big"
+          },
+          "status": {
+            "type": "string",
+            "example": "active"
+          }
+        }
+      },
       "ProgressView": {
         "type": "object",
         "description": "Sessions completed, and the denominator if there is an honest one.",
@@ -1990,6 +2200,59 @@
           "label": {
             "type": "string",
             "example": "Military Press"
+          }
+        }
+      },
+      "SessionFigures": {
+        "type": "object",
+        "description": "One session, for the load panel and the drift band.",
+        "required": [
+          "workout_id",
+          "enrollment_id",
+          "at",
+          "load_moved_kg",
+          "load_planned_kg",
+          "sets_over",
+          "sets_under"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duration_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "enrollment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "load_moved_kg": {
+            "type": "number",
+            "format": "double"
+          },
+          "load_planned_kg": {
+            "type": "number",
+            "format": "double",
+            "description": "Summed over **every** set the session prescribed, whatever its status —\nunlike [`crate::report::SessionReport::load_prescribed_kg`], which sums\nonly the done sets on the finish-screen receipt. That field answers\n\"how far did the weight I actually lifted drift from what was asked?\",\nuncontaminated by work not done. This one answers a different question:\n\"how much did the program ask for, whether or not I did it?\" — so a\nsession with half its sets skipped reads as a shortfall here rather\nthan as perfect compliance. Both are correct for their own panel, which\nis exactly why they carry different names on `/v1` rather than one\nfield meaning two things depending which endpoint sent it."
+          },
+          "sets_over": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "sets_under": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "workout_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -2226,6 +2489,75 @@
             "example": "Bearer"
           }
         }
+      },
+      "TrendPoint": {
+        "type": "object",
+        "description": "One session's contribution to a lift's trend.",
+        "required": [
+          "workout_id",
+          "at",
+          "drift_kg",
+          "sets_over",
+          "sets_under",
+          "reasons"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "drift_kg": {
+            "type": "number",
+            "format": "double",
+            "description": "Signed: positive is heavier than prescribed, negative lighter. Summed\nover that session's done sets of this lift, against the same sets'\nprescriptions, so it is weight drift uncontaminated by work not done."
+          },
+          "estimate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The best estimate across that session's done sets of this lift. `None`\nwhen every set was skipped, or every set was above the rep ceiling."
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every reason the athlete gave on this lift that session. Travels on\nevery point; the screen renders them only on downward moves, and that\ntest is presentation rather than a fact about training."
+          },
+          "sets_over": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "sets_under": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "training_max": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "What the program was prescribing from during that session. `None` for\nevery session logged before `enrollment_advances` existed — the chart\nmust draw a gap rather than a zero."
+          },
+          "workout_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "Unit": {
+        "type": "string",
+        "description": "What a figure is measured in. A tag, not a display string — the client\ndecides whether 3600 seconds reads as \"1:00\" or \"60 min\" (D-04).",
+        "enum": [
+          "kg",
+          "count",
+          "seconds"
+        ]
       },
       "WorkoutDetail": {
         "type": "object",
@@ -2531,6 +2863,10 @@
     {
       "name": "workouts",
       "description": "Submitting a logged session, idempotently (D-09)"
+    },
+    {
+      "name": "progress",
+      "description": "A year of training, derived from the rows that already exist (D-13)"
     }
   ]
 }

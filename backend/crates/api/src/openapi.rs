@@ -59,6 +59,7 @@ impl Modify for BearerToken {
         crate::routes::workouts::submit,
         crate::routes::workouts::history,
         crate::routes::workouts::show,
+        crate::routes::progress::show,
     ),
     components(schemas(
         crate::routes::health::Health,
@@ -110,6 +111,18 @@ impl Modify for BearerToken {
         crate::timing::LongestInterval,
         crate::timing::IntervalSpread,
         crate::report::SessionReport,
+        // The progress screen. `ProgressView` registers as `AthleteProgress`
+        // via `#[schema(as = ...)]` — `routes::enrollments::ProgressView` holds
+        // the unqualified name, and utoipa would otherwise overwrite it with
+        // this one rather than complain.
+        crate::routes::progress::Indicator,
+        crate::routes::progress::Unit,
+        crate::routes::progress::TrendPoint,
+        crate::routes::progress::Best,
+        crate::routes::progress::LiftTrend,
+        crate::routes::progress::SessionFigures,
+        crate::routes::progress::ProgramTotals,
+        crate::routes::progress::ProgressView,
     )),
     tags(
         (name = "health", description = "Liveness and readiness probes"),
@@ -119,6 +132,7 @@ impl Modify for BearerToken {
         (name = "athlete", description = "The athlete's own numbers (D-04)"),
         (name = "enrollments", description = "Running a program, and peeking at what is next (D-08)"),
         (name = "workouts", description = "Submitting a logged session, idempotently (D-09)"),
+        (name = "progress", description = "A year of training, derived from the rows that already exist (D-13)"),
     )
 )]
 pub struct ApiDoc;
