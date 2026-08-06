@@ -270,7 +270,11 @@ mod tests {
             intervals: Vec::new(),
         };
 
-        let keys: Vec<&str> = indicators_from(&empty)
+        // Bound to a local first: borrowing `&str` out of an unbound temporary
+        // `Vec<Indicator>` is E0716, since the vector dies at the end of the
+        // statement while `keys` outlives it.
+        let indicators = indicators_from(&empty);
+        let keys: Vec<&str> = indicators
             .iter()
             .map(|indicator| indicator.key.as_str())
             .collect();
@@ -281,7 +285,8 @@ mod tests {
 
     #[test]
     fn the_shipped_set_is_present_when_there_is_data() {
-        let keys: Vec<&str> = indicators_from(&totals())
+        let indicators = indicators_from(&totals());
+        let keys: Vec<&str> = indicators
             .iter()
             .map(|indicator| indicator.key.as_str())
             .collect();
