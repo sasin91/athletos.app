@@ -66,11 +66,15 @@ pub struct Indicator {
 pub struct TrendPoint {
     pub workout_id: Uuid,
     pub at: DateTime<Utc>,
-    /// The best estimate across that session's done sets of this lift. `None`
-    /// only when every set was skipped, or a done set carries no weight or no
-    /// reps — [`athletos_training::estimate`]'s own two absence cases. A set
-    /// above the rep ceiling still contributes an estimate: the ceiling caps
-    /// what the formula reads rather than refusing the set (D-13, amended).
+    /// The best (highest) estimate across that session's done sets of this
+    /// lift. A point with no done sets is never emitted, so this is `None`
+    /// only when every done set failed to produce an estimate — each one
+    /// carrying no weight or no reps, [`athletos_training::estimate`]'s own
+    /// two absence cases. One weightless set among several does not null this
+    /// field; the max is taken across sets, so a single done set with a real
+    /// weight and rep count is enough. A set above the rep ceiling still
+    /// contributes an estimate: the ceiling caps what the formula reads
+    /// rather than refusing the set (D-13, amended).
     pub estimate: Option<f64>,
     /// What the program was prescribing from during that session. `None` for
     /// every session logged before `enrollment_advances` existed — the chart

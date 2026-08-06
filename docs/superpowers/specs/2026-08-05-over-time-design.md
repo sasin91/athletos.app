@@ -247,8 +247,9 @@ reconciling a table against a rule that has moved, with no marker for where.
 and the chart must draw a gap rather than a zero. `estimate` is nullable for
 a narrower reason, now that [section 2](#2--the-estimate) caps rather than
 refuses a set above the rep ceiling: a session where every set of that lift
-was skipped, or where the sets performed carried no weight, contributes no
-estimate. A high rep count alone no longer does — it is capped, not discarded.
+was skipped, or where the sets performed carried no weight or no reps,
+contributes no estimate. A high rep count alone no longer does — it is capped,
+not discarded.
 
 `drift_kg` is signed: **positive means heavier than prescribed**, negative
 lighter, zero run as written. Summed over that session's done sets for that

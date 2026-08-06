@@ -2517,7 +2517,7 @@
               "null"
             ],
             "format": "double",
-            "description": "The best estimate across that session's done sets of this lift. `None`\nonly when every set was skipped, or a done set carries no weight or no\nreps — [`athletos_training::estimate`]'s own two absence cases. A set\nabove the rep ceiling still contributes an estimate: the ceiling caps\nwhat the formula reads rather than refusing the set (D-13, amended)."
+            "description": "The best (highest) estimate across that session's done sets of this\nlift. A point with no done sets is never emitted, so this is `None`\nonly when every done set failed to produce an estimate — each one\ncarrying no weight or no reps, [`athletos_training::estimate`]'s own\ntwo absence cases. One weightless set among several does not null this\nfield; the max is taken across sets, so a single done set with a real\nweight and rep count is enough. A set above the rep ceiling still\ncontributes an estimate: the ceiling caps what the formula reads\nrather than refusing the set (D-13, amended)."
           },
           "reasons": {
             "type": "array",

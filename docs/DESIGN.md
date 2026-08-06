@@ -1092,6 +1092,18 @@ and duplicated rules. Decide when the Health requirement is concrete.
 > reach, so the one argument against Brzycki is unreachable here — but it is the
 > ceiling doing that and not the formula, and a later reader who raises the
 > ceiling past 37 gets negative kilograms.
+>
+> **That refusal is no longer the rule, and D-13 has the correction.** The
+> paragraph above describes the ceiling as it read when this correction was
+> written. `estimate()` now caps the reps it reads at the ceiling instead of
+> discarding the set past it — refusal made the trend fall on the athlete's
+> best day, an AMRAP set landing at eleven reps reporting about a quarter
+> *less* than one at ten, and D-13's amendment has that accounting in full.
+> The `timing.rs` comparison stops here: a set above the ceiling is no longer
+> discarded, so nothing in this file still shares that instinct. What the
+> ceiling still does, unchanged, is guard the pole above — capping holds the
+> formula's input at ten exactly as refusing did, so the three-times margin
+> stands regardless of which of the two rules is doing the guarding.
 
 ---
 
