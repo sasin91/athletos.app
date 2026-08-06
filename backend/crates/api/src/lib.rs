@@ -73,6 +73,8 @@ pub fn app(state: AppState) -> Router {
             post(routes::workouts::submit).get(routes::workouts::history),
         )
         .route("/v1/workouts/{id}", get(routes::workouts::show))
+        // Read-only, and derived: no table stands behind this (D-13, amended).
+        .route("/v1/progress", get(routes::progress::show))
         // Served at the RFC 8615 well-known location so any future verifier can
         // discover it without configuration. Deliberately *not* under `/v1`:
         // the path is fixed by the RFC, not by us.

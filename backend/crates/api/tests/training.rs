@@ -1411,6 +1411,12 @@ async fn the_training_endpoints_all_require_a_token(pool: PgPool) {
         .get(&format!("/v1/enrollments/{}/next-session", Uuid::now_v7()))
         .await
         .assert_status_unauthorized();
+    // Derived or not, it is somebody's training data and is scoped like
+    // everything else — the athlete comes from the token and from nowhere else.
+    server
+        .get("/v1/progress")
+        .await
+        .assert_status_unauthorized();
 }
 
 // --- the catalogue --------------------------------------------------------
@@ -2780,4 +2786,156 @@ async fn a_retried_submit_records_no_second_advance(pool: PgPool) {
         .unwrap();
 
     assert_eq!(advances, 1);
+}
+
+// --- the progress screen: a year of training, derived (D-13) ---------------
+
+/// The whole screen in one round trip.
+async fn progress(server: &TestServer, token: &str) -> serde_json::Value {
+    server
+        .get("/v1/progress")
+        .authorization_bearer(token)
+        .await
+        .json()
+}
+
+#[sqlx::test]
+async fn progress_is_empty_for_an_athlete_who_has_logged_nothing(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+
+    let view = progress(&server, &token).await;
+
+    assert_eq!(view["lifts"].as_array().unwrap().len(), 0);
+    assert_eq!(view["sessions"].as_array().unwrap().len(), 0);
+    assert_eq!(view["programs"].as_array().unwrap().len(), 0);
+    // No sessions means no median to report — the card is absent, not zero.
+    let overall: Vec<String> = view["overall"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|indicator| indicator["key"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(!overall.contains(&"median_duration".to_owned()));
+}
+
+#[sqlx::test]
+async fn a_logged_session_produces_a_trend_point_with_a_training_max(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    log_a_session(&server, &token, enrollment).await;
+
+    let view = progress(&server, &token).await;
+
+    let lifts = view["lifts"].as_array().unwrap();
+    assert!(!lifts.is_empty(), "one session should produce one lift");
+
+    let point = &lifts[0]["points"][0];
+    // Logged exactly as prescribed, so the estimate exists and drift is zero.
+    assert!(point["estimate"].as_f64().is_some());
+    assert_eq!(point["drift_kg"].as_f64(), Some(0.0));
+    assert_eq!(point["sets_over"].as_u64(), Some(0));
+    // The training max comes from readout(state_before), which this session
+    // recorded — so it is present rather than a gap.
+    assert!(point["training_max"].as_f64().is_some());
+}
+
+#[sqlx::test]
+async fn a_best_is_the_heaviest_weight_for_at_least_that_many_reps(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    // One set taken well past its prescription, so there is an unambiguous
+    // best: heavier than anything else that day, at five reps.
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    body["sets"][0]["actual_weight"] = json!(200.0);
+    body["sets"][0]["actual_reps"] = json!(5);
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let view = progress(&server, &token).await;
+    let bests = view["lifts"][0]["bests"].as_array().unwrap();
+
+    let at_three = bests
+        .iter()
+        .find(|best| best["reps"].as_u64() == Some(3))
+        .expect("a 3-rep bucket");
+    let at_five = bests
+        .iter()
+        .find(|best| best["reps"].as_u64() == Some(5))
+        .expect("a 5-rep bucket");
+
+    // Five reps at 200 proves three reps at 200: "at least", not "exactly".
+    assert_eq!(at_three["weight"].as_f64(), Some(200.0));
+    assert_eq!(at_five["weight"].as_f64(), Some(200.0));
+    assert_eq!(at_five["actual_reps"].as_u64(), Some(5));
+}
+
+#[sqlx::test]
+async fn drift_is_signed_and_counted_per_direction(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+    let first = body["sets"][0]["prescribed_weight"].as_f64().unwrap();
+    body["sets"][0]["actual_weight"] = json!(first + 5.0);
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let view = progress(&server, &token).await;
+    let point = &view["lifts"][0]["points"][0];
+
+    assert_eq!(point["drift_kg"].as_f64(), Some(5.0));
+    assert_eq!(point["sets_over"].as_u64(), Some(1));
+    assert_eq!(point["sets_under"].as_u64(), Some(0));
+}
+
+/// The units are the contract, and nothing else asserted which one is which.
+///
+/// `progress.rs`'s own test only checks that every indicator has *a* unit,
+/// which can fail only if a fourth variant appears. This pins the two that a
+/// client formats differently: kilograms are weight and get D-04's treatment,
+/// a session count is a bare integer. Swapping them would render "12 kg
+/// sessions" and no existing test would notice.
+#[sqlx::test]
+async fn an_indicator_names_the_unit_the_client_must_format_it_in(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    log_a_session(&server, &token, enrollment).await;
+
+    let view = progress(&server, &token).await;
+    let unit = |key: &str| {
+        view["overall"]
+            .as_array()
+            .expect("overall is a list")
+            .iter()
+            .find(|indicator| indicator["key"] == key)
+            .unwrap_or_else(|| panic!("{key} is an indicator"))["unit"]
+            .as_str()
+            .expect("a unit is a string")
+            .to_owned()
+    };
+
+    assert_eq!(unit("load_moved"), "kg");
+    assert_eq!(unit("sessions"), "count");
 }
