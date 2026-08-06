@@ -57,18 +57,32 @@ it makes the arithmetic testable in milliseconds.
 
 ### The formula
 
-**Epley**: `weight × (1 + reps / 30)`. A single returns the weight itself, which
-is the property that matters most — the heaviest thing the athlete has actually
-done should never be understated by the estimate of it.
+**Brzycki**: `weight × 36 / (37 − reps)`. A single returns the weight itself —
+`36 / 36` — and that is the property that decided it. An estimate is evidence
+about what the athlete can do, and a formula reporting a 140 kg single as 144.7
+invents 4.7 kg of evidence that does not exist. On a screen built for an athlete
+whose failure mode is over-reaching (D-01), a systematic overstatement is the
+wrong direction to be wrong in.
 
-Brzycki (`weight × 36 / (37 − reps)`) is the usual alternative and is slightly
-kinder at low reps. It was not chosen because it has a pole at 37 reps and turns
-negative past it, which is a formula that has to be guarded rather than one that
-degrades. Epley grows without a discontinuity; it merely grows optimistic.
+> **Corrected during implementation, and this section had it backwards.** It
+> first specified **Epley** — `weight × (1 + reps / 30)` — and justified it on
+> exactly the property quoted above. Epley does not have that property: at one
+> rep it returns 31/30 of the weight. "A single returns the weight itself" is
+> Brzycki's, and the whole argument was resting on the wrong formula.
+>
+> It also rejected Brzycki for having a pole at 37 reps where the estimate goes
+> negative — true, and unreachable here, because the rep ceiling in the very
+> next paragraph puts it more than three times out of range. The objection was
+> written into the same section that made it moot.
+>
+> The two agree exactly at the ceiling — `36/27` and `1 + 10/30` are both 4/3 —
+> so the choice costs nothing where they meet and only matters in between,
+> where Brzycki is the more conservative. A test pins both properties so the
+> argument cannot silently drift back.
 
 **A rep ceiling, and it is a real rule rather than input validation.** An
-estimate off a set of twenty is not evidence about a single, and Epley's error
-grows monotonically with reps. Sets above the ceiling contribute **no estimate at
+estimate off a set of twenty is not evidence about a single, and the formula's
+error grows monotonically with reps. Sets above the ceiling contribute **no estimate at
 all** rather than a clamped one — the same instinct as `timing.rs` discarding an
 interval it cannot believe instead of folding it in at an invented value. The
 ceiling is a constant in the training crate with the reasoning beside it.
