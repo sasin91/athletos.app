@@ -726,7 +726,7 @@
           "progress"
         ],
         "summary": "Where a year of training went.",
-        "description": "# One round trip, and nothing stored\n\nFour queries, no writes, and no table behind any of it (D-13, amended). The\nestimate is [`athletos_training::estimate`] over stored sets, load and drift\nare sums over the same rows, the training max is `readout()` applied to the\n`state_before` [`crate::advances`] already records, and the intervals come\noff [`crate::timing`]'s own walk. Every figure here is implied by rows that\nexist for other reasons, which is exactly why a metrics table was declined:\na stored total is a second copy of an arithmetic fact, and the day it\ndisagrees with the rows there is no way to tell which one is wrong.\n\n# The scope, and the index that does not serve it\n\n`workouts` has no `athlete_id`, so ownership arrives through the join on\n`enrollments` in all four queries — the same shape, and the same accepted\ncost, that [`crate::routes::workouts::history`] documents at length. The\nwindow bounds it: this is one person's twelve months, which is hundreds of\nsessions and low thousands of sets at the volume this product is designed\nfor.",
+        "description": "# One round trip, and nothing stored\n\nFour queries, no writes, and no table behind any of it (D-13, amended). The\nestimate is [`athletos_training::estimate`] over stored sets, load and drift\nare sums over the same rows, the training max is `readout()` applied to the\n`state_before` [`crate::advances`] already records, and the intervals come\noff [`crate::timing`]'s own walk. Every figure here is implied by rows that\nexist for other reasons, which is exactly why a metrics table was declined:\na stored total is a second copy of an arithmetic fact, and the day it\ndisagrees with the rows there is no way to tell which one is wrong.\n\n# The scope, and the index that does not serve it\n\n`workouts` has no `athlete_id`, so ownership arrives through the join on\n`enrollments` in all four queries — the same shape, and the same accepted\ncost, that [`crate::routes::workouts::history`] documents at length. The\nwindow bounds it: this is one person's twelve months, which is hundreds of\nsessions and low thousands of sets at the volume this product is designed\nfor.\n\n# A deviation from the spec: fixed, not overridable\n\nThe spec calls the window \"twelve months by default, overridable\". This\nships the default and not the override — no query parameter — because\nbuilding one was out of scope for this pass. What it does carry is\n[`ProgressView::window_months`], so a client rendering `overall.sessions`\ncan caption it correctly without knowing [`WINDOW_MONTHS`] exists. That\ncloses the half of the gap that would otherwise force a client to hardcode\na server-side constant (D-11); it does not close the other half, and an\nathlete cannot yet ask this endpoint for eighteen months instead of twelve.",
         "operationId": "athlete_progress",
         "responses": {
           "200": {
@@ -993,7 +993,8 @@
           "lifts",
           "sessions",
           "programs",
-          "overall"
+          "overall",
+          "window_months"
         ],
         "properties": {
           "lifts": {
@@ -1019,6 +1020,13 @@
             "items": {
               "$ref": "#/components/schemas/SessionFigures"
             }
+          },
+          "window_months": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many months of history `lifts`, `sessions` and `overall` cover —\n[`WINDOW_MONTHS`], carried onto the wire. `bests` is the one exception\nand is not bounded by it (see that function). Named rather than left\nimplicit so a client can caption `overall`'s `sessions` figure as\n\"Sessions (last N months)\" without hardcoding a number only the server\nknows — the same reason `indicators_from`'s doc comment gives for why\nthe client is never told what a metric means beyond its `unit` (D-11).",
+            "example": 12,
+            "minimum": 0
           }
         }
       },
@@ -2203,7 +2211,7 @@
           "enrollment_id",
           "at",
           "load_moved_kg",
-          "load_prescribed_kg",
+          "load_planned_kg",
           "sets_over",
           "sets_under"
         ],
@@ -2227,9 +2235,10 @@
             "type": "number",
             "format": "double"
           },
-          "load_prescribed_kg": {
+          "load_planned_kg": {
             "type": "number",
-            "format": "double"
+            "format": "double",
+            "description": "Summed over **every** set the session prescribed, whatever its status —\nunlike [`crate::report::SessionReport::load_prescribed_kg`], which sums\nonly the done sets on the finish-screen receipt. That field answers\n\"how far did the weight I actually lifted drift from what was asked?\",\nuncontaminated by work not done. This one answers a different question:\n\"how much did the program ask for, whether or not I did it?\" — so a\nsession with half its sets skipped reads as a shortfall here rather\nthan as perfect compliance. Both are correct for their own panel, which\nis exactly why they carry different names on `/v1` rather than one\nfield meaning two things depending which endpoint sent it."
           },
           "sets_over": {
             "type": "integer",

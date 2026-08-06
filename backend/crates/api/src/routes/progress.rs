@@ -116,7 +116,17 @@ pub struct SessionFigures {
     pub enrollment_id: Uuid,
     pub at: DateTime<Utc>,
     pub load_moved_kg: f64,
-    pub load_prescribed_kg: f64,
+    /// Summed over **every** set the session prescribed, whatever its status —
+    /// unlike [`crate::report::SessionReport::load_prescribed_kg`], which sums
+    /// only the done sets on the finish-screen receipt. That field answers
+    /// "how far did the weight I actually lifted drift from what was asked?",
+    /// uncontaminated by work not done. This one answers a different question:
+    /// "how much did the program ask for, whether or not I did it?" — so a
+    /// session with half its sets skipped reads as a shortfall here rather
+    /// than as perfect compliance. Both are correct for their own panel, which
+    /// is exactly why they carry different names on `/v1` rather than one
+    /// field meaning two things depending which endpoint sent it.
+    pub load_planned_kg: f64,
     pub sets_over: u32,
     pub sets_under: u32,
     pub duration_seconds: Option<i64>,
@@ -154,6 +164,15 @@ pub struct ProgressView {
     pub sessions: Vec<SessionFigures>,
     pub programs: Vec<ProgramTotals>,
     pub overall: Vec<Indicator>,
+    /// How many months of history `lifts`, `sessions` and `overall` cover —
+    /// [`WINDOW_MONTHS`], carried onto the wire. `bests` is the one exception
+    /// and is not bounded by it (see that function). Named rather than left
+    /// implicit so a client can caption `overall`'s `sessions` figure as
+    /// "Sessions (last N months)" without hardcoding a number only the server
+    /// knows — the same reason `indicators_from`'s doc comment gives for why
+    /// the client is never told what a metric means beyond its `unit` (D-11).
+    #[schema(example = 12)]
+    pub window_months: u32,
 }
 
 /// What an indicator set is built from. Not serialised — this is the
@@ -255,9 +274,9 @@ pub fn median(values: &mut [i64]) -> Option<i64> {
 
 // --- loading it, and the four queries that do ------------------------------
 
-/// How far back the three **series** look.
+/// How far back the three **series** look, in months.
 ///
-/// Twelve months, written into those queries rather than bound as a parameter:
+/// Twelve, written into those queries rather than bound as a parameter:
 /// `interval '12 months'` is calendar arithmetic Postgres does correctly across
 /// leap days and month lengths, and a `now() - $2` with a duration computed in
 /// Rust would be the same window measured worse. It is a `const` and never a
@@ -269,13 +288,24 @@ pub fn median(values: &mut [i64]) -> Option<i64> {
 ///
 /// **[`bests`] does not use it, and that is the point rather than an oversight.**
 /// See that function: a record is not a series and does not expire.
-const WINDOW: &str = "12 months";
+///
+/// Carried onto the wire as [`ProgressView::window_months`] rather than left
+/// implicit — see [`show`]'s doc comment for why, and for the spec deviation
+/// that leaves this fixed rather than overridable.
+const WINDOW_MONTHS: u32 = 12;
 
 /// The rep buckets the grid offers.
 ///
 /// One, two, three, five, eight, ten: the numbers a strength athlete already
-/// thinks in, and the ceiling matches [`athletos_training::ESTIMATE_REP_CEILING`]
-/// so no cell is filled by a set the estimator itself refuses to read.
+/// thinks in. The top of that list happens to equal
+/// [`athletos_training::ESTIMATE_REP_CEILING`], but that is a coincidence
+/// rather than a reason the two share a number: buckets are "at least N", so a
+/// set of any rep count still fills the 10 cell, including one past the
+/// ceiling. A 15-rep set at 200 kg fills it despite `estimate(200.0, 15)`
+/// returning `None` — the grid reports what was actually lifted for at least N
+/// reps, and the estimator separately refuses a rep count it does not trust as
+/// evidence of a single. Both are right; they are simply not the same
+/// question, and a set can answer one while the other has nothing to say.
 const BEST_REPS: &[i32] = &[1, 2, 3, 5, 8, 10];
 
 /// One session, as the sessions query returns it.
@@ -358,6 +388,17 @@ struct Loaded {
 /// window bounds it: this is one person's twelve months, which is hundreds of
 /// sessions and low thousands of sets at the volume this product is designed
 /// for.
+///
+/// # A deviation from the spec: fixed, not overridable
+///
+/// The spec calls the window "twelve months by default, overridable". This
+/// ships the default and not the override — no query parameter — because
+/// building one was out of scope for this pass. What it does carry is
+/// [`ProgressView::window_months`], so a client rendering `overall.sessions`
+/// can caption it correctly without knowing [`WINDOW_MONTHS`] exists. That
+/// closes the half of the gap that would otherwise force a client to hardcode
+/// a server-side constant (D-11); it does not close the other half, and an
+/// athlete cannot yet ask this endpoint for eighteen months instead of twelve.
 #[utoipa::path(
     get,
     path = "/v1/progress",
@@ -394,7 +435,7 @@ async fn sessions(db: &PgPool, athlete_id: Uuid) -> ApiResult<Vec<SessionRow>> {
         "select w.id, w.enrollment_id, e.program_key, e.status, w.started_at, w.ended_at
          from workouts w
          join enrollments e on e.id = w.enrollment_id
-         where e.athlete_id = $1 and w.started_at >= now() - interval '{WINDOW}'
+         where e.athlete_id = $1 and w.started_at >= now() - interval '{WINDOW_MONTHS} months'
          order by w.started_at, w.id"
     ))
     .bind(athlete_id)
@@ -422,7 +463,7 @@ async fn sets(db: &PgPool, athlete_id: Uuid) -> ApiResult<HashMap<Uuid, Vec<SetR
          from workout_sets s
          join workouts w on w.id = s.workout_id
          join enrollments e on e.id = w.enrollment_id
-         where e.athlete_id = $1 and w.started_at >= now() - interval '{WINDOW}'
+         where e.athlete_id = $1 and w.started_at >= now() - interval '{WINDOW_MONTHS} months'
          order by s.workout_id, s.\"position\""
     ))
     .bind(athlete_id)
@@ -461,7 +502,7 @@ async fn training_maxes(
          from enrollment_advances a
          join workouts w on w.id = a.workout_id
          join enrollments e on e.id = a.enrollment_id
-         where e.athlete_id = $1 and w.started_at >= now() - interval '{WINDOW}'"
+         where e.athlete_id = $1 and w.started_at >= now() - interval '{WINDOW_MONTHS} months'"
     ))
     .bind(athlete_id)
     .fetch_all(db)
@@ -530,7 +571,7 @@ async fn training_maxes(
 ///
 /// # This query is deliberately **not** windowed
 ///
-/// The other three carry `WINDOW`; this one does not, and a reader who
+/// The other three carry `WINDOW_MONTHS`; this one does not, and a reader who
 /// "consistently" adds it back would be removing a feature. Spec section 6 asks
 /// for the heaviest weight lifted for at least N reps **over all history and
 /// all programs**, and the reason is that *a record does not expire*. An
@@ -643,14 +684,14 @@ fn assemble(loaded: Loaded) -> ProgressView {
         // they were performed in is worth more here than a hash lookup.
         let mut tallies: Vec<(&str, LiftTally)> = Vec::new();
         let mut load_moved = 0.0_f64;
-        let mut load_prescribed = 0.0_f64;
+        let mut load_planned = 0.0_f64;
 
         for row in rows {
             // Every set, whatever its status. This is what the program asked
             // for, so a set skipped or never answered still counts toward it —
             // otherwise skipping half a session would read as perfect
             // compliance, which is the one thing this figure exists to catch.
-            load_prescribed += row.prescribed_weight * f64::from(row.prescribed_reps);
+            load_planned += row.prescribed_weight * f64::from(row.prescribed_reps);
 
             let index = match tallies.iter().position(|(key, _)| *key == row.exercise) {
                 Some(index) => index,
@@ -783,7 +824,7 @@ fn assemble(loaded: Loaded) -> ProgressView {
             enrollment_id,
             at: started_at,
             load_moved_kg: load_moved,
-            load_prescribed_kg: load_prescribed,
+            load_planned_kg: load_planned,
             sets_over,
             sets_under,
             duration_seconds,
@@ -856,6 +897,7 @@ fn assemble(loaded: Loaded) -> ProgressView {
         sessions: figures,
         programs,
         overall: indicators_from(&overall),
+        window_months: WINDOW_MONTHS,
     }
 }
 
