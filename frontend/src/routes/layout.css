@@ -174,6 +174,37 @@
 	--color-plate-1-25: #9aa5ab;
 	--color-bar: #7c8388;
 
+	/*
+	 * The ink each plate carries its own number in. This is a token rather than
+	 * a value picked in the component for one reason: the light theme already
+	 * re-tokenises the two pale plates above, and a hardcoded ink would go on
+	 * being right in the dark and silently wrong the moment the surface
+	 * changed. Five of the seven plates are saturated enough to hold white
+	 * digits; the 5 kg (#e8eaed) and the 1.25 (#9aa5ab) are pale and take dark
+	 * ones. The 15 kg (#f2a413) takes dark ink despite being one of the
+	 * saturated five — its luminance sits closer to the white plate's than to
+	 * the red's, and white on it is unreadable at 9 px.
+	 *
+	 * The light theme needs no override here: its darker #b9b4a3 and #7d8a90
+	 * still hold dark digits, at roughly 10:1 and 5.9:1.
+	 *
+	 * Three of the whites land just at or under the 4.5:1 that 9 px text
+	 * nominally wants — the 10 kg green computes to about 4.35:1, the red and
+	 * the blue to about 4.6:1 and 4.7:1. That is recorded rather than fixed,
+	 * on the ground that these digits duplicate a number already stated twice
+	 * in text: in the add / take off lines above the drawing, and in the
+	 * sr-only sentence beneath it. They are a convenience on a picture, not the
+	 * only place the number appears. See D-04's palette note, which carries the
+	 * light theme's 1.92:1 plate edge on the same terms.
+	 */
+	--color-plate-25-ink: #fff;
+	--color-plate-20-ink: #fff;
+	--color-plate-15-ink: rgb(0 0 0 / 0.8);
+	--color-plate-10-ink: #fff;
+	--color-plate-5-ink: rgb(0 0 0 / 0.8);
+	--color-plate-2-5-ink: #fff;
+	--color-plate-1-25-ink: rgb(0 0 0 / 0.8);
+
 	/* The outline that separates two adjacent plates of similar colour. Dark
 	   on a dark surface; overridden in the light theme, where black would be
 	   the heaviest line on the screen. */
@@ -201,22 +232,44 @@ body {
 /*
  * The single most important thing on any screen, and sized to be read at arm's
  * length. Tabular figures so the number does not shuffle sideways between sets,
- * and tight tracking so three digits and a decimal still fit a phone.
+ * and negative tracking so three digits and a decimal still fit a phone.
+ *
+ * It was Archivo 800 at clamp(4.5rem, 22vw, 7rem), tracked at -0.04em and led
+ * at 0.85 — about 86 px on a 390 pt phone, where the middle term wins. Both of
+ * those choices were right and both overshot: at 86 px the current set is one
+ * number with some furniture around it, and there is no room left for the
+ * plate stack or the input without scrolling. It is now Barlow 600 at about
+ * 48 px on the same phone, still around three times body text.
+ *
+ * The tracking relaxes because -0.04em was compensating for Archivo's width at
+ * poster size; at 48 px in Barlow it would only look cramped. The leading goes
+ * to 1 for the same reason — 0.85 is a display-type value that reads as
+ * deliberate above about 64 px and as a mistake below it.
+ *
+ * Barlow rather than a fourth family because every font here arrives through
+ * the Google Fonts @import at the top of this file, and /session is the
+ * prerendered, service-worker-backed screen that has to work in a basement
+ * with no signal. Barlow 600 is already in that request, so this removes a
+ * rendering dependency from the most important number in the product rather
+ * than adding one. Archivo keeps the eyebrows, the KG and the log button — the
+ * objection was to the face on the number, not to the face.
  */
 @utility weight-hero {
-	font-family: var(--font-display);
-	font-weight: 800;
+	font-family: var(--font-sans);
+	font-weight: 600;
 	font-variant-numeric: tabular-nums;
-	font-size: clamp(4.5rem, 22vw, 7rem);
-	line-height: 0.85;
-	letter-spacing: -0.04em;
+	font-size: clamp(2.5rem, 12vw, 3rem);
+	line-height: 1;
+	letter-spacing: -0.01em;
 	color: var(--color-base-content);
 }
 
+/* A footnote beside 86 px; beside 48 px it would be nearly a third of the
+   number it annotates, so it comes down with it. */
 @utility weight-unit {
 	font-family: var(--font-display);
 	font-weight: 600;
-	font-size: 1.125rem;
+	font-size: 1rem;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: color-mix(in oklab, var(--color-base-content) 45%, transparent);

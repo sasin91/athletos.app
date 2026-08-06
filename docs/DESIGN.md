@@ -459,6 +459,35 @@ front of the rack.
 > close them is to stop dimming those particular strings rather than to darken
 > the palette further, and that is a change to the chassis and not to this
 > theme.
+>
+> **The plates learned to say their own weight, 2026-08-06.** Colour and height
+> were the whole signal, which works for anyone who has memorised the IWF
+> palette and not for anyone who has not — and the person the app is for said
+> so. Each plate now carries its value on its face, turned to read bottom-to-top
+> because the plate is 18 px wide and the number is not. The constraining case
+> is the 1.25, whose 38 mm-scaled height holds a four-character string with room
+> left; there is therefore no plate small enough to be exempt and no size below
+> which the rule changes.
+>
+> The ink is a token per plate rather than a computed contrast, for the same
+> reason the plate colours are: the light theme re-tokenises the two pale plates
+> and would otherwise silently keep dark digits on a surface that had moved
+> underneath them. Five plates take white; the 5 kg, the 1.25 kg **and the 15 kg
+> orange** take black — the orange is one of the saturated five but sits nearer
+> the white plate's luminance than the red's, and the palette does not get to
+> decide that on grounds of family resemblance.
+>
+> Three of the white-on-colour pairs are marginal and are recorded here rather
+> than smoothed over: the 10 kg green computes to **4.35:1**, under the 4.5:1
+> that 9 px text nominally wants, with the red at 4.6 and the blue at 4.7 only
+> just above. The trade is different from the 1.92:1 above, and weaker in the
+> app's favour: these digits are not the only place the number appears. The same
+> weights are stated in words in the *take off* and *add* lines directly above
+> the drawing, and again in the `sr-only` sentence beneath it. A digit that is
+> hard to read at 9 px costs a glance; it does not cost the information. Fixing
+> it would mean either darkening the IWF greens — which breaks the promise that
+> the drawing shows what is on the rack — or growing the plates, which is the
+> opposite of what was asked for in the same breath.
 
 ### Units
 
@@ -1045,6 +1074,63 @@ next-session selection, `advance()`, rounding, drift — all of it.
 Anything implemented in a `+page.server.ts` is something the future native
 client has to reimplement in another language. This stops being a preference
 and becomes load-bearing the moment a second client exists.
+
+> **One bounded exception, 2026-08-06: the logger snaps a typed weight to
+> 0.5 kg.**
+>
+> It is written down here because the rule above is absolute and an exception
+> that is not recorded is just a violation nobody has noticed yet.
+>
+> What it fixes was found by asking what happens when you type `142,555556`.
+> With a period, the value went in verbatim, the *difference* against the
+> prescription carried it onto every later pending set of that exercise, and
+> Postgres eventually cast it to `numeric(6,2)` — so the log said 142.56 and the
+> screen had never said anything of the kind. With a comma, `Number()` returned
+> `NaN`, the edit was discarded in silence, and the set was logged at the weight
+> that was there before. That last one is a set recorded at a weight nobody
+> lifted, with no error, on the screen whose entire premise is that one tap logs
+> what it shows (D-07). The separator now parses; nothing typed can be dropped
+> without saying so.
+>
+> **Which took a second attempt, and the first one was not a fix.** Teaching the
+> parser to read a comma only helps if the comma reaches it, and whether it does
+> is the engine's business rather than ours. Measured across three locales:
+> Chromium on Windows normalises `99,5` to `"99.5"`, and Chromium on Linux
+> reports `""` with `validity.badInput`. On the second, `type="number"` ate the
+> keystrokes before any code here ran — the field showed `99,5`, the state kept
+> the old weight, and the set logged at the prescription. The defect was still
+> open on an engine nobody had run, and CI is what said so.
+>
+> The weight field is therefore **`type="text" inputmode="decimal"`**.
+> `inputmode` is what raises the numeric keypad on a phone; `type="number"` was
+> contributing a parse that differs by platform, a `step` that constrained only
+> the spinner arrows and `checkValidity()` — neither of which this screen uses —
+> and a `min` that never stopped anyone typing a negative. The price is that the
+> parser inherits the half-typed state the number input was hiding:
+> `Number('142.')` is `142`, so a trailing separator has to be refused or the
+> decimal point is eaten the instant it is pressed. Half a number is not a
+> number.
+>
+> The snap itself is defended on the ground that it is not loading arithmetic.
+> It computes nothing about what can be put on a bar, never asks what exercise
+> it is looking at, and returns the same answer for a barbell, a dumbbell and a
+> machine. It is the field declining to hold a number the athlete cannot have
+> meant.
+>
+> It was checked against the catalogue rather than assumed harmless. Every
+> loading mode resolves to a multiple of 0.5 — barbell at 2.5, the dumbbell rack
+> at 2.0, bodyweight at 0 — so no weight the engine can prescribe is disturbed,
+> and no correct number is ever changed behind the athlete's back. The cost is
+> stated: a future `Machine { increment }` on a stack that is not a multiple of
+> 0.5 could not be logged exactly. The alternative considered was refusing the
+> value and blocking the log, which is worse on a screen used mid-set, offline,
+> with chalk on your hands.
+>
+> **The exception does not extend.** It rounds to a half kilo, not to something
+> loadable. The unloadable carried difference recorded under D-07 — correct 97.5
+> to 96 and a 70 kg backoff pre-fills at 68.5 — stays exactly as unfixed as it
+> was, because closing it would require the plate arithmetic this rule exists to
+> keep out.
 
 ### v1 is an installable PWA
 

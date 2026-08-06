@@ -108,7 +108,11 @@ test('a live plate change instructs what to move, and draws the resulting stack'
 	await expect(page.getByText('take off', { exact: true })).toBeVisible();
 	await expect(page.getByText('5, 2.5', { exact: true })).toBeVisible();
 	await expect(page.getByText('add', { exact: true })).toBeVisible();
-	await expect(page.getByText('10', { exact: true })).toBeVisible();
+	// The whole instruction rather than the bare number. `10` on its own stopped
+	// being unique once the plate drawing started printing each plate's value on
+	// its face: it matched the instruction and the 10 kg plate both, and a
+	// strict-mode violation is not the same thing as a regression.
+	await expect(page.getByText('add 10 per side', { exact: true })).toBeVisible();
 
 	// The plate diagram's accessible text — what anyone actually loading the
 	// bar needs said out loud, per Plates.svelte.
@@ -271,4 +275,106 @@ test('logging a set takes one click, whether or not a drift reason was chosen', 
 	await page.getByRole('button', { name: 'too easy', exact: true }).click();
 	await page.getByRole('button', { name: 'Log', exact: true }).click();
 	await expect(page.getByText('Logged 90 kg × 5', { exact: true })).toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// The cues, folded away. Squat carries six of them, and six lines of body text
+// is a large fraction of a phone card that also has to hold the weight, the
+// plate drawing and two inputs.
+// ---------------------------------------------------------------------------
+
+test('cues stay folded until asked for, and are folded again on the next set', async ({ page }) => {
+	await seedSession(
+		page,
+		session([set({ position: 0 }), set({ position: 1 })], {
+			cues: { squat: ['Brace core', 'Drive up through heels'] }
+		})
+	);
+	await page.goto('/session');
+
+	const summary = page.getByText('form cues', { exact: true });
+	const firstCue = page.getByText('Brace core', { exact: true });
+
+	await expect(summary).toBeVisible();
+	await expect(firstCue).not.toBeVisible();
+
+	await summary.click();
+	await expect(firstCue).toBeVisible();
+
+	// Advancing mounts a fresh `<details>` for the next set, which is closed
+	// because nothing about the open state is stored — the intent, not an
+	// omission. Someone who wants the cues every set taps once per set.
+	await page.getByRole('button', { name: 'Log', exact: true }).first().click();
+
+	await expect(page.getByText('form cues', { exact: true })).toBeVisible();
+	await expect(page.getByText('Brace core', { exact: true })).not.toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// Six decimals. "What happens if u input more decimals, like 142,555556?" —
+// the answer was a defect on both spellings of the number.
+// ---------------------------------------------------------------------------
+
+test('a weight typed with six decimals reads back as a multiple of half a kilo', async ({
+	page
+}) => {
+	await seedSession(page, session([set()]));
+	await page.goto('/session');
+
+	const weight = page.getByLabel('Weight in kilograms');
+	await weight.fill('142.555556');
+
+	// Not snapped yet, on purpose: snapping every keystroke would rewrite the
+	// field mid-typing, since `142.5` passes through `142.` on its way.
+	await expect(weight).toHaveValue('142.555556');
+
+	await weight.blur();
+	await expect(weight).toHaveValue('142.5');
+});
+
+test('a weight typed with six decimals and never blurred is still logged snapped', async ({
+	page
+}) => {
+	// The path that matters at a rack: type the number, tap Log with the same
+	// thumb, never leave the field. `change` never fires, so `logSet` is the
+	// only thing standing between six decimals and the permanent record.
+	await seedSession(page, session([set()]));
+	await page.goto('/session');
+
+	await page.getByLabel('Weight in kilograms').fill('142.555556');
+	await page.getByRole('button', { name: 'Log', exact: true }).click();
+
+	await expect(page.getByText('Logged 142.5 kg × 5', { exact: true })).toBeVisible();
+});
+
+test('a weight typed with a comma is recorded rather than dropped', async ({ page }) => {
+	// Typed key by key rather than filled, because the separator is the whole
+	// point and `fill` would hand the field a string it never had to parse.
+	//
+	// This test failed on CI and passed on the machine it was written on, and
+	// the difference was the browser, not the code. While the field was
+	// `type="number"`, where a comma goes was the engine's business: Chromium
+	// on Windows normalises `99,5` to `"99.5"` at every locale tried, and
+	// Chromium on Linux reports `""` with `validity.badInput`. On the second,
+	// the comma never reached `numberFromText` at all, so accepting commas
+	// there fixed nothing — the field showed `99,5` and the set logged at the
+	// 100 kg prescription, which is precisely the defect this change exists to
+	// close.
+	//
+	// The field is `type="text" inputmode="decimal"` now, so what the athlete
+	// typed reaches our parser on every engine and this assertion means the
+	// same thing everywhere. Keep it typed key by key: `fill` sets the value in
+	// one shot and would not exercise the half-typed `99,` state that
+	// `numberFromText` has to refuse.
+	await seedSession(page, session([set()]));
+	await page.goto('/session');
+
+	const weight = page.getByLabel('Weight in kilograms');
+	await weight.click();
+	await weight.press('Control+a');
+	await weight.pressSequentially('99,5');
+
+	await page.getByRole('button', { name: 'Log', exact: true }).click();
+
+	await expect(page.getByText('Logged 99.5 kg × 5', { exact: true })).toBeVisible();
 });

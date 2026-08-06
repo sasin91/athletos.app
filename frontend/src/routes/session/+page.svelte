@@ -14,12 +14,14 @@
 		logSet,
 		nextSetPosition,
 		noteSet,
+		numberFromText,
 		plateChangeFor,
 		resetSet,
 		setDriftReason,
 		setsDone,
 		setsRemaining,
 		skipSet,
+		snap,
 		summarise,
 		toSubmission
 	} from '$lib/session';
@@ -120,18 +122,14 @@
 		}
 	}
 
+	// The rule this used to hold inline now lives in `numberFromText`, with the
+	// whole of its reasoning: why an empty field is "no edit" rather than a
+	// typed zero, why a comma is a decimal separator, and why junk still comes
+	// back `undefined`. It moved so that it could be unit tested without a DOM
+	// — it is a fact about a string, and the event is only where the string
+	// came from. Nothing is left here but the reach into the element.
 	function numberFrom(event: Event): number | undefined {
-		// Empty or all-whitespace is "no edit", not zero. `Number('')` is `0`,
-		// finite and indistinguishable from a typed zero, and this fires on
-		// every keystroke: without this check, clearing the field to retype a
-		// number applies `delta = -prescribedWeight` and carries a 0 kg to
-		// every later pending set of the exercise before the athlete finishes
-		// typing the number they meant.
-		const raw = (event.currentTarget as HTMLInputElement).value;
-		if (raw.trim().length === 0) return undefined;
-
-		const value = Number(raw);
-		return Number.isFinite(value) ? value : undefined;
+		return numberFromText((event.currentTarget as HTMLInputElement).value);
 	}
 </script>
 
@@ -386,13 +384,33 @@
 									response and nothing stops an exercise carrying the same one
 									twice, which is exactly how the peek screen threw
 									`each_key_duplicate`.
+
+									Folded away by default. The layout of the cues was never the
+									problem; showing six of them to someone who has read them
+									forty times is, and squat carries six. On a phone that is a
+									large fraction of a card that also has to hold the weight,
+									the plate drawing and two inputs.
+
+									No open state is stored and none is cleared, and that is the
+									intent rather than an omission. The cues render only for the
+									set being performed, so advancing the session unmounts this
+									`<details>` and mounts a fresh, closed one for the next set.
+									Someone who wants them on every set taps once per set;
+									someone who wants them on the one lift they are unsure about
+									pays nothing on the others. Persisting the open state would
+									have to decide which of those two people it was for, and
+									would be wrong for the other one on every session after the
+									first.
 								-->
 								{#if cues.length > 0}
-									<ul class="list-disc space-y-1 pl-5 text-sm opacity-60 marker:opacity-50">
-										{#each cues as cue, index (index)}
-											<li>{cue}</li>
-										{/each}
-									</ul>
+									<details>
+										<summary class="eyebrow">form cues</summary>
+										<ul class="list-disc space-y-1 pl-5 text-sm opacity-60 marker:opacity-50">
+											{#each cues as cue, index (index)}
+												<li>{cue}</li>
+											{/each}
+										</ul>
+									</details>
 								{/if}
 							{:else}
 								<div class="flex items-baseline justify-between">
@@ -410,19 +428,73 @@
 							{/if}
 
 							<div class="flex items-center gap-2">
+								<!--
+									Two handlers on one field, doing different jobs.
+
+									`oninput` records the number as typed, unsnapped, exactly as
+									it always has. It is what makes the drift chips and the plate
+									guidance react while the athlete is still holding the phone,
+									and it is the only handler that fires if the field is never
+									left — a set logged with a thumb straight after typing never
+									blurs anything.
+
+									`onchange` additionally snaps to the nearest half kilo, and
+									the field re-renders to the snapped number because it is
+									bound to the state. Snapping per keystroke would rewrite the
+									field mid-typing: `142.5` passes through `142.` on its way,
+									which parses as `142`, which snaps to `142`, and the caret
+									would land back before the athlete had finished the number.
+									`change` fires once, when the number is finished.
+
+									**This is `type="text"`, and that is the fix rather than a
+									regression.** It was `type="number" step="0.5" min="0"`, and
+									that field silently ate the thing this whole change was
+									about. A number input reports `""` from `.value` for any text
+									it does not consider a valid floating-point number, and
+									whether a comma qualifies is the engine's business, not ours:
+									measured, not assumed, Chromium on Windows normalises `99,5`
+									to `"99.5"` at every locale tried, and Chromium on Linux
+									hands back `""` with `validity.badInput`. On the second one
+									the athlete's typing never reached our parser at all — the
+									field showed `99,5`, the state kept the old weight, and the
+									set logged at the prescription. Fixing `numberFromText` to
+									accept a comma could not close that, because the comma never
+									got there. CI on Linux is what caught it; this machine never
+									would have.
+
+									`step` and `min` went with it and are not missed. `step`
+									constrained the spinner arrows and `checkValidity()`, and
+									this screen uses neither; `min="0"` never stopped anyone
+									typing a negative either. `inputmode="decimal"` is what
+									actually summons the numeric keypad on a phone, and it stays.
+
+									What `type="number"` was accidentally protecting is now
+									`numberFromText`'s job: `142.` is a half-typed number, not
+									the number 142, and returning `undefined` for a trailing
+									separator is what keeps the controlled `value` binding from
+									rewriting the field and eating the point mid-typing.
+
+									`snap` is applied again in `logSet`, which is the
+									place that cannot be bypassed; see the exception to D-11
+									written out there.
+								-->
 								<label class="flex items-center gap-1">
 									<span class="sr-only">Weight in kilograms</span>
 									<input
-										type="number"
+										type="text"
 										inputmode="decimal"
-										step="0.5"
-										min="0"
 										class="input-bordered input w-24 text-lg"
 										value={set.actualWeight}
 										oninput={(event) => {
 											const weight = numberFrom(event);
 											if (weight !== undefined) {
 												void apply((s) => editSet(s, set.position, { weight }));
+											}
+										}}
+										onchange={(event) => {
+											const weight = numberFrom(event);
+											if (weight !== undefined) {
+												void apply((s) => editSet(s, set.position, { weight: snap(weight) }));
 											}
 										}}
 									/>
