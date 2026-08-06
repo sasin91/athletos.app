@@ -163,6 +163,35 @@ async fn log_a_session(server: &TestServer, token: &str, enrollment: Uuid) -> Uu
     id
 }
 
+/// Logs the enrolment's current session exactly as prescribed, at `now()`
+/// rather than the fixture's fixed day.
+///
+/// `/v1/progress` windows to the last twelve months, measured from `now()`
+/// (`progress::WINDOW_MONTHS`). `logged_as_prescribed`'s hard-coded
+/// `started_at` cannot be moved — `a_submission_that_contradicts_itself_is_refused`
+/// depends on it staying fixed to build an "ends before it starts" case — so
+/// any test that reads `/v1/progress` needs its own session pinned to `now()`
+/// instead, the same rule `log_a_heavy_session_at` already follows by taking
+/// `at` as a parameter rather than reusing the fixture's date.
+async fn log_a_recent_session(server: &TestServer, token: &str, enrollment: Uuid) -> Uuid {
+    let session = next_session(server, token, enrollment).await;
+    let id = Uuid::now_v7();
+    let now = chrono::Utc::now();
+
+    let mut body = logged_as_prescribed(id, enrollment, &session);
+    body["started_at"] = json!(now.to_rfc3339());
+    body["ended_at"] = json!((now + chrono::Duration::hours(1)).to_rfc3339());
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    id
+}
+
 async fn workout_count(pool: &PgPool) -> i64 {
     sqlx::query_scalar("select count(*) from workouts")
         .fetch_one(pool)
@@ -2825,7 +2854,7 @@ async fn a_logged_session_produces_a_trend_point_with_a_training_max(pool: PgPoo
     let token = register(&server, EMAIL).await;
     set_maxes(&server, &token, full_maxes()).await;
     let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
-    log_a_session(&server, &token, enrollment).await;
+    log_a_recent_session(&server, &token, enrollment).await;
 
     let view = progress(&server, &token).await;
 
@@ -2855,6 +2884,13 @@ async fn a_best_is_the_heaviest_weight_for_at_least_that_many_reps(pool: PgPool)
     let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
     body["sets"][0]["actual_weight"] = json!(200.0);
     body["sets"][0]["actual_reps"] = json!(5);
+
+    // `/v1/progress` windows to the last twelve months measured from `now()`;
+    // the fixture's fixed date cannot move (see `log_a_recent_session`), so this
+    // overrides it the same way that helper does.
+    let now = chrono::Utc::now();
+    body["started_at"] = json!(now.to_rfc3339());
+    body["ended_at"] = json!((now + chrono::Duration::hours(1)).to_rfc3339());
 
     server
         .post("/v1/workouts")
@@ -2903,6 +2939,13 @@ async fn drift_is_signed_and_counted_per_direction(pool: PgPool) {
     // and 5/3/1 opens with three sets of the main lift.
     assert_eq!(body["sets"][0]["exercise"], body["sets"][1]["exercise"]);
 
+    // `/v1/progress` windows to the last twelve months measured from `now()`;
+    // the fixture's fixed date cannot move (see `log_a_recent_session`), so this
+    // overrides it the same way that helper does.
+    let now = chrono::Utc::now();
+    body["started_at"] = json!(now.to_rfc3339());
+    body["ended_at"] = json!((now + chrono::Duration::hours(1)).to_rfc3339());
+
     server
         .post("/v1/workouts")
         .authorization_bearer(&token)
@@ -2931,7 +2974,7 @@ async fn an_indicator_names_the_unit_the_client_must_format_it_in(pool: PgPool) 
     let token = register(&server, EMAIL).await;
     set_maxes(&server, &token, full_maxes()).await;
     let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
-    log_a_session(&server, &token, enrollment).await;
+    log_a_recent_session(&server, &token, enrollment).await;
 
     let view = progress(&server, &token).await;
     let unit = |key: &str| {
@@ -2970,7 +3013,7 @@ async fn another_athletes_progress_is_not_in_mine(pool: PgPool) {
     let mine = register(&server, EMAIL).await;
     set_maxes(&server, &mine, full_maxes()).await;
     let enrollment = enrol(&server, &mine, "wendler-531-bbb").await;
-    log_a_session(&server, &mine, enrollment).await;
+    log_a_recent_session(&server, &mine, enrollment).await;
 
     let theirs = register(&server, "rival@example.com").await;
 
@@ -3003,7 +3046,7 @@ async fn another_athletes_progress_is_not_in_mine(pool: PgPool) {
 /// The asymmetry D-13's second question is asked in: what the program wanted,
 /// against what was actually moved.
 ///
-/// `load_prescribed_kg` counts every set the session prescribed, including one
+/// `load_planned_kg` counts every set the session prescribed, including one
 /// the athlete skipped; `load_moved_kg` counts only what was performed. Making
 /// both sides count the same sets would mean skipping work and still reading as
 /// perfect compliance, which is the one thing this pair exists to catch.
@@ -3049,14 +3092,19 @@ async fn the_prescribed_load_counts_a_skipped_set_and_the_moved_load_does_not(po
         })
         .collect();
 
+    // `/v1/progress` windows to the last twelve months measured from `now()`;
+    // this test's own literal date cannot be the fixture's fixed day (see
+    // `log_a_recent_session`), so it is computed here instead.
+    let now = chrono::Utc::now();
+
     server
         .post("/v1/workouts")
         .authorization_bearer(&token)
         .json(&json!({
             "id": Uuid::now_v7(),
             "enrollment_id": enrollment,
-            "started_at": "2026-07-26T09:00:00Z",
-            "ended_at": "2026-07-26T10:00:00Z",
+            "started_at": now.to_rfc3339(),
+            "ended_at": (now + chrono::Duration::hours(1)).to_rfc3339(),
             "outcome": "completed",
             "sets": sets,
         }))
@@ -3070,13 +3118,13 @@ async fn the_prescribed_load_counts_a_skipped_set_and_the_moved_load_does_not(po
     let left_out = volume(&prescribed[SKIPPED]);
 
     assert!(left_out > 0.0, "the skipped set has to be worth something");
-    assert_eq!(figures["load_prescribed_kg"].as_f64(), Some(asked_for));
+    assert_eq!(figures["load_planned_kg"].as_f64(), Some(asked_for));
     assert_eq!(
         figures["load_moved_kg"].as_f64(),
         Some(asked_for - left_out)
     );
     assert!(
-        figures["load_moved_kg"].as_f64() < figures["load_prescribed_kg"].as_f64(),
+        figures["load_moved_kg"].as_f64() < figures["load_planned_kg"].as_f64(),
         "a skipped set has to show as a shortfall, or the figures say nothing"
     );
 }
@@ -3117,6 +3165,13 @@ async fn a_set_lifted_at_no_weight_earns_no_record(pool: PgPool) {
         "actual_reps": 15,
         "status": "done",
     }));
+
+    // `/v1/progress` windows to the last twelve months measured from `now()`;
+    // the fixture's fixed date cannot move (see `log_a_recent_session`), so this
+    // overrides it the same way that helper does.
+    let now = chrono::Utc::now();
+    body["started_at"] = json!(now.to_rfc3339());
+    body["ended_at"] = json!((now + chrono::Duration::hours(1)).to_rfc3339());
 
     server
         .post("/v1/workouts")
