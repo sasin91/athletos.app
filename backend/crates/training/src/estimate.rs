@@ -40,10 +40,13 @@
 
 /// The most reps an estimate will be taken from.
 ///
-/// Ten. Every program in the catalogue prescribes within it — 5/3/1's Boring
-/// But Big sets of ten are the ceiling exactly, and its AMRAP top sets are
-/// where estimates will actually come from. Beyond ten, the formula is
-/// describing muscular endurance and reporting it as a single.
+/// Ten. Every program's fixed-rep sets in the catalogue prescribe within it —
+/// 5/3/1's Boring But Big sets of ten are the ceiling exactly. Its AMRAP top
+/// sets are the opposite case, not an example of this working well: the whole
+/// point of AMRAP is reps left unconstrained, so those are the sets most
+/// likely to land past ten and contribute no estimate at all, not the sets
+/// estimates will reliably come from. Beyond ten, the formula is describing
+/// muscular endurance and reporting it as a single.
 ///
 /// It also keeps Brzycki's pole at 37 reps more than three times out of reach,
 /// which is what makes that formula's one flaw irrelevant here.

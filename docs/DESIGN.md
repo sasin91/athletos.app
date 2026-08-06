@@ -1827,6 +1827,31 @@ ever pull the schema away from that, the chart gets its own table back.
   both — is a design decision and is deliberately not taken here. Nothing is
   changed until it is.
 
+- **The rep ceiling makes the trend fall on the athlete's best day.** 5/3/1
+  week 1 prescribes 65/75/85% with the last set AMRAP. Ten reps at 85% gives
+  an estimate of `0.85 × 36/27 = 1.133 × TM` — the headline of the session.
+  **Eleven** reps at 85%, one more than that and nothing else different, is
+  above `ESTIMATE_REP_CEILING` and contributes no estimate at all, so the best
+  *surviving* set of the same session is the second one, 75% for five:
+  `0.75 × 36/32 = 0.844 × TM`. The trend line drops about 26% because the
+  athlete did one rep *more* — and the screen renders drift reasons on
+  downward moves (`TrendPoint.reasons`), which invites an explanation for a
+  number that is an artifact of the estimator, not a fact about the athlete's
+  training. The code matches the spec exactly here; this is a hole in the
+  design, not a defect in the build, and it should be settled before the
+  progress screen is built, since the screen is what makes it visible.
+  Candidates, none chosen: raise `ESTIMATE_REP_CEILING`; cap reps at the
+  ceiling instead of refusing past it, which understates the estimate and is
+  therefore safe in this product's direction (D-01); or keep the refusal and
+  have the screen itself mark a session whose top set was unreadable, rather
+  than silently falling back to a lighter one. `estimate.rs`'s own module
+  documentation argued the opposite of this — that BBB's "AMRAP top sets are
+  where estimates will actually come from" — which is backwards: an AMRAP set
+  is exactly the set most likely to exceed the ceiling, since the whole point
+  of AMRAP is reps left unconstrained. That sentence has been corrected in the
+  module doc; recorded here because the design question it was covering for is
+  still open.
+
 - **Second-user readiness.** Password reset (D-02) is the first thing that
   must exist before anyone but the author signs up.
 
