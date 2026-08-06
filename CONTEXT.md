@@ -18,6 +18,12 @@ A one-rep max the athlete typed in, for one lift. Evidence of what they can do,
 and the only weight number they own.
 _Avoid_: Max (ambiguous — see Training max), PR, personal best
 
+**Estimate**:
+The one-rep max a set that was actually performed implies. Evidence of
+capability, computed rather than entered. Distinct from the Entered 1RM, which
+the athlete owns and types, and which never appears on the progress screen.
+_Avoid_: Estimated 1RM, e1RM in prose
+
 **Training max**:
 The number a program actually prescribes from, derived by that program from the
 Entered 1RM. It belongs to the program, moves on its own, and cannot be edited.
@@ -152,6 +158,14 @@ The last Set logged to the end of the session. The counterpart to Lead-in.
 **Time spent**:
 Intervals aggregated by exercise, plus the Lead-in and the Tail — where an
 hour actually went. Answers "which lift is eating my session".
+
+**Load**:
+Kilograms moved: sets times reps times weight, over work actually done.
+
+**Best**:
+The heaviest weight lifted for at least a given number of reps. An observed
+fact, never an estimate.
+_Avoid_: PR, personal best, rep max
 
 ## Not in this language
 

@@ -1064,6 +1064,35 @@ reuses the TypeScript OpenAPI client, the domain types, and shared logic such
 as e1RM formulas and unit conversion. Flutter means a second generated client
 and duplicated rules. Decide when the Health requirement is concrete.
 
+> **Corrected while building the e1RM.** The paragraph above offers "e1RM
+> formulas" as an example of TypeScript a second client would reuse, which
+> contradicts this decision's own *"All business logic and authorization live in
+> Rust."* The rule wins; the example was written before the formula existed and
+> before there was a second client to reason about. An e1RM computed on a client
+> is a number the API cannot stand behind and a rule the next client
+> reimplements. The other half of the example survives intact — unit conversion
+> is a UI change by D-04's own account, which is exactly why it belongs in the
+> shared TypeScript and the formula does not.
+>
+> The formula is **Brzycki**, `weight × 36 / (37 − reps)`, in `athletos-training`
+> (D-15) and nowhere else. It was chosen over Epley, `weight × (1 + reps / 30)`,
+> on one property: Brzycki returns the weight itself for a single — `36 / 36` —
+> where Epley returns 31/30 of it, so a 140 kg single reports as 144.7 and the
+> estimate has invented 4.7 kg of evidence about a set that was actually
+> performed. On a screen built for an athlete who over-reaches (D-01), that is
+> the direction to be wrong in. Brzycki is the more conservative of the two
+> everywhere below ten reps and the two agree exactly at ten.
+>
+> Its cost is a pole at 37 reps, where the denominator reaches zero and the
+> estimate goes negative past it — a formula that has to be guarded rather than
+> one that degrades. What guards it is the rep ceiling of **ten**, which is a
+> rule and not input validation: a set above it contributes no estimate at all
+> rather than a clamped one, the same instinct as `timing.rs` discarding an
+> interval it cannot believe. That puts the pole more than three times out of
+> reach, so the one argument against Brzycki is unreachable here — but it is the
+> ceiling doing that and not the formula, and a later reader who raises the
+> ceiling past 37 gets negative kilograms.
+
 ---
 
 ## D-12 · API versioning
@@ -1096,6 +1125,105 @@ and for an athlete who already goes too heavy, motivation is accelerant.
 **Progress is never shown without its cost.**
 
 The reference writes a `lift_records` table that nothing reads back.
+
+> **Amended while building the endpoint behind the screen it refused.** The
+> sentence at the top reads *"Three things, and no dashboard"*, and the three
+> words after the comma no longer hold: `GET /v1/progress` exists, and it
+> returns the whole of a dashboard in one round trip. Everything before the
+> comma survives unchanged. This is a narrow reversal, but it is a reversal, and
+> it is named here rather than left for a reader to find as a contradiction
+> between this document and the product.
+>
+> **What was refused was a grid of whatever happens to be countable, sitting on
+> the screen the athlete opens**, and that is still refused. The screen this
+> serves is one tap from Train and navigated to on purpose, and it carries
+> exactly the three things above — e1RM trend, drift, session duration — plus a
+> table of bests this decision did not ask for and which is answered below. The
+> placement is D-01 applied rather than D-01 changed: a rising line on the
+> screen where the athlete decides how heavy to go today is the one position
+> this decision's own *motivation is accelerant* argument forbids, so the chart
+> is not there. A dashboard the athlete has to choose to look at is a different
+> object from the one the last three words were written against.
+>
+> **The rule underneath survived contact, and it is the sentence worth keeping.**
+> *Progress is never shown without its cost.* The drift band shares the trend's
+> x-axis and sits directly beneath it, so the eye crosses it on the way down the
+> page — not a tab, not a tap, not a second screen. A rule about not showing
+> progress without its cost is kept by layout or it is not kept at all; moving
+> the cost one interaction away satisfies the words and loses the decision. The
+> figure beside it — *"Over on 23 of 180 sets in this block"* — is on the same
+> screen for the same reason.
+>
+> **The bests grid walks straight into the other sentence**, so it is answered
+> rather than sidestepped: *"The reference writes a `lift_records` table that
+> nothing reads back."* The grid is the same idea and the opposite
+> construction. Nothing is written — no detection at submit, no writer, no
+> backfill, and this change carries no migration. Each cell is a query for the
+> heaviest `done` set whose actual reps reach that cell, over the same
+> `workout_sets` rows the logger already wrote and never updates, and the grid
+> exists because a screen renders it. *At least* that many reps rather than
+> exactly, so every cell is still a set that happened and the grid cannot show a
+> 3-rep best below a 5-rep one; gaps are never filled with the estimate, because
+> a records table that mixes what was done with what a formula implies stops
+> meaning anything. The scar recorded above is a write with no reader, not the
+> concept of a record.
+>
+> **What it costs, stated rather than glossed.** Every figure on this screen is
+> recomputed on every request, and the derivation is the definition. So there is
+> no record of what a number was once believed to be: revise the estimate's
+> formula or its rep ceiling and a year of history redraws under the new rule,
+> with nothing marking where the old one stopped. That is the only behaviour a
+> trend line can honestly have — a chart quietly mixing points computed under
+> two formulas has a slope that is partly an artifact — but it does mean the
+> numbers here have no past tense, and a screenshot taken last month cannot be
+> reproduced. Adding a metric is a deploy rather than a row. And every load does
+> real work that the indexes have to cover.
+>
+> A `performance_indicators` table written at submit was evaluated and declined.
+> It earns its keep when aggregation is expensive, when the inputs will not be
+> available later, when the number is contractual, when definitions vary by
+> tenant or version, or when the metric set is open-ended. This codebase meets
+> one of the five — the training max's input is the opaque `State`, which keeps
+> only the latest fold (D-19) — and `enrollment_advances` already covers it.
+> Everything else derives from `workout_sets`, and a year of training is roughly
+> two hundred workouts and six thousand set rows: an indexed aggregate, not a
+> scan. D-16 sized this box by measurement rather than estimate, and caching
+> before measuring is the same instinct in reverse. The asymmetry is what
+> settles it — deriving first costs nothing later, since the derivation is the
+> definition a cache would eventually be built from, while materialising first
+> and then revising a formula means reconciling a table against a rule that has
+> moved, with no marker for where.
+>
+> **Two things the build settled that the design predates.** The response type
+> is named **`AthleteProgress`** on the wire while keeping its Rust name: the
+> shipped `enrollments::ProgressView` — sessions completed out of a block —
+> already owns that component name, and utoipa overwrites a collision silently
+> rather than failing, which would have left the generated TypeScript describing
+> this screen wherever an enrolment's `progress` field is read. D-12 forbids
+> changing what an existing `/v1` field means, so the older name stays with the
+> older type. This renames a schema, not a field.
+>
+> And the training max on the trend comes from `program.readout(&state_before)`
+> against `enrollment_advances`, which D-19 records to audit the fold and for no
+> other purpose. That table's second use is a caution as much as a convenience
+> and D-19 already says so — *"a table justified by one purpose acquiring a
+> second is how tables end up serving neither"*, and the guard is that nothing
+> about that schema bends toward this chart. The line therefore starts where the
+> advances start — sessions logged before that table existed have no
+> `state_before` and never will, so the chart draws a gap rather than a zero,
+> the same shape as `logged_at` in D-10 and honest for the same reason.
+>
+> **No celebration, and that is an instruction rather than an inference.** No
+> detection at submit, no notification, no badge, no marker on a cell that was
+> set recently. D-01 would get there on its own, and the argument lands on the
+> *moment* rather than on the data: a table consulted deliberately is a
+> reference, and a congratulation arriving while the athlete decides how heavy
+> to go is accelerant. But the rule was not derived. Asked directly whether
+> records should be celebrated, the athlete this product is built for said: *no
+> celebratory stuff, just the facts and data.* It is recorded with the person
+> attached because a rule with somebody behind it survives a redesign, and one
+> derived from principles gets re-derived the other way by the next reader who
+> wants a badge.
 
 ---
 
