@@ -576,12 +576,12 @@ describe('a weight edit carries through the exercise', () => {
 	});
 });
 
-	describe('a weight edit carries through one prescription run', () => {
-		it('copies the exact weight only through the equal-prescription run', () => {
-			const edited = editSet(bbbFixture(), 0, { weight: 95 });
-			expect(edited.sets.map((set) => set.actualWeight)).toEqual([95, 95, 50, 50]);
-		});
+describe('a weight edit carries through one prescription run', () => {
+	it('copies the exact weight only through the equal-prescription run', () => {
+		const edited = editSet(bbbFixture(), 0, { weight: 95 });
+		expect(edited.sets.map((set) => set.actualWeight)).toEqual([95, 95, 50, 50]);
 	});
+});
 
 describe('the reason for a drift', () => {
 	it('an answered target keeps its reason local', () => {
@@ -597,7 +597,10 @@ describe('the reason for a drift', () => {
 		const reasoned = setDriftReason(edited, 0, 'too_easy');
 
 		expect(reasoned.sets.map((set) => set.driftReason)).toEqual([
-			'too_easy', 'too_easy', null, null
+			'too_easy',
+			'too_easy',
+			null,
+			null
 		]);
 	});
 

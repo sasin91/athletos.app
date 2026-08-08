@@ -56,8 +56,9 @@ use athletos_training::{
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
 use crate::report::{self, ReportedSet, SessionReport};
-use crate::routes::enrollments::{unknown_program, ProgressView};
+use crate::routes::enrollments::ProgressView;
 use crate::routes::maxes::MAX_WEIGHT_KG;
+use crate::routes::programs::resolve_stored_program;
 use crate::state::AppState;
 use crate::timing::{self, SessionTiming, TimedSet};
 
@@ -432,7 +433,7 @@ pub async fn submit(
         return Err(ApiError::NotFound);
     };
 
-    let program = unknown_program(&program_key)?;
+    let program = resolve_stored_program(&program_key)?;
     let program_state = ProgramState::from_json(stored_state);
 
     // The session the enrolment is currently pointing at, which is the one the

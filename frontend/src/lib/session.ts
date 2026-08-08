@@ -310,9 +310,9 @@ export function editSet(
 	position: number,
 	values: { weight?: number; reps?: number }
 ): LocalSession {
-	const target = session.sets.find((set) => set.position === position);
-	if (!target) return session;
 	const targetIndex = session.sets.findIndex((set) => set.position === position);
+	if (targetIndex === -1) return session;
+	const target = session.sets[targetIndex];
 
 	const edited = replace(session, position, (set) => {
 		const actualWeight = values.weight ?? set.actualWeight;
@@ -332,8 +332,7 @@ export function editSet(
 	return {
 		...edited,
 		sets: edited.sets.map((set, index) => {
-			const carries =
-				index > targetIndex && index < runEnd && set.status === 'pending';
+			const carries = index > targetIndex && index < runEnd && set.status === 'pending';
 
 			if (!carries) return set;
 

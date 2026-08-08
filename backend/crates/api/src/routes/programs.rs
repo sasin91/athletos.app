@@ -30,6 +30,22 @@ use athletos_training::{programs, Equipment, Experience, Length, ProgramMeta, Re
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
 
+/// Resolves a stored `program_key` back to compiled code.
+///
+/// An internal error rather than a 404: the key was written by this server from
+/// the registry, so a missing program means code was deleted out from under a
+/// stored enrolment. Request-supplied catalogue keys use the handlers' normal
+/// 404 path instead.
+pub(crate) fn resolve_stored_program(
+    key: &str,
+) -> ApiResult<&'static dyn athletos_training::Program> {
+    programs::find(key).ok_or_else(|| {
+        ApiError::Internal(format!(
+            "enrolment names program {key}, which is not in the registry"
+        ))
+    })
+}
+
 /// Everything an athlete needs in order to judge whether a program fits.
 ///
 /// There is no fit score and no ranking (D-01). `recovery_demand` and

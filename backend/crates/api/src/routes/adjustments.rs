@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
-use crate::routes::enrollments::unknown_program;
+use crate::routes::programs::resolve_stored_program;
 use crate::state::AppState;
 
 /// The complete adjustment document supplied by a client.
@@ -135,7 +135,7 @@ pub async fn replace(
         )));
     }
 
-    let program = unknown_program(&program_key)?;
+    let program = resolve_stored_program(&program_key)?;
     let allowed = program.meta().weighted_exercises;
     let normalized = validate_and_normalize(&body.adjustments, allowed)?;
     let exercises: Vec<String> = normalized.keys().cloned().collect();

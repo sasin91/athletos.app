@@ -157,6 +157,37 @@ describe('Train page load', () => {
 });
 
 describe('Train page SSR', () => {
+	it('scopes each active enrollment adjustment form to that enrollment', () => {
+		const second = {
+			...enrollment,
+			id: '019f9fbf-ab32-7c52-90ee-02b7f3092243',
+			program_name: 'Second active program'
+		};
+		const active = [
+			{
+				...enrollment,
+				weighted_exercises: [{ exercise: 'squat', label: 'Squat' }]
+			},
+			{
+				...second,
+				weighted_exercises: [{ exercise: 'bench', label: 'Bench Press' }]
+			}
+		];
+		const body = render(Page, {
+			props: {
+				data: { enrollments: active, progress: null, requestedLift: null },
+				form: null
+			}
+		}).body;
+		const forms = body.match(/<form\b[^>]*>[\s\S]*?<\/form>/g) ?? [];
+
+		expect(forms).toHaveLength(2);
+		expect(forms[0]).toContain(`name="enrollment_id" value="${enrollment.id}"`);
+		expect(forms[0]).not.toContain(second.id);
+		expect(forms[1]).toContain(`name="enrollment_id" value="${second.id}"`);
+		expect(forms[1]).not.toContain(enrollment.id);
+	});
+
 	it('keeps training usable when statistics are unavailable', () => {
 		const body = render(Page, {
 			props: {

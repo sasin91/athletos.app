@@ -1,8 +1,10 @@
 //! What a program prescribes, and what came back from the gym.
 //!
-//! Everything in this module is a pure `serde` type with no behaviour and no
-//! formatting (D-03). In particular there is no `label` field anywhere: the
-//! reference builds `'%d x %d @ %.1fkg'` inside `Lift`'s constructor, which
+//! The session shapes are pure `serde` data, with narrowly scoped load-adjustment
+//! behaviour that preserves those shapes and the engine's loading rules (D-03,
+//! D-04). Formatting still does not live here. In particular there is no
+//! `label` field anywhere: the reference builds `'%d x %d @ %.1fkg'` inside
+//! `Lift`'s constructor, which
 //! bakes a unit, a decimal precision and an English word order into the domain
 //! and makes the type unusable for anyone who wants pounds, another language,
 //! or a table cell. Weights are bare numbers. Formatting happens at the UI edge.
