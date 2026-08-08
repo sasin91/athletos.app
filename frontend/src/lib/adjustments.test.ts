@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	adjustmentRows,
+	historicalAdjustmentRows,
 	isAdjustmentValidationFailure,
 	serializeAdjustments,
 	type WeightedExercise
@@ -24,6 +25,22 @@ describe('adjustmentRows', () => {
 		expect(adjustmentRows(weighted, { squat: -10, 'barbell-row': 15 })).toEqual([
 			{ exercise: 'squat', label: 'Squat', value: -10 },
 			{ exercise: 'bench-press', label: 'Bench press', value: 0 }
+		]);
+	});
+});
+
+describe('historicalAdjustmentRows', () => {
+	it('keeps stored adjustments when program metadata is unavailable', () => {
+		expect(historicalAdjustmentRows(null, { squat: -10, 'barbell-row': 15 })).toEqual([
+			{ exercise: 'barbell-row', label: 'barbell-row', value: 15 },
+			{ exercise: 'squat', label: 'squat', value: -10 }
+		]);
+	});
+
+	it('labels known exercises without dropping stored keys absent from current metadata', () => {
+		expect(historicalAdjustmentRows(weighted, { squat: -10, 'barbell-row': 15 })).toEqual([
+			{ exercise: 'squat', label: 'Squat', value: -10 },
+			{ exercise: 'barbell-row', label: 'barbell-row', value: 15 }
 		]);
 	});
 });

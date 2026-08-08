@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 
 import {
 	isAdjustmentValidationFailure,
@@ -6,7 +6,13 @@ import {
 	type RawAdjustment
 } from '$lib/adjustments';
 import { problemDetail, unwrap } from '$lib/server/api';
+import { optionalRequest, type OptionalRequestResult } from '$lib/server/optional-request';
 import type { Actions, PageServerLoad } from './$types';
+
+function optionalData<T>(result: OptionalRequestResult<T>): T | null {
+	if (result.state === 'unauthenticated') redirect(303, '/login');
+	return result.state === 'available' ? result.data : null;
+}
 
 /**
  * What the athlete is running, current program first.
@@ -17,26 +23,30 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals }) => {
 	const [enrollmentResult, programResult] = await Promise.all([
 		locals.api.GET('/v1/enrollments', {}),
-		locals.api.GET('/v1/programs', {})
+		optionalRequest(() => locals.api.GET('/v1/programs', {}))
 	]);
 	const enrollments = unwrap(enrollmentResult, 'Could not load your programs.');
+	const programDocument = optionalData(programResult);
 	const programs = new Map(
-		(programResult.data?.programs ?? []).map((program) => [program.key, program])
+		(programDocument?.programs ?? []).map((program) => [program.key, program])
 	);
 
 	const adjustmentResults = await Promise.all(
 		enrollments.enrollments.map((enrollment) =>
-			locals.api.GET('/v1/enrollments/{id}/exercise-adjustments', {
-				params: { path: { id: enrollment.id } }
-			})
+			optionalRequest(() =>
+				locals.api.GET('/v1/enrollments/{id}/exercise-adjustments', {
+					params: { path: { id: enrollment.id } }
+				})
+			)
 		)
 	);
+	const adjustmentDocuments = adjustmentResults.map(optionalData);
 
 	return {
 		enrollments: enrollments.enrollments.map((enrollment, index) => ({
 			...enrollment,
 			weighted_exercises: programs.get(enrollment.program_key)?.weighted_exercises ?? null,
-			adjustments: adjustmentResults[index].data?.adjustments ?? null
+			adjustments: adjustmentDocuments[index]?.adjustments ?? null
 		}))
 	};
 };

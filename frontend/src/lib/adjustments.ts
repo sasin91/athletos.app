@@ -35,6 +35,34 @@ export function adjustmentRows(
 }
 
 /**
+ * Reconstruct a closed enrollment's sparse document without depending on the
+ * current program catalogue. Known keys receive their current labels; stored
+ * keys no longer present in metadata remain visible under their own key.
+ */
+export function historicalAdjustmentRows(
+	weighted: readonly WeightedExercise[] | null,
+	adjustments: Readonly<Record<string, number>>
+): AdjustmentRow[] {
+	const labels = new Map((weighted ?? []).map(({ exercise, label }) => [exercise, label]));
+	const order = new Map((weighted ?? []).map(({ exercise }, index) => [exercise, index]));
+
+	return Object.entries(adjustments)
+		.sort(([left], [right]) => {
+			const leftOrder = order.get(left);
+			const rightOrder = order.get(right);
+			if (leftOrder !== undefined && rightOrder !== undefined) return leftOrder - rightOrder;
+			if (leftOrder !== undefined) return -1;
+			if (rightOrder !== undefined) return 1;
+			return left.localeCompare(right);
+		})
+		.map(([exercise, value]) => ({
+			exercise,
+			label: labels.get(exercise) ?? exercise,
+			value
+		}));
+}
+
+/**
  * Convert the form's text fields into the API's sparse, full-replacement document.
  *
  * Successful validation deliberately returns the document itself. Invalid input

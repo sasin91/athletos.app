@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { adjustmentRows } from '$lib/adjustments';
+	import { adjustmentRows, historicalAdjustmentRows } from '$lib/adjustments';
 	import { loadActiveSession } from '$lib/storage';
 	import type { LocalSession } from '$lib/session';
 	import type { ActionData, PageData } from './$types';
@@ -45,6 +45,10 @@
 
 	function inputKey(enrollmentId: string, exercise: string): string {
 		return `${enrollmentId}:${exercise}`;
+	}
+
+	function inputId(enrollmentId: string, exercise: string): string {
+		return `adjustment-${enrollmentId}-${exercise}`;
 	}
 
 	function isLarge(enrollmentId: string, exercise: string, raw: string): boolean {
@@ -127,11 +131,9 @@
 							{#each rows as row (row.exercise)}
 								{@const raw = rawValue(enrollment.id, row.exercise, row.value)}
 								{@const error = state?.errors?.[row.exercise]}
+								{@const id = inputId(enrollment.id, row.exercise)}
 								<div>
-									<label
-										class="mb-1 block text-sm font-medium"
-										for={`${enrollment.id}-${row.exercise}`}
-									>
+									<label class="mb-1 block text-sm font-medium" for={id}>
 										{row.label}
 									</label>
 									<div class="flex items-center gap-2">
@@ -139,7 +141,7 @@
 											class="flex items-center rounded-field border border-base-300 bg-base-200 focus-within:border-base-content"
 										>
 											<input
-												id={`${enrollment.id}-${row.exercise}`}
+												{id}
 												name={`adjustment:${row.exercise}`}
 												type="number"
 												inputmode="numeric"
@@ -149,21 +151,23 @@
 												value={raw}
 												oninput={(event) => updateWarning(event, enrollment.id, row.exercise)}
 												aria-invalid={error ? 'true' : undefined}
+												aria-describedby={error ? `${id}-unit ${id}-error` : `${id}-unit`}
 												class="input w-20 border-0 bg-transparent text-right tabular focus:outline-none"
 											/>
-											<span class="pr-3 text-sm opacity-60">%</span>
+											<span id={`${id}-unit`} class="pr-3 text-sm opacity-60">%</span>
 										</span>
 										<button
 											type="button"
 											class="btn btn-ghost btn-sm"
 											onclick={(event) => resetToZero(event, enrollment.id, row.exercise)}
+											aria-label={`Reset ${row.label} adjustment`}
 										>
 											Reset
 										</button>
 									</div>
 
 									{#if error}
-										<p class="mt-1 text-xs text-error">{error}</p>
+										<p id={`${id}-error`} class="mt-1 text-xs text-error">{error}</p>
 									{/if}
 									{#if isLarge(enrollment.id, row.exercise, raw)}
 										<p class="mt-1 text-xs text-warning">
@@ -196,11 +200,13 @@
 				<details class="mt-2 border-t border-base-300 pt-2">
 					<summary class="cursor-pointer font-medium">Exercise adjustments</summary>
 
-					{#if enrollment.weighted_exercises === null || enrollment.adjustments === null}
+					{#if enrollment.adjustments === null}
 						<p class="mt-2 opacity-70">Adjustments unavailable.</p>
 					{:else}
-						{@const rows = adjustmentRows(enrollment.weighted_exercises, enrollment.adjustments)}
-						{@const changed = rows.filter((row) => row.value !== 0)}
+						{@const changed = historicalAdjustmentRows(
+							enrollment.weighted_exercises,
+							enrollment.adjustments
+						).filter((row) => row.value !== 0)}
 						{#if changed.length === 0}
 							<p class="mt-2 opacity-70">No exercise adjustments.</p>
 						{:else}
