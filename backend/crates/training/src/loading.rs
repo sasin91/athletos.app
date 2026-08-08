@@ -108,6 +108,17 @@ impl Loading {
     }
 }
 
+/// Applies an enrollment adjustment to a generated load and rebuilds it through
+/// the exercise's loading model.
+///
+/// The percentage applies to the already-generated prescription, not to a
+/// training max or other program input. Re-entering through [`Loading::round_down`]
+/// is what keeps the result loadable and rebuilds a barbell's plate breakdown.
+pub fn adjusted_load(load: &Load, loading: Loading, percent: i16) -> Load {
+    let target = load.weight * (1.0 + f64::from(percent) / 100.0);
+    loading.round_down(target)
+}
+
 /// The greedy walk shared by [`break_down`] and [`fill`]: plates placed
 /// largest-first and capped at `ceiling`, plus whatever was left over.
 ///

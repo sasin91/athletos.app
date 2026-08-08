@@ -43,6 +43,12 @@ pub struct ProgramMeta {
     /// and `start()` must fail naming that key, and the ones declared must be
     /// enough on their own.
     pub required_maxes: &'static [&'static str],
+    /// Every non-bodyweight exercise this program can prescribe.
+    ///
+    /// This is intentionally independent of [`Self::required_maxes`]: an
+    /// adjustment applies to generated session loads, including accessories
+    /// whose percentage is derived from another exercise's max.
+    pub weighted_exercises: &'static [&'static str],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
