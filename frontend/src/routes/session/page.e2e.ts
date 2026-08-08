@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { LocalSession, LocalSet, PlateChange, WorkoutReceipt } from '$lib/session';
+import type {
+	LocalSession,
+	LocalSet,
+	PlateChange,
+	WorkoutReceipt,
+	WorkoutSubmission
+} from '$lib/session';
 
 /**
  * The logger reads a committed session out of IndexedDB and never touches the
@@ -363,6 +369,31 @@ test('ending early still offers the ordered reason choices while a set is pendin
 		'Done enough'
 	]);
 	await expect(page.getByRole('button', { name: 'Keep going' })).toBeVisible();
+});
+
+test('answering the final set after opening early ending submits a completed session', async ({
+	page
+}) => {
+	let submitted: WorkoutSubmission | null = null;
+
+	await seedSession(page, session([set()]));
+	await page.route('/api/workouts', async (route) => {
+		submitted = route.request().postDataJSON() as WorkoutSubmission;
+		await route.fulfill({ status: 201, json: completionReceipt() });
+	});
+	await page.goto('/session');
+
+	await page.getByRole('button', { name: 'End session early' }).click();
+	await page.getByRole('button', { name: 'Log', exact: true }).click();
+
+	await expect(page.getByText('Why are you stopping?', { exact: true })).not.toBeVisible();
+	await expect(page.getByRole('button', { name: 'Finish session' })).toBeVisible();
+
+	await page.getByRole('button', { name: 'Finish session' }).click();
+	await expect(page.getByRole('heading', { name: 'Session complete' })).toBeVisible();
+	// The intercepted BFF response leaves the logger and queue path real; this
+	// is the body that would be persisted and sent, not a mock call assertion.
+	expect(submitted).toMatchObject({ outcome: 'completed', cut_reason: null });
 });
 
 test('logging a set takes one click, whether or not a drift reason was chosen', async ({

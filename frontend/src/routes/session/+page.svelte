@@ -684,7 +684,7 @@
 		</main>
 
 		<footer class="sticky bottom-0 border-t bg-base-100 p-3">
-			{#if phase === 'ending'}
+			{#if phase === 'ending' && !isComplete(session)}
 				<!--
 					The one question, asked once, when a session ends before the
 					last set (D-08). The program advances whatever the answer is —
