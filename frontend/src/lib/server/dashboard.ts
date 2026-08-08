@@ -1,5 +1,7 @@
 import type { ProgressView } from '$lib/dashboard';
-import { unwrap, type ApiResult } from './api';
+import { redirect } from '@sveltejs/kit';
+import type { ApiResult } from './api';
+import { optionalRequest } from './optional-request';
 
 /**
  * Keep progress optional without weakening the application's authentication
@@ -9,17 +11,7 @@ import { unwrap, type ApiResult } from './api';
 export async function optionalProgress(
 	call: () => Promise<ApiResult<ProgressView>>
 ): Promise<ProgressView | null> {
-	let result: ApiResult<ProgressView>;
-
-	try {
-		result = await call();
-	} catch {
-		return null;
-	}
-
-	if (result.response.status === 401) {
-		return unwrap(result, 'Could not load your statistics.');
-	}
-
-	return result.data ?? null;
+	const result = await optionalRequest(call);
+	if (result.state === 'unauthenticated') redirect(303, '/login');
+	return result.state === 'available' ? result.data : null;
 }

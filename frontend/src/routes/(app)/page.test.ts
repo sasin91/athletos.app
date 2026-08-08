@@ -225,7 +225,7 @@ describe('Train page SSR', () => {
 			`${enrollment.program_name} statistics`,
 			'Overall',
 			'Finished',
-			'Completed program'
+			'Completed program — finished'
 		];
 		for (let index = 1; index < ordered.length; index += 1) {
 			expect(body.indexOf(ordered[index - 1])).toBeGreaterThanOrEqual(0);
@@ -241,7 +241,7 @@ describe('Train page SSR', () => {
 		expect(body).toContain('Load moved');
 	});
 
-	it('omits estimate-change copy and zero-observation statistic blocks', () => {
+	it('keeps an empty statistics block for every enrollment without inventing zeroes', () => {
 		const emptyStatistics: ProgressView = {
 			...observedProgress,
 			lifts: [
@@ -270,7 +270,26 @@ describe('Train page SSR', () => {
 		}).body;
 
 		expect(body).not.toContain('Estimate change');
-		expect(body).not.toContain(`${enrollment.program_name} statistics`);
+		expect(body).toContain(`${enrollment.program_name} statistics`);
+		expect(body).toContain('No observations in this period.');
+		expect(body).not.toContain('Sessions</');
 		expect(body).not.toContain('<summary class="cursor-pointer font-medium">Overall</summary>');
+	});
+
+	it('renders truthful empty statistics when an enrollment is absent from progress programs', () => {
+		const body = render(Page, {
+			props: {
+				data: {
+					enrollments: [enrollment],
+					progress: { ...progress, overall: observedProgress.overall },
+					requestedLift: null
+				},
+				form: null
+			}
+		}).body;
+
+		expect(body).toContain(`${enrollment.program_name} statistics`);
+		expect(body).toContain('No observations in this period.');
+		expect(body).not.toContain('<p class="mt-1 font-medium tabular">0</p>');
 	});
 });

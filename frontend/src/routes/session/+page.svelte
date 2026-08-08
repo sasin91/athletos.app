@@ -136,6 +136,10 @@
 	function formatWeightChange(change: number): string {
 		return `${change > 0 ? '+' : ''}${change} kg`;
 	}
+
+	function weightChangeKey(change: WorkoutReceipt['summary']['weight_changes'][number]): string {
+		return JSON.stringify([change.exercise, change.prescribed_weight, change.actual_weight]);
+	}
 </script>
 
 <svelte:head><title>Session · AthletOS</title></svelte:head>
@@ -195,7 +199,7 @@
 							<dt class="eyebrow">Weight changes</dt>
 							<dd>
 								<ol class="space-y-1">
-									{#each ending.weight_changes as change (change.exercise + change.prescribed_weight + change.actual_weight)}
+									{#each ending.weight_changes as change (weightChangeKey(change))}
 										<li class="grid grid-cols-[1fr_auto] gap-x-3 tabular">
 											<span class="font-medium">{change.label}</span>
 											<span>{change.prescribed_weight} → {change.actual_weight} kg</span>

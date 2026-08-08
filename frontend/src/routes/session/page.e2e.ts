@@ -396,6 +396,36 @@ test('answering the final set after opening early ending submits a completed ses
 	expect(submitted).toMatchObject({ outcome: 'completed', cut_reason: null });
 });
 
+test('completion renders distinct weight changes whose old concatenated keys collide', async ({
+	page
+}) => {
+	const receipt = completionReceipt();
+	receipt.summary.weight_changes = [
+		{
+			exercise: 'same-lift',
+			label: 'Same lift',
+			prescribed_weight: 20,
+			actual_weight: 510,
+			sets: 1
+		},
+		{
+			exercise: 'same-lift',
+			label: 'Same lift',
+			prescribed_weight: 205,
+			actual_weight: 10,
+			sets: 1
+		}
+	];
+
+	await seedSession(page, session([set({ status: 'done', loggedAt: new Date().toISOString() })]));
+	await page.route('/api/workouts', (route) => route.fulfill({ status: 201, json: receipt }));
+	await page.goto('/session');
+	await page.getByRole('button', { name: 'Finish session' }).click();
+
+	await expect(page.getByText('20 → 510 kg', { exact: true })).toBeVisible();
+	await expect(page.getByText('205 → 10 kg', { exact: true })).toBeVisible();
+});
+
 test('logging a set takes one click, whether or not a drift reason was chosen', async ({
 	page
 }) => {
