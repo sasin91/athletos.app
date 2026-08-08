@@ -162,9 +162,9 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
  *
  * Empty or all-whitespace is "no edit", not zero. `Number('')` is `0`, finite
  * and indistinguishable from a typed zero, and this fires on every keystroke:
- * without this check, clearing the field to retype a number applies `delta =
- * -prescribedWeight` and carries a 0 kg to every later pending set of the
- * exercise before the athlete finishes typing the number they meant.
+ * without this check, clearing the field to retype a number carries a 0 kg to
+ * every later pending set of the exercise before the athlete finishes typing
+ * the number they meant.
  *
  * A comma is read as a decimal separator before `Number()` sees it.
  * `Number('142,5')` is `NaN`, and `NaN` used to leave here as `undefined` —
@@ -258,6 +258,21 @@ function replace(
 	};
 }
 
+function prescriptionRunEnd(sets: LocalSet[], targetIndex: number): number {
+	const target = sets[targetIndex];
+	let end = targetIndex + 1;
+
+	while (
+		end < sets.length &&
+		sets[end].exercise === target.exercise &&
+		sets[end].prescribedWeight === target.prescribedWeight
+	) {
+		end += 1;
+	}
+
+	return end;
+}
+
 /**
  * Records what the athlete actually lifted.
  *
@@ -269,21 +284,16 @@ function replace(
  * `pending`. Correcting an already-logged set changes what happened; it must
  * not rewrite the plan for sets not yet performed.
  *
- * What carries is the **difference**, not the weight: `delta = the new weight
- * minus the edited set's own prescription`, applied to each later pending
- * set's *own* prescription and clamped at zero. 5/3/1 BBB prescribes a main
- * lift and its Boring But Big backoff under one `exercise` key at two
- * different percentages (D-04); carrying the raw weight would pre-fill five
- * backoff sets at the main lift's number. Carrying the delta instead means
- * editing set one from 90 to 95 leaves later main-lift sets at their own
- * prescription +5 and the backoff sets at their own prescription +5, and
- * editing back to 90 returns every carried set to exactly its own
- * prescription.
+ * What carries is the **exact edited weight**, but only through the later
+ * pending rows in the same contiguous run of equal exercise and prescription.
+ * 5/3/1 BBB puts its main lift and Boring But Big backoff under one `exercise`
+ * key at different prescriptions (D-04); the prescription boundary prevents
+ * a main-lift edit from pre-filling the backoff rows.
  *
- * The carry stops at the next exercise — which is a different bar, and
- * possibly not even the same bar, the boundary D-04 already draws for the
- * plate chain. Retyping the same correction five times is the app making an
- * honest answer cost more than a dishonest one (D-07).
+ * The carry stops at the next exercise or prescription — which is a different
+ * bar, or a different loading block under the same exercise key. Retyping the
+ * same correction five times is the app making an honest answer cost more than
+ * a dishonest one (D-07).
  *
  * A **rep** edit never carries. It is about that set — an AMRAP that went
  * well, a set cut short at eight — whereas a weight edit is about the bar,
@@ -302,6 +312,7 @@ export function editSet(
 ): LocalSession {
 	const target = session.sets.find((set) => set.position === position);
 	if (!target) return session;
+	const targetIndex = session.sets.findIndex((set) => set.position === position);
 
 	const edited = replace(session, position, (set) => {
 		const actualWeight = values.weight ?? set.actualWeight;
@@ -315,17 +326,18 @@ export function editSet(
 
 	if (values.weight === undefined || target.status !== 'pending') return edited;
 
-	const delta = values.weight - target.prescribedWeight;
+	const runEnd = prescriptionRunEnd(session.sets, targetIndex);
+	const weight = values.weight;
 
 	return {
 		...edited,
-		sets: edited.sets.map((set) => {
+		sets: edited.sets.map((set, index) => {
 			const carries =
-				set.exercise === target.exercise && set.position > position && set.status === 'pending';
+				index > targetIndex && index < runEnd && set.status === 'pending';
 
 			if (!carries) return set;
 
-			const actualWeight = Math.max(0, set.prescribedWeight + delta);
+			const actualWeight = weight;
 			return {
 				...set,
 				actualWeight,
@@ -344,10 +356,9 @@ export function editSet(
  * constraint it refuses one on a pending set with, and a chip tapped on a set
  * that never drifted must not take the whole submission down with it.
  *
- * Carries to the same sets a weight edit carries to — later pending sets of
- * the same exercise — because it is one decision continuing, and recording
- * four of five carried sets as unanswered would misreport it. A set among
- * those whose carried weight happens to land back on its own prescription
+ * Carries to the same bounded run a weight edit carries to — later pending
+ * sets with the same exercise and prescription — because it is one decision
+ * continuing. A set among those whose carried weight is on its prescription
  * gets `null` regardless, since there is nothing left for the reason to be
  * about.
  */
@@ -358,13 +369,15 @@ export function setDriftReason(
 ): LocalSession {
 	const target = session.sets.find((set) => set.position === position);
 	if (!target) return session;
+	const targetIndex = session.sets.findIndex((set) => set.position === position);
+	const runEnd = prescriptionRunEnd(session.sets, targetIndex);
 
 	return {
 		...session,
-		sets: session.sets.map((set) => {
+		sets: session.sets.map((set, index) => {
 			const applies =
-				set.position === position ||
-				(set.exercise === target.exercise && set.position > position && set.status === 'pending');
+				index === targetIndex ||
+				(index > targetIndex && index < runEnd && set.status === 'pending');
 
 			if (!applies) return set;
 
@@ -474,14 +487,11 @@ export function setsDone(session: LocalSession): number {
 }
 
 /**
- * Whether the session can be submitted as `completed`.
- *
- * Anything else has to answer D-08's one question, including a session where
- * every set was *skipped* — skipping is work not done, which is the second axis
- * of drift and not a way to finish early without saying so.
+ * Whether the session can be submitted as `completed`: every set has been
+ * answered, whether it was logged or skipped.
  */
 export function isComplete(session: LocalSession): boolean {
-	return session.sets.every((set) => set.status === 'done');
+	return session.sets.every((set) => set.status !== 'pending');
 }
 
 /** The first set not yet answered — where the logger should be looking. */
