@@ -1371,6 +1371,27 @@
           "abandoned"
         ]
       },
+      "EstimateChange": {
+        "type": "object",
+        "description": "First-to-latest estimated-strength change over the trend window.",
+        "required": [
+          "kg"
+        ],
+        "properties": {
+          "kg": {
+            "type": "number",
+            "format": "double"
+          },
+          "percent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Absent when the first estimate is zero: no finite percentage exists."
+          }
+        }
+      },
       "ExerciseAdjustments": {
         "type": "object",
         "description": "The canonical non-zero adjustments stored for one enrolment.",
@@ -1621,6 +1642,17 @@
             "items": {
               "$ref": "#/components/schemas/Best"
             }
+          },
+          "estimate_change": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EstimateChange",
+                "description": "Change from the first to the latest present estimate in `points`.\nAbsent when fewer than two sessions produced an estimate."
+              }
+            ]
           },
           "exercise": {
             "type": "string",

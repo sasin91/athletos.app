@@ -125,6 +125,7 @@ impl Modify for BearerToken {
         crate::routes::progress::Unit,
         crate::routes::progress::TrendPoint,
         crate::routes::progress::Best,
+        crate::routes::progress::EstimateChange,
         crate::routes::progress::LiftTrend,
         crate::routes::progress::SessionFigures,
         crate::routes::progress::ProgramTotals,

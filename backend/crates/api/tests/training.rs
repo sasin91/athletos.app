@@ -2950,6 +2950,14 @@ async fn progress(server: &TestServer, token: &str) -> serde_json::Value {
         .json()
 }
 
+fn progress_indicator<'a>(list: &'a serde_json::Value, key: &str) -> &'a serde_json::Value {
+    list.as_array()
+        .expect("indicators are a list")
+        .iter()
+        .find(|item| item["key"] == key)
+        .unwrap_or_else(|| panic!("missing {key}"))
+}
+
 #[sqlx::test]
 async fn progress_is_empty_for_an_athlete_who_has_logged_nothing(pool: PgPool) {
     let server = server(pool);
@@ -3141,6 +3149,135 @@ async fn an_indicator_names_the_unit_the_client_must_format_it_in(pool: PgPool) 
 
     assert_eq!(unit("load_moved"), "kg");
     assert_eq!(unit("sessions"), "count");
+}
+
+/// Dashboard aggregates pool the raw answer-to-answer intervals, but each
+/// enrolment still gets only its own samples. A stamped skip is an answer and
+/// therefore closes one interval and opens the next one.
+#[sqlx::test]
+async fn progress_pools_interval_spreads_without_bridging_workouts_or_enrollments(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+
+    let first_enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let second_enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let first_session = next_session(&server, &token, first_enrollment).await;
+    let second_session = next_session(&server, &token, second_enrollment).await;
+
+    let now = chrono::Utc::now();
+    let first_start = now - chrono::Duration::hours(3);
+    let second_start = now - chrono::Duration::hours(1);
+
+    let mut first = logged_as_prescribed(Uuid::now_v7(), first_enrollment, &first_session);
+    first["started_at"] = json!(first_start.to_rfc3339());
+    first["ended_at"] = json!((first_start + chrono::Duration::seconds(3_000)).to_rfc3339());
+
+    let mut second = logged_as_prescribed(Uuid::now_v7(), second_enrollment, &second_session);
+    second["started_at"] = json!(second_start.to_rfc3339());
+    second["ended_at"] = json!((second_start + chrono::Duration::seconds(4_200)).to_rfc3339());
+
+    for (body, start, offsets) in [
+        (&mut first, first_start, [300_i64, 360, 480]),
+        (&mut second, second_start, [300_i64, 390, 540]),
+    ] {
+        let sets = body["sets"]
+            .as_array_mut()
+            .expect("a prescribed session has sets");
+        assert!(sets.len() >= 3, "the fixture needs two measured gaps");
+
+        for (set, offset) in sets.iter_mut().take(3).zip(offsets) {
+            set["logged_at"] = json!((start + chrono::Duration::seconds(offset)).to_rfc3339());
+        }
+
+        // The middle answer is deliberately a skip. Its stamp remains a
+        // boundary: first -> skip and skip -> third are both real intervals.
+        sets[1]["status"] = json!("skipped");
+        sets[1]["actual_weight"] = serde_json::Value::Null;
+        sets[1]["actual_reps"] = serde_json::Value::Null;
+    }
+
+    // Move the second session's main lift enough to make the trend's
+    // first-to-latest estimate change observable on the wire.
+    let main_lift = second["sets"][0]["exercise"]
+        .as_str()
+        .expect("the first set names its lift")
+        .to_owned();
+    for set in second["sets"].as_array_mut().unwrap() {
+        if set["exercise"] == main_lift && set["status"] == "done" {
+            let weight = set["actual_weight"].as_f64().expect("done is loaded");
+            set["actual_weight"] = json!(weight + 10.0);
+        }
+    }
+
+    for body in [&first, &second] {
+        server
+            .post("/v1/workouts")
+            .authorization_bearer(&token)
+            .json(body)
+            .await
+            .assert_status(StatusCode::CREATED);
+    }
+
+    let view = progress(&server, &token).await;
+    let value = |list: &serde_json::Value, key: &str| {
+        progress_indicator(list, key)["value"]
+            .as_f64()
+            .expect("indicator is numeric")
+    };
+
+    let program_for = |enrollment: Uuid| {
+        view["programs"]
+            .as_array()
+            .expect("program totals are a list")
+            .iter()
+            .find(|program| program["enrollment_id"] == enrollment.to_string())
+            .unwrap_or_else(|| panic!("missing enrollment {enrollment}"))
+    };
+
+    let first_indicators = &program_for(first_enrollment)["indicators"];
+    assert_eq!(value(first_indicators, "average_duration"), 3_000.0);
+    assert_eq!(value(first_indicators, "interval_min"), 60.0);
+    assert_eq!(value(first_indicators, "interval_average"), 90.0);
+    assert_eq!(value(first_indicators, "interval_max"), 120.0);
+
+    let second_indicators = &program_for(second_enrollment)["indicators"];
+    assert_eq!(value(second_indicators, "average_duration"), 4_200.0);
+    assert_eq!(value(second_indicators, "interval_min"), 90.0);
+    assert_eq!(value(second_indicators, "interval_average"), 120.0);
+    assert_eq!(value(second_indicators, "interval_max"), 150.0);
+
+    // Four raw samples are pooled: [60, 120] and [90, 150]. There is no
+    // synthetic interval from the end of one workout to the start of the next.
+    assert_eq!(value(&view["overall"], "average_duration"), 3_600.0);
+    assert_eq!(value(&view["overall"], "interval_min"), 60.0);
+    assert_eq!(value(&view["overall"], "interval_average"), 105.0);
+    assert_eq!(value(&view["overall"], "interval_max"), 150.0);
+
+    for key in [
+        "average_duration",
+        "interval_min",
+        "interval_average",
+        "interval_max",
+    ] {
+        assert_eq!(progress_indicator(&view["overall"], key)["unit"], "seconds");
+    }
+
+    let lift = view["lifts"]
+        .as_array()
+        .expect("lifts are a list")
+        .iter()
+        .find(|lift| lift["exercise"] == main_lift)
+        .expect("the main lift has a trend");
+    let points = lift["points"].as_array().expect("points are a list");
+    assert_eq!(points.len(), 2);
+    let first_estimate = points[0]["estimate"].as_f64().expect("estimated");
+    let latest_estimate = points[1]["estimate"].as_f64().expect("estimated");
+    let change = &lift["estimate_change"];
+    let expected_kg = latest_estimate - first_estimate;
+    let expected_percent = expected_kg / first_estimate * 100.0;
+    assert!((change["kg"].as_f64().unwrap() - expected_kg).abs() < f64::EPSILON);
+    assert!((change["percent"].as_f64().unwrap() - expected_percent).abs() < f64::EPSILON);
 }
 
 /// A rival sees an empty screen, and the owner still sees a full one.

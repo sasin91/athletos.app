@@ -128,6 +128,17 @@ pub struct LiftTrend {
     pub label: String,
     pub points: Vec<TrendPoint>,
     pub bests: Vec<Best>,
+    /// Change from the first to the latest present estimate in `points`.
+    /// Absent when fewer than two sessions produced an estimate.
+    pub estimate_change: Option<EstimateChange>,
+}
+
+/// First-to-latest estimated-strength change over the trend window.
+#[derive(Debug, Clone, Serialize, ToSchema, PartialEq)]
+pub struct EstimateChange {
+    pub kg: f64,
+    /// Absent when the first estimate is zero: no finite percentage exists.
+    pub percent: Option<f64>,
 }
 
 /// One session, for the load panel and the drift band.
@@ -249,12 +260,39 @@ pub fn indicators_from(totals: &Totals) -> Vec<Indicator> {
 
     // Omitted rather than zeroed: a median across nothing is not a number, and
     // an absent card is the honest way to say so.
+    if let Some(seconds) = mean(&totals.durations) {
+        indicators.push(indicator(
+            "average_duration",
+            "Average session",
+            seconds,
+            Unit::Seconds,
+        ));
+    }
+
     let mut durations = totals.durations.clone();
     if let Some(seconds) = median(&mut durations) {
         indicators.push(indicator(
             "median_duration",
             "Typical session",
             seconds as f64,
+            Unit::Seconds,
+        ));
+    }
+
+    if let Some(seconds) = totals.intervals.iter().min() {
+        indicators.push(indicator(
+            "interval_min",
+            "Shortest gap between sets",
+            *seconds as f64,
+            Unit::Seconds,
+        ));
+    }
+
+    if let Some(seconds) = mean(&totals.intervals) {
+        indicators.push(indicator(
+            "interval_average",
+            "Average gap between sets",
+            seconds,
             Unit::Seconds,
         ));
     }
@@ -269,7 +307,21 @@ pub fn indicators_from(totals: &Totals) -> Vec<Indicator> {
         ));
     }
 
+    if let Some(seconds) = totals.intervals.iter().max() {
+        indicators.push(indicator(
+            "interval_max",
+            "Longest gap between sets",
+            *seconds as f64,
+            Unit::Seconds,
+        ));
+    }
+
     indicators
+}
+
+/// Arithmetic mean over one raw sample. `None` for no observations.
+pub fn mean(values: &[i64]) -> Option<f64> {
+    (!values.is_empty()).then(|| values.iter().sum::<i64>() as f64 / values.len() as f64)
 }
 
 /// Median, sorting in place. `None` for an empty sample.
@@ -290,6 +342,26 @@ pub fn median(values: &mut [i64]) -> Option<i64> {
         values[middle]
     } else {
         (values[middle - 1] + values[middle]) / 2
+    })
+}
+
+/// First-to-latest present estimate in the chronological point order supplied.
+///
+/// A missing estimate is a gap rather than zero. The percentage is undefined
+/// when the first present estimate is zero, but the kilogram change remains a
+/// useful fact.
+fn estimate_change(points: &[TrendPoint]) -> Option<EstimateChange> {
+    let mut estimates = points.iter().filter_map(|point| point.estimate);
+    let first = estimates.next()?;
+    let mut latest = estimates.next()?;
+
+    for estimate in estimates {
+        latest = estimate;
+    }
+
+    Some(EstimateChange {
+        kg: latest - first,
+        percent: (first != 0.0).then(|| (latest - first) / first * 100.0),
     })
 }
 
@@ -953,13 +1025,19 @@ fn assemble(loaded: Loaded) -> ProgressView {
 
     let lifts = lift_order
         .into_iter()
-        .map(|exercise| LiftTrend {
-            label: exercise::find(&exercise)
-                .map(|found| found.label.to_owned())
-                .unwrap_or_else(|| exercise.clone()),
-            points: points.remove(&exercise).unwrap_or_default(),
-            bests: bests.remove(&exercise).unwrap_or_default(),
-            exercise,
+        .map(|exercise| {
+            let points = points.remove(&exercise).unwrap_or_default();
+            let estimate_change = estimate_change(&points);
+
+            LiftTrend {
+                label: exercise::find(&exercise)
+                    .map(|found| found.label.to_owned())
+                    .unwrap_or_else(|| exercise.clone()),
+                points,
+                bests: bests.remove(&exercise).unwrap_or_default(),
+                estimate_change,
+                exercise,
+            }
         })
         .collect();
 
@@ -982,8 +1060,26 @@ mod tests {
             load_moved_kg: 20_000.0,
             sets_over: 6,
             sets_under: 1,
-            durations: vec![3_600, 3_300, 4_200],
-            intervals: vec![120, 180, 90],
+            durations: vec![3_000, 3_600, 4_200],
+            intervals: vec![60, 90, 120],
+        }
+    }
+
+    fn value<'a>(indicators: &'a [Indicator], key: &str) -> Option<&'a Indicator> {
+        indicators.iter().find(|indicator| indicator.key == key)
+    }
+
+    fn point_at(second: i64, estimate: Option<f64>) -> TrendPoint {
+        TrendPoint {
+            workout_id: Uuid::nil(),
+            at: DateTime::from_timestamp(second, 0).expect("in range"),
+            estimate,
+            training_max: None,
+            training_max_label: None,
+            drift_kg: 0.0,
+            sets_over: 0,
+            sets_under: 0,
+            reasons: Vec::new(),
         }
     }
 
@@ -1018,8 +1114,20 @@ mod tests {
             .map(|indicator| indicator.key.as_str())
             .collect();
 
-        assert!(!keys.contains(&"median_duration"));
-        assert!(!keys.contains(&"median_interval"));
+        for absent in [
+            "average_duration",
+            "median_duration",
+            "interval_min",
+            "interval_average",
+            "median_interval",
+            "interval_max",
+        ] {
+            assert!(!keys.contains(&absent), "unexpected {absent}");
+        }
+
+        for present in ["sessions", "load_moved", "sets_over", "sets_under"] {
+            assert!(keys.contains(&present), "missing {present}");
+        }
     }
 
     #[test]
@@ -1035,11 +1143,67 @@ mod tests {
             "load_moved",
             "sets_over",
             "sets_under",
+            "average_duration",
             "median_duration",
+            "interval_min",
+            "interval_average",
             "median_interval",
+            "interval_max",
         ] {
             assert!(keys.contains(&expected), "missing {expected}");
         }
+    }
+
+    #[test]
+    fn dashboard_indicators_use_the_full_duration_and_interval_samples() {
+        let indicators = indicators_from(&totals());
+
+        for (key, expected) in [
+            ("average_duration", 3_600.0),
+            ("interval_min", 60.0),
+            ("interval_average", 90.0),
+            ("interval_max", 120.0),
+        ] {
+            let indicator = value(&indicators, key).unwrap_or_else(|| panic!("missing {key}"));
+            assert_eq!(indicator.value, expected);
+            assert_eq!(indicator.unit, Unit::Seconds);
+        }
+    }
+
+    #[test]
+    fn estimate_change_needs_two_present_estimates() {
+        assert_eq!(estimate_change(&[]), None);
+        assert_eq!(estimate_change(&[point_at(1, Some(100.0))]), None);
+        assert_eq!(
+            estimate_change(&[point_at(1, Some(100.0)), point_at(2, Some(110.0)),]),
+            Some(EstimateChange {
+                kg: 10.0,
+                percent: Some(10.0),
+            })
+        );
+        assert_eq!(
+            estimate_change(&[point_at(1, Some(0.0)), point_at(2, Some(10.0))])
+                .expect("two estimates")
+                .percent,
+            None
+        );
+    }
+
+    #[test]
+    fn estimate_change_ignores_gaps_and_uses_chronological_endpoints() {
+        assert_eq!(
+            estimate_change(&[
+                point_at(1, None),
+                point_at(2, Some(80.0)),
+                point_at(3, None),
+                point_at(4, Some(100.0)),
+                point_at(5, None),
+            ]),
+            Some(EstimateChange {
+                kg: 20.0,
+                percent: Some(25.0),
+            })
+        );
     }
 
     #[test]
