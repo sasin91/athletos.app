@@ -6,6 +6,7 @@ import {
 	type RawAdjustment
 } from '$lib/adjustments';
 import { problemDetail, unwrap } from '$lib/server/api';
+import { optionalProgress } from '$lib/server/dashboard';
 import { optionalRequest, type OptionalRequestResult } from '$lib/server/optional-request';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -20,9 +21,10 @@ function optionalData<T>(result: OptionalRequestResult<T>): T | null {
  * `GET /v1/enrollments` already orders active enrolments first and already
  * counts progress, so there is nothing to sort or compute here (D-11).
  */
-export const load: PageServerLoad = async ({ locals }) => {
-	const [enrollmentResult, programResult] = await Promise.all([
+export const load: PageServerLoad = async ({ locals, url }) => {
+	const [enrollmentResult, progress, programResult] = await Promise.all([
 		locals.api.GET('/v1/enrollments', {}),
+		optionalProgress(() => locals.api.GET('/v1/progress', {})),
 		optionalRequest(() => locals.api.GET('/v1/programs', {}))
 	]);
 	const enrollments = unwrap(enrollmentResult, 'Could not load your programs.');
@@ -47,7 +49,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			...enrollment,
 			weighted_exercises: programs.get(enrollment.program_key)?.weighted_exercises ?? null,
 			adjustments: adjustmentDocuments[index]?.adjustments ?? null
-		}))
+		})),
+		progress,
+		requestedLift: url.searchParams.get('lift')
 	};
 };
 

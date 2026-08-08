@@ -494,6 +494,14 @@ front of the rack.
 kg only. Stored as bare numbers with kg semantics; no unit is written into any
 domain type, so adding lb later is a UI change rather than a migration.
 
+> **Amended for enrolment-specific exercise adjustments.** An adjustment is a
+> whole signed percentage owned by one enrolment. It multiplies the program's
+> already-generated load exactly once, then the exercise's existing loading
+> model rounds down and rebuilds the plate plan. It does not edit entered
+> maxes, training maxes, progression state, or a session already committed to
+> the phone. The program remains the owner of progression; the adjustment is a
+> bounded preference over a future prescription.
+
 ---
 
 ## D-05 · Program metadata
@@ -706,6 +714,15 @@ Design rule: **honesty must never cost more than dishonesty.**
 > measured against the number that was displayed. If a prescription is reliably
 > light the fault is upstream, in an entered 1RM typed conservatively, and the
 > fix is to correct the number the athlete owns, deliberately, between blocks.
+>
+> **Superseded for within-session carry.** A pending weight edit now copies the
+> exact entered weight only through the contiguous run with the same exercise
+> and the same `prescribed_weight`. A changed prescription or exercise ends the
+> run. Done and skipped rows are never rewritten, although they do not end the
+> run for later pending rows. Reps stay local. An athlete may correct an
+> answered set directly, but that correction belongs only to the addressed set
+> and never propagates. This replaces the delta carry across all later sets of
+> an exercise described above.
 
 ---
 
@@ -862,6 +879,12 @@ just finished lifting; the dashboard is one tap away and will still be there.
 > duplicated here. This screen says what the hour cost and how the intervals
 > inside it were spread; the page built to answer *which lift ate my session*
 > is still one tap away, and that is still the right place for it.
+>
+> **Amended: a skipped set is an answer.** Normal completion now means every
+> set has been answered, whether `done` or `skipped`, rather than every set
+> being done. A skip remains explicit work not done and travels to the report;
+> it does not force the athlete through a cut-short reason. That question is
+> reserved for sessions that still contain pending sets.
 
 ---
 
@@ -1025,6 +1048,13 @@ cannot render a breakdown of nothing.
 > languages, and a change made in `timing.rs` will pass everything. The pair
 > is small enough and cited from both sides well enough for that to be
 > acceptable; a generated constant is the fix if it ever stops being.
+>
+> **Amended for requested summaries.** Median remains on the wire and in the
+> historical views that use its resistance to long tails. Completion and the
+> dashboard may also render the arithmetic average together with minimum and
+> maximum, over the same believable answer-to-answer interval sample. Both
+> readings keep the discard-rather-than-clamp rule; an average does not make an
+> impossible measurement real.
 
 ---
 
@@ -1385,6 +1415,12 @@ The reference writes a `lift_records` table that nothing reads back.
 > carry per point; it settles only the narrower question of whether the number
 > announces itself, not the wider one of whether a prescriptive program's
 > trend should carry an entered max at all.
+>
+> **Amended: Train is the training-first dashboard.** The separate progress
+> placement above is replaced by the Train page order: resume and today's
+> training controls first, analytics second. Progress still never appears
+> without its load and drift cost on the same trace. An analytics failure may
+> remove statistics, but it may not remove the safe path into training.
 
 ---
 

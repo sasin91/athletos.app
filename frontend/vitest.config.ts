@@ -1,8 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { fileURLToPath } from 'node:url';
 
 /**
- * Unit tests for the pure logic, and nothing else.
+ * Unit tests for pure logic and server-renderable route composition.
  *
  * A separate config from `vite.config.ts` on purpose: these tests need no
  * SvelteKit, no DOM and no build. The offline queue, the UUIDv7 generation, the
@@ -16,8 +17,14 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
  */
 export default defineConfig({
 	plugins: [svelte()],
+	resolve: {
+		alias: {
+			$lib: fileURLToPath(new URL('./src/lib', import.meta.url)),
+			'$app/paths': fileURLToPath(new URL('./src/lib/test/app-paths.ts', import.meta.url))
+		}
+	},
 	test: {
-		include: ['src/lib/**/*.test.ts'],
+		include: ['src/lib/**/*.test.ts', 'src/routes/**/*.test.ts'],
 		environment: 'node'
 	}
 });
