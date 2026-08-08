@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use athletos_training::{exercise, Loading};
+use athletos_training::{exercise, AdjustmentPercent, Loading};
 use axum::extract::{Path, State};
 use axum::Json;
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,8 @@ use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
 use crate::routes::programs::resolve_stored_program;
 use crate::state::AppState;
+
+type EngineAdjustments = BTreeMap<String, AdjustmentPercent>;
 
 /// The complete adjustment document supplied by a client.
 #[derive(Debug, Deserialize, ToSchema)]
@@ -71,9 +73,10 @@ pub async fn show(
         return Err(ApiError::NotFound);
     }
 
+    let adjustments = load(&state.db, id).await?;
     Ok(Json(ExerciseAdjustments {
         enrollment_id: id,
-        adjustments: load(&state.db, id).await?,
+        adjustments: wire_adjustments(&adjustments),
     }))
 }
 
@@ -139,7 +142,7 @@ pub async fn replace(
     let allowed = program.meta().weighted_exercises;
     let normalized = validate_and_normalize(&body.adjustments, allowed)?;
     let exercises: Vec<String> = normalized.keys().cloned().collect();
-    let percentages: Vec<i16> = normalized.values().copied().collect();
+    let percentages: Vec<i16> = normalized.values().map(|percent| percent.get()).collect();
 
     // All parsing and domain validation is complete before either write. A
     // mixed body therefore cannot clear valid old rows and fail halfway through.
@@ -176,20 +179,20 @@ pub async fn replace(
     .bind(id)
     .fetch_all(&mut *tx)
     .await?;
-    let adjustments = rows.into_iter().collect();
+    let adjustments = decode_rows(rows)?;
 
     tx.commit().await?;
 
     Ok(Json(ExerciseAdjustments {
         enrollment_id: id,
-        adjustments,
+        adjustments: wire_adjustments(&adjustments),
     }))
 }
 
 fn validate_and_normalize(
     adjustments: &BTreeMap<String, i16>,
     allowed: &[&str],
-) -> ApiResult<BTreeMap<String, i16>> {
+) -> ApiResult<EngineAdjustments> {
     let mut normalized = BTreeMap::new();
 
     for (key, percent) in adjustments {
@@ -209,21 +212,22 @@ fn validate_and_normalize(
             )));
         }
 
-        if !(-50..=50).contains(percent) {
-            return Err(ApiError::Validation(format!(
-                "the adjustment for {key} must be between -50 and 50 percent"
-            )));
+        if *percent == 0 {
+            continue;
         }
 
-        if *percent != 0 {
-            normalized.insert(key.clone(), *percent);
-        }
+        let percent = AdjustmentPercent::try_from(*percent).map_err(|_| {
+            ApiError::Validation(format!(
+                "the adjustment for {key} must be between -50 and 50 percent"
+            ))
+        })?;
+        normalized.insert(key.clone(), percent);
     }
 
     Ok(normalized)
 }
 
-pub(crate) async fn load(pool: &PgPool, enrollment_id: Uuid) -> ApiResult<BTreeMap<String, i16>> {
+pub(crate) async fn load(pool: &PgPool, enrollment_id: Uuid) -> ApiResult<EngineAdjustments> {
     let rows: Vec<(String, i16)> = sqlx::query_as(
         "select exercise, adjustment_percent
          from enrollment_exercise_adjustments
@@ -234,5 +238,62 @@ pub(crate) async fn load(pool: &PgPool, enrollment_id: Uuid) -> ApiResult<BTreeM
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().collect())
+    decode_rows(rows)
+}
+
+fn decode_rows(rows: Vec<(String, i16)>) -> ApiResult<EngineAdjustments> {
+    rows.into_iter()
+        .map(
+            |(exercise, value)| match AdjustmentPercent::try_from(value) {
+                Ok(percent) => Ok((exercise, percent)),
+                Err(_) => Err(ApiError::Internal(format!(
+                    "stored adjustment {value} for {exercise} is outside the engine domain"
+                ))),
+            },
+        )
+        .collect()
+}
+
+fn wire_adjustments(adjustments: &EngineAdjustments) -> BTreeMap<String, i16> {
+    adjustments
+        .iter()
+        .map(|(exercise, percent)| (exercise.clone(), percent.get()))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_values_cross_into_the_bounded_engine_domain() {
+        let allowed = ["squat"];
+
+        for value in [-51, 51] {
+            let request = BTreeMap::from([("squat".to_owned(), value)]);
+            assert!(matches!(
+                validate_and_normalize(&request, &allowed),
+                Err(ApiError::Validation(_))
+            ));
+        }
+
+        let absent = validate_and_normalize(&BTreeMap::from([("squat".to_owned(), 0)]), &allowed)
+            .expect("zero means no adjustment");
+        assert!(absent.is_empty());
+
+        for value in [-50, 50] {
+            let normalized =
+                validate_and_normalize(&BTreeMap::from([("squat".to_owned(), value)]), &allowed)
+                    .expect("hard endpoint is valid");
+            assert_eq!(normalized["squat"].get(), value);
+        }
+    }
+
+    #[test]
+    fn an_invalid_stored_percentage_is_an_internal_error() {
+        assert!(matches!(
+            decode_rows(vec![("squat".to_owned(), 0)]),
+            Err(ApiError::Internal(_))
+        ));
+    }
 }

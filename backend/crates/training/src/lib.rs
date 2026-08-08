@@ -63,7 +63,8 @@ pub use error::{ProgramError, Result};
 pub use estimate::{estimate, ESTIMATE_REP_CEILING};
 pub use exercise::Exercise;
 pub use loading::{
-    adjusted_load, plan, Load, Loading, PlateChange, BARBELL_RESOLUTION, BAR_WEIGHT, PLATES,
+    adjusted_load, plan, AdjustmentPercent, InvalidAdjustmentPercent, Load, Loading, PlateChange,
+    BARBELL_RESOLUTION, BAR_WEIGHT, PLATES,
 };
 pub use maxes::Maxes;
 pub use meta::{Equipment, Experience, Length, ProgramMeta, RecoveryDemand};

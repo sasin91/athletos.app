@@ -2747,6 +2747,7 @@
         "required": [
           "workout_id",
           "at",
+          "load_moved_kg",
           "drift_kg",
           "sets_over",
           "sets_under",
@@ -2769,6 +2770,11 @@
             ],
             "format": "double",
             "description": "The best (highest) estimate across that session's done sets of this\nlift. A point with no done sets is never emitted, so this is `None`\nonly when every done set failed to produce an estimate — each one\ncarrying no weight or no reps, [`athletos_training::estimate`]'s own\ntwo absence cases. One weightless set among several does not null this\nfield; the max is taken across sets, so a single done set with a real\nweight and rep count is enough. A set above the rep ceiling still\ncontributes an estimate: the ceiling caps what the formula reads\nrather than refusing the set (D-13, amended)."
+          },
+          "load_moved_kg": {
+            "type": "number",
+            "format": "double",
+            "description": "Kilograms moved by done sets of this exercise in this workout."
           },
           "reasons": {
             "type": "array",

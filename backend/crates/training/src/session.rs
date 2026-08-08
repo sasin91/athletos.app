@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::loading::{adjusted_load, Load, Loading};
+use crate::loading::{adjusted_load, AdjustmentPercent, Load, Loading};
 
 /// One training session: what to do on one day.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -91,7 +91,10 @@ impl Lift {
 /// A session is generated before this walk, so it deliberately changes only
 /// its load objects. Program state, maxes, set structure, and AMRAP semantics
 /// remain the program's concern and are left untouched.
-pub fn apply_exercise_adjustments(session: &mut Session, adjustments: &BTreeMap<String, i16>) {
+pub fn apply_exercise_adjustments(
+    session: &mut Session,
+    adjustments: &BTreeMap<String, AdjustmentPercent>,
+) {
     for block in &mut session.blocks {
         let Some(percent) = adjustments.get(&block.exercise) else {
             continue;

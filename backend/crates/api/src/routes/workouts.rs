@@ -1238,6 +1238,24 @@ fn validate(body: &WorkoutSubmission) -> ApiResult<()> {
         _ => {}
     }
 
+    let has_pending = body
+        .sets
+        .iter()
+        .any(|set| matches!(set.status, SetStatus::Pending));
+    match (body.outcome, has_pending) {
+        (WorkoutOutcome::Completed, true) => {
+            return Err(ApiError::Validation(
+                "a completed session cannot contain pending sets".to_owned(),
+            ));
+        }
+        (WorkoutOutcome::CutShort, false) => {
+            return Err(ApiError::Validation(
+                "a session with no pending sets must be completed".to_owned(),
+            ));
+        }
+        _ => {}
+    }
+
     if body.sets.len() > MAX_SETS {
         return Err(ApiError::PayloadTooLarge(format!(
             "a session may carry at most {MAX_SETS} sets"
@@ -1491,5 +1509,108 @@ impl From<&SubmittedSet> for LoggedSet {
             actual_reps: set.actual_reps,
             status: set.status.into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn submitted_set(position: u16, status: SetStatus) -> SubmittedSet {
+        SubmittedSet {
+            position,
+            exercise: "squat".to_owned(),
+            prescribed_weight: 100.0,
+            prescribed_reps: 5,
+            actual_weight: matches!(status, SetStatus::Done).then_some(100.0),
+            actual_reps: matches!(status, SetStatus::Done).then_some(5),
+            status,
+            logged_at: None,
+            note: None,
+            drift_reason: None,
+        }
+    }
+
+    fn submission(
+        outcome: WorkoutOutcome,
+        cut_reason: Option<CutReason>,
+        statuses: &[SetStatus],
+    ) -> WorkoutSubmission {
+        let started_at = DateTime::from_timestamp(1_700_000_000, 0).expect("in range");
+        WorkoutSubmission {
+            id: Uuid::now_v7(),
+            enrollment_id: Uuid::now_v7(),
+            started_at,
+            ended_at: started_at + chrono::Duration::hours(1),
+            outcome,
+            cut_reason,
+            notes: None,
+            sets: statuses
+                .iter()
+                .copied()
+                .enumerate()
+                .map(|(position, status)| submitted_set(position as u16, status))
+                .collect(),
+        }
+    }
+
+    fn validation_detail(body: &WorkoutSubmission) -> Option<String> {
+        match validate(body) {
+            Err(ApiError::Validation(detail)) => Some(detail),
+            other => {
+                assert!(other.is_ok(), "unexpected validation result: {other:?}");
+                None
+            }
+        }
+    }
+
+    #[test]
+    fn completed_refuses_any_pending_set() {
+        let body = submission(
+            WorkoutOutcome::Completed,
+            None,
+            &[SetStatus::Done, SetStatus::Pending],
+        );
+
+        assert_eq!(
+            validation_detail(&body).as_deref(),
+            Some("a completed session cannot contain pending sets")
+        );
+    }
+
+    #[test]
+    fn cut_short_requires_pending_work() {
+        let body = submission(
+            WorkoutOutcome::CutShort,
+            Some(CutReason::Enough),
+            &[SetStatus::Done, SetStatus::Skipped],
+        );
+
+        assert_eq!(
+            validation_detail(&body).as_deref(),
+            Some("a session with no pending sets must be completed")
+        );
+    }
+
+    #[test]
+    fn done_and_skipped_is_a_valid_completed_session() {
+        let body = submission(
+            WorkoutOutcome::Completed,
+            None,
+            &[SetStatus::Done, SetStatus::Skipped],
+        );
+
+        assert!(validate(&body).is_ok());
+    }
+
+    #[test]
+    fn pending_work_with_a_reason_is_a_valid_cut_short_session() {
+        let body = submission(
+            WorkoutOutcome::CutShort,
+            Some(CutReason::OutOfTime),
+            &[SetStatus::Done, SetStatus::Pending],
+        );
+
+        assert!(validate(&body).is_ok());
     }
 }

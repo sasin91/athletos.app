@@ -95,6 +95,8 @@ pub struct TrendPoint {
     /// own.
     #[schema(example = "Training max")]
     pub training_max_label: Option<String>,
+    /// Kilograms moved by done sets of this exercise in this workout.
+    pub load_moved_kg: f64,
     /// Signed: positive is heavier than prescribed, negative lighter. Summed
     /// over that session's done sets of this lift, against the same sets'
     /// prescriptions, so it is weight drift uncontaminated by work not done.
@@ -770,6 +772,7 @@ async fn bests(
 #[derive(Default)]
 struct LiftTally {
     estimate: Option<f64>,
+    load_moved_kg: f64,
     drift_kg: f64,
     sets_over: u32,
     sets_under: u32,
@@ -860,7 +863,9 @@ fn assemble(loaded: Loaded) -> ProgressView {
             tally.performed = true;
 
             let reps = u32::try_from(actual_reps).unwrap_or_default();
-            load_moved += actual_weight * f64::from(reps);
+            let set_load = actual_weight * f64::from(reps);
+            load_moved += set_load;
+            tally.load_moved_kg += set_load;
 
             // The best estimate of the session, not the last one: a heavy
             // single and a set of ten are both admissible readings of the same
@@ -911,6 +916,7 @@ fn assemble(loaded: Loaded) -> ProgressView {
                     estimate: tally.estimate,
                     training_max: readout.map(|(weight, _)| *weight),
                     training_max_label: readout.map(|(_, label)| (*label).to_owned()),
+                    load_moved_kg: tally.load_moved_kg,
                     drift_kg: tally.drift_kg,
                     sets_over: tally.sets_over,
                     sets_under: tally.sets_under,
@@ -1076,11 +1082,64 @@ mod tests {
             estimate,
             training_max: None,
             training_max_label: None,
+            load_moved_kg: 0.0,
             drift_kg: 0.0,
             sets_over: 0,
             sets_under: 0,
             reasons: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_lift_trend_counts_only_that_exercises_done_load() {
+        let workout_id = Uuid::now_v7();
+        let enrollment_id = Uuid::now_v7();
+        let at = DateTime::from_timestamp(1_700_000_000, 0).expect("in range");
+        let row = |position: i16, exercise: &str, weight: f64, reps: i16, status: &str| SetRow {
+            workout_id,
+            position,
+            exercise: exercise.to_owned(),
+            prescribed_weight: weight,
+            prescribed_reps: reps,
+            actual_weight: Some(weight),
+            actual_reps: Some(reps),
+            status: status.to_owned(),
+            logged_at: None,
+            drift_reason: None,
+        };
+
+        let view = assemble(Loaded {
+            sessions: vec![(
+                workout_id,
+                enrollment_id,
+                "wendler-531-bbb".to_owned(),
+                "active".to_owned(),
+                at,
+                Some(at + chrono::Duration::hours(1)),
+            )],
+            sets: HashMap::from([(
+                workout_id,
+                vec![
+                    row(0, "squat", 100.0, 5, "done"),
+                    row(1, "deadlift", 180.0, 3, "done"),
+                    row(2, "lateral-raise", 10.0, 10, "done"),
+                    row(3, "squat", 100.0, 5, "skipped"),
+                    row(4, "squat", 120.0, 1, "pending"),
+                ],
+            )]),
+            training_maxes: HashMap::new(),
+            bests: HashMap::new(),
+        });
+
+        let squat = view
+            .lifts
+            .iter()
+            .find(|lift| lift.exercise == "squat")
+            .expect("squat was performed");
+        let point = serde_json::to_value(&squat.points[0]).expect("serialises");
+
+        assert_eq!(point["load_moved_kg"], serde_json::json!(500.0));
+        assert_eq!(view.sessions[0].load_moved_kg, 1_140.0);
     }
 
     #[test]
