@@ -255,7 +255,7 @@
 		{/each}
 	</g>
 
-	<g data-panel="load">
+	<g data-panel="load" data-zero-y={LOAD_TOP + LOAD_HEIGHT}>
 		{#each positioned as point (point.workout_id)}
 			{#if finite(point.load_moved_kg) && point.load_moved_kg >= 0}
 				{@const y = loadY(point.load_moved_kg)}

@@ -86,7 +86,7 @@ describe('ProgressChart SSR', () => {
 				estimate: 100,
 				training_max: 80,
 				drift_kg: -10,
-				load_moved_kg: 0
+				load_moved_kg: 2000
 			}),
 			point({
 				workout_id: 'workout-2',
@@ -151,13 +151,20 @@ describe('ProgressChart SSR', () => {
 		expect(number(under, 'y')).toBeCloseTo(zero, 5);
 		expect(number(over, 'height')).toBeCloseTo(number(under, 'height'), 5);
 
-		const zeroLoad = byWorkout(loads, 'workout-1');
-		const workedLoad = byWorkout(loads, 'workout-2');
-		expect(number(zeroLoad, 'height')).toBe(0);
-		expect(number(zeroLoad, 'y')).toBeCloseTo(
-			number(workedLoad, 'y') + number(workedLoad, 'height'),
-			5
+		const lowLoad = byWorkout(loads, 'workout-1');
+		const middleLoad = byWorkout(loads, 'workout-2');
+		const lowY = number(lowLoad, 'y');
+		const middleY = number(middleLoad, 'y');
+		const syntheticZeroY = lowY + (0 - 2000) * ((middleY - lowY) / (4000 - 2000));
+		const declaredZeroY = number(
+			elements(body, 'g').find((attributes) => attributes['data-panel'] === 'load')!,
+			'data-zero-y'
 		);
+
+		expect(syntheticZeroY).toBeCloseTo(declaredZeroY, 5);
+		for (const load of loads) {
+			expect(number(load, 'y') + number(load, 'height')).toBeCloseTo(syntheticZeroY, 5);
+		}
 	});
 
 	it('draws gaps instead of connecting or zeroing missing middle observations', () => {
