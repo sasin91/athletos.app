@@ -131,6 +131,11 @@
 	function numberFrom(event: Event): number | undefined {
 		return numberFromText((event.currentTarget as HTMLInputElement).value);
 	}
+
+	/** A receipt change is already computed by the server; this only adds its sign for display. */
+	function formatWeightChange(change: number): string {
+		return `${change > 0 ? '+' : ''}${change} kg`;
+	}
 </script>
 
 <svelte:head><title>Session · AthletOS</title></svelte:head>
@@ -180,21 +185,32 @@
 				{#if receipt}
 					{@const ending = receipt.summary}
 					<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-						<!--
-							Load and drift on the same screen, deliberately. D-08 refused a
-							drift total here because it would have been the first place in
-							the product drift appeared alone; beside the load actually
-							moved and the athlete's own average, it is not alone (D-13).
-						-->
-						<dt class="eyebrow">load moved</dt>
+						<dt class="eyebrow">Load moved</dt>
 						<dd class="tabular">{Math.round(ending.load_moved_kg)} kg</dd>
 
-						{#if ending.sets_over > 0 || ending.sets_under > 0}
-							<dt class="eyebrow">against the prescription</dt>
-							<dd class="tabular">
-								{Math.round(ending.load_moved_kg - ending.load_prescribed_kg)} kg
-								{#if ending.sets_over > 0}· over on {ending.sets_over}{/if}
-								{#if ending.sets_under > 0}· under on {ending.sets_under}{/if}
+						<dt class="eyebrow">Load prescribed</dt>
+						<dd class="tabular">{Math.round(ending.load_prescribed_kg)} kg</dd>
+
+						{#if ending.weight_changes.length > 0}
+							<dt class="eyebrow">Weight changes</dt>
+							<dd>
+								<ol class="space-y-1">
+									{#each ending.weight_changes as change (change.exercise + change.prescribed_weight + change.actual_weight)}
+										<li class="grid grid-cols-[1fr_auto] gap-x-3 tabular">
+											<span class="font-medium">{change.label}</span>
+											<span>{change.prescribed_weight} → {change.actual_weight} kg</span>
+											<span class="text-sm opacity-70">
+												<span
+													>{formatWeightChange(
+														change.actual_weight - change.prescribed_weight
+													)}</span
+												>
+												<span aria-hidden="true"> · </span>
+												<span>{change.sets} set{change.sets === 1 ? '' : 's'}</span>
+											</span>
+										</li>
+									{/each}
+								</ol>
 							</dd>
 						{/if}
 
@@ -210,19 +226,23 @@
 
 						{#if ending.intervals}
 							<dt class="eyebrow">between sets</dt>
-							<dd class="tabular">
-								{formatElapsed(ending.intervals.min_seconds * 1000)} ·
-								{formatElapsed(ending.intervals.median_seconds * 1000)} ·
-								{formatElapsed(ending.intervals.max_seconds * 1000)}
+							<dd class="grid grid-cols-3 gap-2 tabular">
+								<span>
+									<span class="block eyebrow">Fastest</span>
+									{formatElapsed(ending.intervals.min_seconds * 1000)}
+								</span>
+								<span>
+									<span class="block eyebrow">Average</span>
+									{formatElapsed(ending.intervals.average_seconds * 1000)}
+								</span>
+								<span>
+									<span class="block eyebrow">Longest</span>
+									{formatElapsed(ending.intervals.max_seconds * 1000)}
+								</span>
 							</dd>
-							<!--
-								The middle figure is a median, not a mean: one interval spent
-								talking to somebody moves a mean of twelve by a minute, and
-								the tail of this distribution is not signal (D-10).
-							-->
 							<dt class="sr-only">what those three are</dt>
 							<dd class="col-span-2 text-xs opacity-50">
-								fastest · typical · slowest
+								fastest · average · longest
 								{#if ending.intervals.discarded > 0}
 									· {ending.intervals.discarded} gap{ending.intervals.discarded === 1 ? '' : 's'} too
 									long to believe, left out
@@ -623,7 +643,7 @@
 										type="button"
 										onclick={() => apply((s) => skipSet(s, set.position, new Date().toISOString()))}
 									>
-										Skip
+										Skip set
 									</button>
 								{:else}
 									{@const interval = intervalBefore(session, set.position)}

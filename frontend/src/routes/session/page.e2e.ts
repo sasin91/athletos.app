@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { LocalSession, LocalSet, PlateChange } from '$lib/session';
+import type { LocalSession, LocalSet, PlateChange, WorkoutReceipt } from '$lib/session';
 
 /**
  * The logger reads a committed session out of IndexedDB and never touches the
@@ -86,6 +86,48 @@ function session(sets: LocalSet[], overrides: Partial<LocalSession> = {}): Local
 
 function plateChange(overrides: Partial<PlateChange> = {}): PlateChange {
 	return { add: [], remove: [], plates_per_side: [], ...overrides };
+}
+
+function completionReceipt(): WorkoutReceipt {
+	return {
+		id: 'e2e-session',
+		enrollment_id: 'e2e-enrollment',
+		week: 1,
+		day: 1,
+		duplicate: false,
+		progress: { completed: 1, total: 4 },
+		summary: {
+			load_moved_kg: 570,
+			load_prescribed_kg: 520,
+			sets_over: 3,
+			sets_under: 0,
+			weight_changes: [
+				{
+					exercise: 'barbell-row',
+					label: 'Barbell row',
+					prescribed_weight: 85,
+					actual_weight: 100,
+					sets: 2
+				},
+				{
+					exercise: 'bench-press',
+					label: 'Bench press',
+					prescribed_weight: 80,
+					actual_weight: 90,
+					sets: 1
+				}
+			],
+			duration_seconds: 3300,
+			average_duration_seconds: null,
+			intervals: {
+				min_seconds: 45,
+				average_seconds: 75,
+				median_seconds: 60,
+				max_seconds: 120,
+				discarded: 0
+			}
+		}
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +295,74 @@ test('tapping a drift-reason chip marks it pressed, and tapping it again clears 
 
 	await tooHeavy.click();
 	await expect(tooHeavy).toHaveAttribute('aria-pressed', 'false');
+});
+
+// ---------------------------------------------------------------------------
+// Completion means every set is answered. A skip is an answer, so a mixed
+// logger gets the ordinary finish button; ending reasons are only for work
+// that remains pending. The receipt is server-computed and rendered verbatim,
+// apart from local number and duration formatting.
+// ---------------------------------------------------------------------------
+
+test('a fully answered mixed session finishes normally and shows its receipt', async ({ page }) => {
+	await seedSession(
+		page,
+		session([
+			set({ position: 0 }),
+			set({
+				position: 1,
+				exercise: 'barbell-row',
+				label: 'Barbell row',
+				prescribedWeight: 85,
+				actualWeight: 100
+			}),
+			set({ position: 2 })
+		])
+	);
+	await page.route('/api/workouts', async (route) => {
+		await route.fulfill({ status: 201, json: completionReceipt() });
+	});
+	await page.goto('/session');
+
+	// This catches a completion predicate that counts skips as pending work.
+	await page.getByRole('button', { name: 'Skip set' }).first().click();
+	await page.getByRole('button', { name: 'Log', exact: true }).first().click();
+	await page.getByRole('button', { name: 'Skip set' }).first().click();
+
+	await expect(page.getByRole('button', { name: 'Finish session' })).toBeVisible();
+	await expect(page.getByText('End session early')).not.toBeVisible();
+
+	await page.getByRole('button', { name: 'Finish session' }).click();
+
+	for (const label of ['Load moved', 'Load prescribed', 'Fastest', 'Average', 'Longest']) {
+		await expect(page.getByText(label, { exact: true })).toBeVisible();
+	}
+	for (const value of ['Barbell row', '85 → 100 kg', '+15 kg', '2 sets']) {
+		await expect(page.getByText(value, { exact: true })).toBeVisible();
+	}
+	await expect(page.getByText('Bench press', { exact: true })).toBeVisible();
+	await expect(page.getByText('80 → 90 kg', { exact: true })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'See where the hour went' })).toBeVisible();
+});
+
+test('ending early still offers the ordered reason choices while a set is pending', async ({
+	page
+}) => {
+	await seedSession(page, session([set({ position: 0 }), set({ position: 1 })]));
+	await page.goto('/session');
+
+	await page.getByRole('button', { name: 'End session early' }).click();
+
+	const reasons = page
+		.getByRole('button')
+		.filter({ hasText: /Ran out of time|Pain or injury|Equipment unavailable|Done enough/ });
+	await expect(reasons).toHaveText([
+		'Ran out of time',
+		'Pain or injury',
+		'Equipment unavailable',
+		'Done enough'
+	]);
+	await expect(page.getByRole('button', { name: 'Keep going' })).toBeVisible();
 });
 
 test('logging a set takes one click, whether or not a drift reason was chosen', async ({

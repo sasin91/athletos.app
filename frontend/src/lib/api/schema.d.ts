@@ -722,6 +722,13 @@ export interface components {
         /** @description The shape of one session's intervals: fastest, typical, slowest. */
         IntervalSpread: {
             /**
+             * Format: double
+             * @description Arithmetic mean over the same believable answer-to-answer intervals as
+             *     the other figures. Kept alongside the median so clients can choose the
+             *     shape that best answers their question without restating the filter.
+             */
+            average_seconds: number;
+            /**
              * Format: int32
              * @description Intervals thrown away as impossible, so a screen showing these figures
              *     can say why they account for less than the wall clock.
@@ -1331,6 +1338,11 @@ export interface components {
             sets_over: number;
             /** Format: int32 */
             sets_under: number;
+            /**
+             * @description Done sets whose actual weight differed from what was prescribed,
+             *     grouped in the order each exact change was first performed.
+             */
+            weight_changes: components["schemas"]["WeightChange"][];
         };
         /** @description Where one session's time went. */
         SessionTiming: {
@@ -1529,6 +1541,19 @@ export interface components {
          * @enum {string}
          */
         Unit: "kg" | "count" | "seconds";
+        /** @description One exact weight change, grouped across matching done sets. */
+        WeightChange: {
+            /** Format: double */
+            actual_weight: number;
+            /** @example barbell-row */
+            exercise: string;
+            /** @example Barbell row */
+            label: string;
+            /** Format: double */
+            prescribed_weight: number;
+            /** Format: int32 */
+            sets: number;
+        };
         /**
          * @description One workout, expanded.
          *
