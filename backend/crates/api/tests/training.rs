@@ -15,10 +15,14 @@
 
 use athletos_api::app;
 use athletos_api::state::AppState;
-use axum_test::TestServer;
+use axum_test::{TestResponse, TestServer};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::Barrier;
+use tokio::time::timeout;
 use uuid::Uuid;
 
 use axum::http::StatusCode;
@@ -239,6 +243,46 @@ async fn workout_count(pool: &PgPool) -> i64 {
         .unwrap()
 }
 
+/// Release two requests on the same scheduler turn and poll both until they
+/// finish. This is deliberately not `spawn`: `axum-test` owns one in-process
+/// server, and `join!` gives both request futures concurrent progress without
+/// requiring the server to be cloneable. The barrier proves neither request
+/// starts before its peer is ready; the timeout turns a lock-order regression
+/// into a named failure instead of a hung CI job.
+async fn post_workouts_together(
+    server: &TestServer,
+    token: &str,
+    left: &serde_json::Value,
+    right: &serde_json::Value,
+) -> (TestResponse, TestResponse) {
+    let gate = Arc::new(Barrier::new(2));
+    let left_gate = Arc::clone(&gate);
+    let right_gate = Arc::clone(&gate);
+
+    timeout(Duration::from_secs(15), async {
+        tokio::join!(
+            async {
+                left_gate.wait().await;
+                server
+                    .post("/v1/workouts")
+                    .authorization_bearer(token)
+                    .json(left)
+                    .await
+            },
+            async {
+                right_gate.wait().await;
+                server
+                    .post("/v1/workouts")
+                    .authorization_bearer(token)
+                    .json(right)
+                    .await
+            }
+        )
+    })
+    .await
+    .expect("overlapping workout requests deadlocked or exceeded 15 seconds")
+}
+
 // --- the acceptance test this whole phase exists for -----------------------
 
 /// The same body twice leaves the same state as once.
@@ -311,6 +355,200 @@ async fn posting_the_same_workout_twice_advances_the_program_exactly_once(pool: 
         state_after_first, state_after_second,
         "advance() must not have run a second time"
     );
+}
+
+#[sqlx::test]
+async fn concurrent_same_id_on_one_enrollment_is_one_accept_and_one_duplicate(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+    let prescribed = session["prescribed_sets"].as_array().unwrap().len();
+    let body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+
+    let (left, right) = post_workouts_together(&server, &token, &body, &body).await;
+    let statuses = [left.status_code(), right.status_code()];
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|status| **status == StatusCode::CREATED)
+            .count(),
+        1
+    );
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|status| **status == StatusCode::OK)
+            .count(),
+        1
+    );
+    let receipts = [
+        left.json::<serde_json::Value>(),
+        right.json::<serde_json::Value>(),
+    ];
+    assert_eq!(
+        receipts
+            .iter()
+            .filter(|receipt| receipt["duplicate"] == true)
+            .count(),
+        1
+    );
+
+    assert_eq!(workout_count(&pool).await, 1);
+    let set_rows: i64 =
+        sqlx::query_scalar("select count(*) from workout_sets where workout_id = $1")
+            .bind(body["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let advances: i64 =
+        sqlx::query_scalar("select count(*) from enrollment_advances where enrollment_id = $1")
+            .bind(enrollment)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(set_rows, prescribed as i64, "one complete set document");
+    assert_eq!(advances, 1, "the program advanced exactly once");
+    assert_eq!(
+        next_session(&server, &token, enrollment).await["progress"]["completed"],
+        1
+    );
+}
+
+#[sqlx::test]
+async fn concurrent_different_ids_on_one_enrollment_serialize_program_state(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let first_session = next_session(&server, &token, enrollment).await;
+    let initial_state: serde_json::Value =
+        sqlx::query_scalar("select state from enrollments where id = $1")
+            .bind(enrollment)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let left = logged_as_prescribed(Uuid::now_v7(), enrollment, &first_session);
+    let right = logged_as_prescribed(Uuid::now_v7(), enrollment, &first_session);
+
+    let (left_response, right_response) =
+        post_workouts_together(&server, &token, &left, &right).await;
+    let statuses = [left_response.status_code(), right_response.status_code()];
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|status| **status == StatusCode::CREATED)
+            .count(),
+        1,
+        "one request owns the locked session"
+    );
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|status| **status == StatusCode::UNPROCESSABLE_ENTITY)
+            .count(),
+        1,
+        "the waiter validates against the next session rather than stale state"
+    );
+
+    assert_eq!(workout_count(&pool).await, 1);
+    let advances: i64 =
+        sqlx::query_scalar("select count(*) from enrollment_advances where enrollment_id = $1")
+            .bind(enrollment)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(advances, 1);
+
+    let (advance_before, advance_after): (serde_json::Value, serde_json::Value) = sqlx::query_as(
+        "select state_before, state_after from enrollment_advances
+             where enrollment_id = $1",
+    )
+    .bind(enrollment)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let final_state: serde_json::Value =
+        sqlx::query_scalar("select state from enrollments where id = $1")
+            .bind(enrollment)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(advance_before, initial_state);
+    assert_eq!(final_state, advance_after);
+    assert_ne!(final_state, initial_state);
+
+    let current = next_session(&server, &token, enrollment).await;
+    assert_eq!(current["progress"]["completed"], 1);
+    assert_eq!(current["week"], 1);
+    assert_eq!(current["day"], 2, "only the first session was folded");
+}
+
+#[sqlx::test]
+async fn concurrent_same_id_across_owned_enrollments_has_one_owner(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let first_enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let second_enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let workout = Uuid::now_v7();
+    let first_session = next_session(&server, &token, first_enrollment).await;
+    let second_session = next_session(&server, &token, second_enrollment).await;
+    let prescribed = first_session["prescribed_sets"].as_array().unwrap().len();
+    let first = logged_as_prescribed(workout, first_enrollment, &first_session);
+    let second = logged_as_prescribed(workout, second_enrollment, &second_session);
+
+    let (first_response, second_response) =
+        post_workouts_together(&server, &token, &first, &second).await;
+    let statuses = [first_response.status_code(), second_response.status_code()];
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|status| **status == StatusCode::CREATED)
+            .count(),
+        1
+    );
+    assert_eq!(
+        statuses
+            .iter()
+            .filter(|status| **status == StatusCode::CONFLICT)
+            .count(),
+        1
+    );
+
+    let owner: Uuid = sqlx::query_scalar("select enrollment_id from workouts where id = $1")
+        .bind(workout)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(owner == first_enrollment || owner == second_enrollment);
+    let set_rows: i64 =
+        sqlx::query_scalar("select count(*) from workout_sets where workout_id = $1")
+            .bind(workout)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let advances: i64 =
+        sqlx::query_scalar("select count(*) from enrollment_advances where workout_id = $1")
+            .bind(workout)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(set_rows, prescribed as i64, "one set document was stored");
+    assert_eq!(advances, 1, "only the owning enrollment advanced");
+
+    let first_progress = next_session(&server, &token, first_enrollment).await["progress"]
+        ["completed"]
+        .as_u64()
+        .unwrap();
+    let second_progress = next_session(&server, &token, second_enrollment).await["progress"]
+        ["completed"]
+        .as_u64()
+        .unwrap();
+    assert_eq!(first_progress + second_progress, 1);
+    assert_eq!(first_progress, u64::from(owner == first_enrollment));
+    assert_eq!(second_progress, u64::from(owner == second_enrollment));
 }
 
 /// A row accepted by an older build remains idempotently retryable even when
@@ -2923,6 +3161,43 @@ async fn a_new_workout_requires_the_complete_prescribed_set_document(pool: PgPoo
         .json(&mixed)
         .await
         .assert_status(StatusCode::CREATED);
+}
+
+#[sqlx::test]
+async fn an_exercise_key_with_whitespace_is_rejected_without_mutation(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+    let workout = Uuid::now_v7();
+    let mut body = logged_as_prescribed(workout, enrollment, &session);
+    body["sets"][0]["exercise"] = json!(" squat ");
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+
+    let workouts: i64 = sqlx::query_scalar("select count(*) from workouts where id = $1")
+        .bind(workout)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let advances: i64 =
+        sqlx::query_scalar("select count(*) from enrollment_advances where enrollment_id = $1")
+            .bind(enrollment)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(workouts, 0);
+    assert_eq!(advances, 0);
+    assert_eq!(
+        next_session(&server, &token, enrollment).await["progress"]["completed"],
+        0
+    );
 }
 
 /// The athlete's typed weight differs from the prescription only below the

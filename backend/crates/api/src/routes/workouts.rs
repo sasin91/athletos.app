@@ -1152,7 +1152,7 @@ async fn insert_sets(
     let mut drift_reasons: Vec<Option<String>> = Vec::with_capacity(sets.len());
 
     for set in sets {
-        exercises.push(set.exercise.trim().to_owned());
+        exercises.push(set.exercise.clone());
         positions.push(i16::try_from(set.position).map_err(|_| {
             ApiError::Validation(format!("position {} is out of range", set.position))
         })?);
@@ -1386,7 +1386,7 @@ fn validate_session_semantics(body: &WorkoutSubmission, session: &Session) -> Ap
                 "the submitted sets do not contain prescribed position {position}"
             )));
         }
-        if set.exercise.trim() != exercise || set.prescribed_reps != reps {
+        if set.exercise != exercise || set.prescribed_reps != reps {
             return Err(ApiError::Validation(format!(
                 "the set at position {position} does not match the prescribed exercise and reps"
             )));
@@ -1544,7 +1544,7 @@ impl From<SetStatus> for athletos_training::SetStatus {
 impl From<&SubmittedSet> for LoggedSet {
     fn from(set: &SubmittedSet) -> Self {
         Self {
-            exercise: set.exercise.trim().to_owned(),
+            exercise: set.exercise.clone(),
             position: set.position,
             prescribed_weight: set.prescribed_weight,
             prescribed_reps: set.prescribed_reps,
@@ -1752,6 +1752,19 @@ mod tests {
 
         assert!(is_validation_error(validate_new(&wrong_exercise, &session)));
         assert!(is_validation_error(validate_new(&wrong_reps, &session)));
+    }
+
+    #[test]
+    fn an_exercise_key_with_surrounding_whitespace_is_not_the_prescribed_key() {
+        let session = prescribed_session();
+        let mut body = full_submission(
+            WorkoutOutcome::Completed,
+            None,
+            [SetStatus::Done, SetStatus::Done, SetStatus::Done],
+        );
+        body.sets[0].exercise = " squat ".to_owned();
+
+        assert!(is_validation_error(validate_new(&body, &session)));
     }
 
     #[test]
