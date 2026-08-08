@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- The prescription shown to the athlete is historical fact. Never rewrite a committed session or completed/skipped set.
+- The prescription shown to the athlete is historical fact. An athlete-directed correction to an answered set is allowed only on that addressed set; automatic carry may affect pending work, but never propagates from an answered set or automatically rewrites a completed/skipped set.
 - Every behavior change follows red-green-refactor: run each named focused test and observe the expected failure before production edits.
 - `/v1` changes are additive only (D-12). Regenerate `backend/openapi.json` and `frontend/src/lib/api/schema.d.ts`; never hand-edit generated contract files.
 - Business arithmetic stays in Rust (D-11). TypeScript may select, join by identifier, scale SVG coordinates, and format values; it may not calculate training prescriptions, reports, or aggregate statistics.

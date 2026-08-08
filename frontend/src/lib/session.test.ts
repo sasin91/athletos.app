@@ -535,7 +535,7 @@ describe('a weight edit carries through the exercise', () => {
 		expect(edited.sets[3].actualWeight).toBe(committed.sets[3].actualWeight);
 	});
 
-	it('an answered row is preserved without breaking the pending run', () => {
+	it('automatic carry skips an answered row and continues through the pending run', () => {
 		const answered = logSet(committed, 1, '2026-08-05T10:05:00Z');
 		const edited = editSet(answered, 0, { weight: 100 });
 
@@ -566,19 +566,13 @@ describe('a weight edit carries through the exercise', () => {
 		expect(again.sets[2].actualWeight).toBe(105);
 	});
 
-	it('still changes its own weight when the addressed set has already been logged', () => {
+	it('a direct edit to an answered set changes only itself', () => {
 		const logged = logSet(committed, 0, '2026-08-05T10:05:00Z');
-		const edited = editSet(logged, 0, { weight: 100 });
+		const edited = editSet(logged, 0, { weight: 100, reps: 3 });
 
 		expect(edited.sets[0].actualWeight).toBe(100);
-	});
-
-	it('does not carry from an addressed set that has already been logged', () => {
-		const logged = logSet(committed, 0, '2026-08-05T10:05:00Z');
-		const edited = editSet(logged, 0, { weight: 100 });
-
-		expect(edited.sets[1].actualWeight).toBe(97.5);
-		expect(edited.sets[2].actualWeight).toBe(97.5);
+		expect(edited.sets[0].actualReps).toBe(3);
+		expect(edited.sets.slice(1)).toEqual(logged.sets.slice(1));
 	});
 });
 

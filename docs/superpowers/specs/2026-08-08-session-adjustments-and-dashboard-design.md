@@ -3,8 +3,10 @@
 Design, 2026-08-08. This spec joins three independently shippable slices:
 session logging corrections, enrollment-specific exercise adjustments, and the
 training-first analytics dashboard. They share one principle: the prescription
-shown to the athlete is the historical fact. Changes may affect pending work,
-but never rewrite a committed session or a completed set.
+shown to the athlete is the historical fact. An athlete-directed correction to
+an answered set is allowed, but changes only that addressed set; automatic carry
+may affect pending work, but never automatically propagates from an answered set
+or rewrites a done/skipped row.
 
 The completion-report and progress backend already exist. This work extends
 those contracts and builds the missing dashboard UI rather than introducing a
