@@ -170,6 +170,8 @@
 
 	{#each positioned as point (point.workout_id)}
 		<line
+			data-series="spine"
+			data-workout-id={point.workout_id}
 			x1={point.x}
 			x2={point.x}
 			y1={STRENGTH_TOP}
@@ -211,6 +213,7 @@
 		{#if finite(point.estimate)}
 			<circle
 				data-series="estimate-point"
+				data-workout-id={point.workout_id}
 				cx={point.x}
 				cy={strengthY(point.estimate)}
 				r="4"
@@ -224,6 +227,7 @@
 
 	<g data-panel="drift">
 		<line
+			data-series="drift-zero"
 			x1={LEFT}
 			x2={LEFT + PLOT_WIDTH}
 			y1={driftZero}
@@ -238,6 +242,8 @@
 			{@const y = driftY(drift)}
 			{#if drift !== 0}
 				<rect
+					data-series="drift"
+					data-workout-id={point.workout_id}
 					x={point.x - markWidth / 2}
 					y={Math.min(y, driftZero)}
 					width={markWidth}
@@ -255,6 +261,7 @@
 				{@const y = loadY(point.load_moved_kg)}
 				<rect
 					data-series="load"
+					data-workout-id={point.workout_id}
 					x={point.x - markWidth / 2}
 					{y}
 					width={markWidth}
