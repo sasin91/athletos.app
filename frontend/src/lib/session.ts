@@ -356,11 +356,12 @@ export function editSet(
  * constraint it refuses one on a pending set with, and a chip tapped on a set
  * that never drifted must not take the whole submission down with it.
  *
- * Carries to the same bounded run a weight edit carries to — later pending
- * sets with the same exercise and prescription — because it is one decision
- * continuing. A set among those whose carried weight is on its prescription
- * gets `null` regardless, since there is nothing left for the reason to be
- * about.
+ * A pending target carries to the same bounded run a weight edit carries to —
+ * later pending sets with the same exercise and prescription — because it is
+ * one decision continuing. An answered target is a direct correction and
+ * applies only to itself. A set among the propagated rows whose carried weight
+ * is on its prescription gets `null` regardless, since there is nothing left
+ * for the reason to be about.
  */
 export function setDriftReason(
 	session: LocalSession,
@@ -377,7 +378,10 @@ export function setDriftReason(
 		sets: session.sets.map((set, index) => {
 			const applies =
 				index === targetIndex ||
-				(index > targetIndex && index < runEnd && set.status === 'pending');
+				(target.status === 'pending' &&
+					index > targetIndex &&
+					index < runEnd &&
+					set.status === 'pending');
 
 			if (!applies) return set;
 

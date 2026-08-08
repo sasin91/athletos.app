@@ -584,6 +584,14 @@ describe('a weight edit carries through the exercise', () => {
 	});
 
 describe('the reason for a drift', () => {
+	it('an answered target keeps its reason local', () => {
+		const answered = logSet(editSet(committed, 0, { weight: 100 }), 0, '2026-08-05T10:05:00Z');
+		const reasoned = setDriftReason(answered, 0, 'too_heavy');
+
+		expect(reasoned.sets[0].driftReason).toBe('too_heavy');
+		expect(reasoned.sets.slice(1)).toEqual(answered.sets.slice(1));
+	});
+
 	it('a reason stops at the same changed-prescription boundary', () => {
 		const edited = editSet(bbbFixture(), 0, { weight: 95 });
 		const reasoned = setDriftReason(edited, 0, 'too_easy');
