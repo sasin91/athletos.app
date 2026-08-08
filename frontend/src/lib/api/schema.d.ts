@@ -680,6 +680,16 @@ export interface components {
         };
         /** @enum {string} */
         EnrollmentStatus: "active" | "finished" | "abandoned";
+        /** @description First-to-latest estimated-strength change over the trend window. */
+        EstimateChange: {
+            /** Format: double */
+            kg: number;
+            /**
+             * Format: double
+             * @description Absent when the first estimate is zero: no finite percentage exists.
+             */
+            percent?: number | null;
+        };
         /** @description The canonical non-zero adjustments stored for one enrolment. */
         ExerciseAdjustments: {
             /**
@@ -820,6 +830,7 @@ export interface components {
         };
         LiftTrend: {
             bests: components["schemas"]["Best"][];
+            estimate_change?: null | components["schemas"]["EstimateChange"];
             /** @example squat */
             exercise: string;
             /** @example Squat */

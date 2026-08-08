@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 /**
  * Unit tests for the pure logic, and nothing else.
@@ -9,11 +10,12 @@ import { defineConfig } from 'vitest/config';
  * precisely so that the parts most likely to be wrong can be checked in
  * milliseconds — the same reasoning D-15 applies to the training crate.
  *
- * Anything that needs a browser (IndexedDB in `storage.ts`, the Svelte
- * components) is deliberately not here. See `playwright.config.ts` for what
- * would test those, and MILESTONE-1 for why none of it has been run.
+ * Browser-owned behavior (IndexedDB in `storage.ts`) stays in Playwright. Pure
+ * Svelte components may render through `svelte/server` here: that exercises
+ * their markup and accessibility without introducing a DOM or a browser.
  */
 export default defineConfig({
+	plugins: [svelte()],
 	test: {
 		include: ['src/lib/**/*.test.ts'],
 		environment: 'node'
