@@ -183,6 +183,21 @@ const META: ProgramMeta = ProgramMeta {
     // The three the reference's `ExtractsPowerliftingMaxes` pulls. Every
     // accessory percentage is taken from one of these, so there is no fourth.
     required_maxes: &[SQUAT.key, BENCH.key, DEADLIFT.key],
+    // These are session exercises, not max sources: all loaded accessories
+    // belong here even when their percentage comes from another lift's max.
+    weighted_exercises: &[
+        SQUAT.key,
+        DEADLIFT.key,
+        MILITARY_PRESS.key,
+        LATERAL_RAISE.key,
+        BENCH.key,
+        BARBELL_ROW.key,
+        BARBELL_CURL.key,
+        DUMBBELL_TRICEP_EXTENSION.key,
+        INCLINE_DUMBBELL_PRESS.key,
+        ROMANIAN_DEADLIFT.key,
+        HAMMER_CURL.key,
+    ],
 };
 
 #[derive(Debug, Clone, Copy, Default)]

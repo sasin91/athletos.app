@@ -30,6 +30,22 @@ use athletos_training::{programs, Equipment, Experience, Length, ProgramMeta, Re
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
 
+/// Resolves a stored `program_key` back to compiled code.
+///
+/// An internal error rather than a 404: the key was written by this server from
+/// the registry, so a missing program means code was deleted out from under a
+/// stored enrolment. Request-supplied catalogue keys use the handlers' normal
+/// 404 path instead.
+pub(crate) fn resolve_stored_program(
+    key: &str,
+) -> ApiResult<&'static dyn athletos_training::Program> {
+    programs::find(key).ok_or_else(|| {
+        ApiError::Internal(format!(
+            "enrolment names program {key}, which is not in the registry"
+        ))
+    })
+}
+
 /// Everything an athlete needs in order to judge whether a program fits.
 ///
 /// There is no fit score and no ranking (D-01). `recovery_demand` and
@@ -63,6 +79,9 @@ pub struct ProgramSummary {
     /// Rust `static`, and a `/v1/exercises` endpoint to cache would be a round
     /// trip before the first form renders.
     pub required_maxes: Vec<RequiredMax>,
+    /// Every loaded exercise this program may prescribe and therefore allows
+    /// an enrolment-specific percentage adjustment for.
+    pub weighted_exercises: Vec<WeightedExercise>,
 }
 
 /// One lift a program needs a max for, ready to be a labelled form field.
@@ -71,6 +90,16 @@ pub struct RequiredMax {
     #[schema(example = "military-press")]
     pub exercise: String,
     #[schema(example = "Military Press")]
+    pub label: String,
+}
+
+/// One adjustable exercise, labelled for a client that cannot read Rust's
+/// compiled registry.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WeightedExercise {
+    #[schema(example = "squat")]
+    pub exercise: String,
+    #[schema(example = "Squat")]
     pub label: String,
 }
 
@@ -144,6 +173,16 @@ impl From<&ProgramMeta> for ProgramSummary {
                     // A program naming an exercise the registry does not hold
                     // is caught by the training crate's own test; falling back
                     // to the key keeps the form renderable either way.
+                    label: athletos_training::exercise::find(key)
+                        .map(|exercise| exercise.label.to_owned())
+                        .unwrap_or_else(|| (*key).to_owned()),
+                })
+                .collect(),
+            weighted_exercises: meta
+                .weighted_exercises
+                .iter()
+                .map(|key| WeightedExercise {
+                    exercise: (*key).to_owned(),
                     label: athletos_training::exercise::find(key)
                         .map(|exercise| exercise.label.to_owned())
                         .unwrap_or_else(|| (*key).to_owned()),

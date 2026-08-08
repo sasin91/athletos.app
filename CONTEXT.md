@@ -23,7 +23,9 @@ The one-rep max a set that was actually performed implies. Evidence of
 capability, computed rather than entered. Distinct from the Entered 1RM, which
 the athlete owns and types, and which is never a series of its own on the
 progress screen — though it stands in for the Training max on the trend where a
-program has none to report.
+program has none to report, and the point it stands in on carries a label
+saying which of the two it is, so the screen can say so rather than leave the
+two conflated.
 _Avoid_: Estimated 1RM, e1RM in prose
 
 **Training max**:

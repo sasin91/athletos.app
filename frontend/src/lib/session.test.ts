@@ -9,12 +9,14 @@ import {
 	logSet,
 	nextSetPosition,
 	noteSet,
+	numberFromText,
 	plateChangeFor,
 	resetSet,
 	setDriftReason,
 	setsDone,
 	setsRemaining,
 	skipSet,
+	snap,
 	summarise,
 	toSubmission
 } from './session';
@@ -226,7 +228,7 @@ describe('logging', () => {
 describe('toSubmission', () => {
 	const ending = { endedAt: '2026-07-26T08:52:00.000Z', cutReason: null };
 
-	it('is completed only when every set was done', () => {
+	it('is complete when every set is answered', () => {
 		let session = commitSession(peeked, options);
 		expect(isComplete(session)).toBe(false);
 
@@ -237,14 +239,14 @@ describe('toSubmission', () => {
 		expect(toSubmission(session, ending).cut_reason).toBeNull();
 	});
 
-	it('a session where everything was skipped is not a completed session', () => {
-		const session = skipSet(
-			skipSet(skipSet(skipSet(commitSession(peeked, options), 0, AT), 1, AT), 2, AT),
-			3,
-			AT
-		);
-
-		expect(isComplete(session)).toBe(false);
+	it('done plus skipped is complete while any pending set is not', () => {
+		let answered = committed;
+		answered = logSet(answered, 0, '2026-08-05T10:01:00Z');
+		answered = skipSet(answered, 1, '2026-08-05T10:02:00Z');
+		answered = logSet(answered, 2, '2026-08-05T10:03:00Z');
+		answered = skipSet(answered, 3, '2026-08-05T10:04:00Z');
+		expect(isComplete(answered)).toBe(true);
+		expect(isComplete(resetSet(answered, 3))).toBe(false);
 	});
 
 	it('carries pending and skipped sets, because work not done is the data', () => {
@@ -441,9 +443,8 @@ const committed = fixture();
 
 /**
  * Squat's main sets (positions 0-1, 90 kg) followed by BBB backoff sets
- * (positions 2-3, 50 kg) under the same `exercise` key — the shape a delta
- * carry has to respect and a flat-weight carry would wreck by pre-filling
- * the backoff sets at the main lift's number.
+ * (positions 2-3, 50 kg) under the same `exercise` key — the prescription run
+ * boundary must respect this even though the exercise key is shared.
  */
 const peekedWithBackoff: NextSession = {
 	enrollment_id: '018f1f2a-0000-7000-8000-000000000002',
@@ -534,9 +535,9 @@ describe('a weight edit carries through the exercise', () => {
 		expect(edited.sets[3].actualWeight).toBe(committed.sets[3].actualWeight);
 	});
 
-	it('leaves a set that has already been answered alone', () => {
-		const logged = logSet(committed, 1, '2026-08-05T10:05:00Z');
-		const edited = editSet(logged, 0, { weight: 100 });
+	it('automatic carry skips an answered row and continues through the pending run', () => {
+		const answered = logSet(committed, 1, '2026-08-05T10:05:00Z');
+		const edited = editSet(answered, 0, { weight: 100 });
 
 		expect(edited.sets[1].actualWeight).toBe(97.5);
 		expect(edited.sets[2].actualWeight).toBe(100);
@@ -565,61 +566,42 @@ describe('a weight edit carries through the exercise', () => {
 		expect(again.sets[2].actualWeight).toBe(105);
 	});
 
-	it('still changes its own weight when the addressed set has already been logged', () => {
+	it('a direct edit to an answered set changes only itself', () => {
 		const logged = logSet(committed, 0, '2026-08-05T10:05:00Z');
-		const edited = editSet(logged, 0, { weight: 100 });
+		const edited = editSet(logged, 0, { weight: 100, reps: 3 });
 
 		expect(edited.sets[0].actualWeight).toBe(100);
-	});
-
-	it('does not carry from an addressed set that has already been logged', () => {
-		const logged = logSet(committed, 0, '2026-08-05T10:05:00Z');
-		const edited = editSet(logged, 0, { weight: 100 });
-
-		expect(edited.sets[1].actualWeight).toBe(97.5);
-		expect(edited.sets[2].actualWeight).toBe(97.5);
+		expect(edited.sets[0].actualReps).toBe(3);
+		expect(edited.sets.slice(1)).toEqual(logged.sets.slice(1));
 	});
 });
 
-describe('a weight edit carries the difference, not the weight', () => {
-	it("applies the delta to each carried set's own prescription, never the edited weight", () => {
-		const session = bbbFixture();
-		const edited = editSet(session, 0, { weight: 95 });
-
-		// +5 on a 90 kg main set: the other main set gets 90 + 5, and both
-		// backoff sets get their own 50 + 5 — never the main lift's 95.
-		expect(edited.sets[1].actualWeight).toBe(95);
-		expect(edited.sets[2].actualWeight).toBe(55);
-		expect(edited.sets[3].actualWeight).toBe(55);
-	});
-
-	it('returns every carried set to exactly its own prescription once the delta is zero', () => {
-		const session = bbbFixture();
-		const edited = editSet(session, 0, { weight: 95 });
-		const back = editSet(edited, 0, { weight: 90 });
-
-		expect(back.sets[1].actualWeight).toBe(90);
-		expect(back.sets[2].actualWeight).toBe(50);
-		expect(back.sets[3].actualWeight).toBe(50);
-	});
-
-	it('clamps a carried weight at zero rather than going negative', () => {
-		const session = bbbFixture();
-		const edited = editSet(session, 0, { weight: 0 });
-
-		// Delta is -90; the backoff sets' own 50 kg would otherwise land at -40.
-		expect(edited.sets[2].actualWeight).toBe(0);
-		expect(edited.sets[3].actualWeight).toBe(0);
+describe('a weight edit carries through one prescription run', () => {
+	it('copies the exact weight only through the equal-prescription run', () => {
+		const edited = editSet(bbbFixture(), 0, { weight: 95 });
+		expect(edited.sets.map((set) => set.actualWeight)).toEqual([95, 95, 50, 50]);
 	});
 });
 
 describe('the reason for a drift', () => {
-	it('carries with the weight it is about', () => {
-		const edited = editSet(committed, 0, { weight: 100 });
+	it('an answered target keeps its reason local', () => {
+		const answered = logSet(editSet(committed, 0, { weight: 100 }), 0, '2026-08-05T10:05:00Z');
+		const reasoned = setDriftReason(answered, 0, 'too_heavy');
+
+		expect(reasoned.sets[0].driftReason).toBe('too_heavy');
+		expect(reasoned.sets.slice(1)).toEqual(answered.sets.slice(1));
+	});
+
+	it('a reason stops at the same changed-prescription boundary', () => {
+		const edited = editSet(bbbFixture(), 0, { weight: 95 });
 		const reasoned = setDriftReason(edited, 0, 'too_easy');
 
-		expect(reasoned.sets[1].driftReason).toBe('too_easy');
-		expect(reasoned.sets[3].driftReason).toBeNull();
+		expect(reasoned.sets.map((set) => set.driftReason)).toEqual([
+			'too_easy',
+			'too_easy',
+			null,
+			null
+		]);
 	});
 
 	it('clears when the weight goes back to the prescription', () => {
@@ -690,5 +672,155 @@ describe('barUnchangedFrom', () => {
 		// 97.5, that the bar is already loaded: nobody touched it.
 		const skipped = skipSet(committed, 0, '2026-08-05T10:05:00Z');
 		expect(barUnchangedFrom(skipped, 1)).toBe(false);
+	});
+});
+
+describe('numberFromText', () => {
+	it('reads a comma and a period as the same decimal separator', () => {
+		// The comma path used to answer `NaN` and therefore `undefined`, which
+		// the logger reads as "no edit" — so the number was accepted by the
+		// field, discarded by the state, and the previous weight was logged
+		// instead. On a Danish keyboard that is a live risk (D-07).
+		expect(numberFromText('142,5')).toBe(142.5);
+		expect(numberFromText('142.5')).toBe(142.5);
+		expect(numberFromText('142,555556')).toBe(numberFromText('142.555556'));
+	});
+
+	it('is undefined for an empty or all-whitespace field, which is not a typed zero', () => {
+		// `Number('')` is `0`, finite and indistinguishable from a zero the
+		// athlete meant. Clearing the field to retype would otherwise carry a
+		// 0 kg to every later pending set of the exercise.
+		expect(numberFromText('')).toBeUndefined();
+		expect(numberFromText('   ')).toBeUndefined();
+	});
+
+	it('is undefined for junk, including a string with two separators', () => {
+		expect(numberFromText('abc')).toBeUndefined();
+		expect(numberFromText('142,5,5')).toBeUndefined();
+		expect(numberFromText('-')).toBeUndefined();
+	});
+
+	it('still reads a plain integer and a zero the athlete actually typed', () => {
+		expect(numberFromText('100')).toBe(100);
+		expect(numberFromText('0')).toBe(0);
+	});
+
+	it('is undefined for a trailing separator, which is half a typed number', () => {
+		// `Number('142.')` is `142`. Reporting that as an edit would move the
+		// state, and the controlled `value` binding would write `142` back into
+		// the field and eat the point before the athlete typed the digit after
+		// it. The field is `type="text"`, so this function sees the half-typed
+		// state that a number input used to hide — and has to recognise it.
+		expect(numberFromText('142.')).toBeUndefined();
+		expect(numberFromText('142,')).toBeUndefined();
+		expect(numberFromText('.')).toBeUndefined();
+	});
+
+	it('reads the number once the digit after the separator arrives', () => {
+		// The other half of the keystroke sequence above: `142.` is refused,
+		// `142.5` is not, so the point survives long enough to be used.
+		expect(numberFromText('142.5')).toBe(142.5);
+		expect(numberFromText('142,5')).toBe(142.5);
+	});
+});
+
+describe('snap', () => {
+	it('rounds to the nearest half kilo, halves going up', () => {
+		expect(snap(142.555556)).toBe(142.5);
+		expect(snap(97.6)).toBe(97.5);
+		expect(snap(0.25)).toBe(0.5);
+		expect(snap(0.75)).toBe(1);
+		expect(snap(102.3)).toBe(102.5);
+	});
+
+	it('leaves a multiple of half a kilo exactly where it is', () => {
+		for (const kg of [0.5, 2.5, 20, 97.5, 100, 142.5, 227.5]) {
+			expect(snap(kg)).toBe(kg);
+		}
+	});
+
+	it('handles zero, which is what bodyweight work is prescribed at', () => {
+		expect(snap(0)).toBe(0);
+	});
+
+	/**
+	 * The claim the D-11 exception rests on: snapping cannot disturb a weight
+	 * the program is able to prescribe. Every loading mode in the catalogue
+	 * resolves to a multiple of 0.5 — the barbell at 2.5
+	 * (`loading.rs`, `BARBELL_RESOLUTION`, on top of a 20 kg bar), the dumbbell
+	 * rack at 2.0 (`exercise.rs`, `RACK`), bodyweight at 0 — so no correct
+	 * number is ever changed behind the athlete's back. If a future loading
+	 * mode breaks that, this test is where it surfaces.
+	 */
+	it('leaves every weight the catalogue can prescribe unchanged', () => {
+		for (let i = 0; i <= 120; i++) {
+			const barbell = 20 + 2.5 * i;
+			expect(snap(barbell)).toBe(barbell);
+
+			const dumbbell = 2 * i;
+			expect(snap(dumbbell)).toBe(dumbbell);
+		}
+
+		// And the ones the fixtures actually carry, end to end.
+		for (const set of fixture().sets) {
+			expect(snap(set.prescribedWeight)).toBe(set.prescribedWeight);
+		}
+		for (const set of bbbFixture().sets) {
+			expect(snap(set.prescribedWeight)).toBe(set.prescribedWeight);
+		}
+	});
+});
+
+describe('logging snaps the weight where it cannot be bypassed', () => {
+	it('rounds a six-decimal weight to the nearest half kilo as the set is logged', () => {
+		// `change` on the field snaps too, but `change` only fires when the
+		// field is left, and one tap on Log without blurring is the normal way
+		// this screen is used.
+		const edited = editSet(committed, 0, { weight: 142.555556 });
+		const logged = logSet(edited, 0, AT);
+
+		expect(logged.sets[0].actualWeight).toBe(142.5);
+	});
+
+	it('leaves a weight already on a half kilo alone', () => {
+		const logged = logSet(editSet(committed, 0, { weight: 110 }), 0, AT);
+		expect(logged.sets[0].actualWeight).toBe(110);
+	});
+
+	it('drops the drift reason when snapping lands back on the prescription', () => {
+		// 97.6 shows the chips, 97.5 is the prescription. A reason travelling
+		// on a set the submission reports as sitting at its own prescription is
+		// what the server's check constraint refuses — and it would take the
+		// whole session down over a chip.
+		const reasoned = setDriftReason(editSet(committed, 0, { weight: 97.6 }), 0, 'too_heavy');
+		const logged = logSet(reasoned, 0, AT);
+
+		expect(logged.sets[0].actualWeight).toBe(97.5);
+		expect(logged.sets[0].driftReason).toBeNull();
+	});
+
+	it('keeps the drift reason when the snapped weight is still a deviation', () => {
+		const reasoned = setDriftReason(editSet(committed, 0, { weight: 110.2 }), 0, 'too_easy');
+		const logged = logSet(reasoned, 0, AT);
+
+		expect(logged.sets[0].actualWeight).toBe(110);
+		expect(logged.sets[0].driftReason).toBe('too_easy');
+	});
+
+	it('does not touch the carried weights of sets that have not been logged yet', () => {
+		// Snapping is what the *record* gets. A pending set still holds whatever
+		// the carry made it until it is logged in its own right.
+		const edited = editSet(committed, 0, { weight: 142.555556 });
+		const logged = logSet(edited, 0, AT);
+
+		// The exact edited weight carries to the next pending set, including a
+		// value the field has not yet snapped to a half kilo.
+		expect(logged.sets[1].actualWeight).toBeCloseTo(142.555556, 6);
+		expect(logSet(logged, 1, AT).sets[1].actualWeight).toBe(142.5);
+	});
+
+	it('never touches the prescription, which is still what drift is measured against', () => {
+		const logged = logSet(editSet(committed, 0, { weight: 142.555556 }), 0, AT);
+		expect(logged.sets[0].prescribedWeight).toBe(97.5);
 	});
 });

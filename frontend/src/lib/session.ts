@@ -152,6 +152,101 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
 	};
 }
 
+/**
+ * What the athlete typed, as a number, or `undefined` when there is nothing to
+ * apply.
+ *
+ * Lifted out of the logger's `numberFrom` so that the rule it encodes can be
+ * tested without a DOM. Everything below is a fact about a string; the input
+ * event is only where the string came from.
+ *
+ * Empty or all-whitespace is "no edit", not zero. `Number('')` is `0`, finite
+ * and indistinguishable from a typed zero, and this fires on every keystroke:
+ * without this check, clearing the field to retype a number carries a 0 kg to
+ * every later pending set of the exercise before the athlete finishes typing
+ * the number they meant.
+ *
+ * A comma is read as a decimal separator before `Number()` sees it.
+ * `Number('142,5')` is `NaN`, and `NaN` used to leave here as `undefined` —
+ * the same answer an empty field gets — so the edit was **silently dropped**.
+ * The field went on showing what was typed, the state kept the previous
+ * weight, and the previous weight is what got logged: a set recorded at a
+ * weight nobody lifted, with no error and no visible sign, on the screen whose
+ * entire premise is that one tap logs what it shows (D-07). Whether the
+ * browser hands the separator over unnormalised depends on the locale it is
+ * running in; on a Danish keyboard that is a live risk rather than a
+ * theoretical one, and accepting the separator costs nothing.
+ *
+ * Only the first comma is rewritten, deliberately. A string with two of them
+ * is not a number anybody meant, and it stays `NaN` and stays refused rather
+ * than being quietly reinterpreted as something else.
+ *
+ * A **trailing separator is half a number, not a number**, and this is
+ * load-bearing rather than tidy. `Number('142.')` is `142`, so without this
+ * guard the athlete typing `142.5` would have the field rewritten to `142` the
+ * instant they pressed the point: the state would move, the controlled `value`
+ * binding would write the canonical `142` back into the input, and the point
+ * would be gone before the `5` arrived. The field used to be `type="number"`,
+ * which reported `""` for `142.` and hid this — until that same behaviour was
+ * found to be dropping comma-typed weights on the engine CI runs, and the
+ * field became `type="text"` so that what the athlete types actually reaches
+ * this function. Owning the half-typed state is the price of that, and it is
+ * the right price: the browser was never going to agree with itself about it
+ * across platforms.
+ *
+ * Junk — a stray letter, two separators, a lone sign — still returns
+ * `undefined` through the `Number.isFinite` guard, which is the honest answer
+ * for a string that names no number.
+ */
+export function numberFromText(raw: string): number | undefined {
+	const trimmed = raw.trim();
+	if (trimmed.length === 0) return undefined;
+	if (trimmed.endsWith('.') || trimmed.endsWith(',')) return undefined;
+
+	const value = Number(trimmed.replace(',', '.'));
+	return Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * The nearest half kilo — a named, bounded exception to D-11.
+ *
+ * `frontend/CLAUDE.md` is unambiguous: "If you find yourself working out a
+ * weight, stop." This works out a weight in the client, so it is written down
+ * here rather than smuggled in.
+ *
+ * The defence is that this is not plate math. It computes nothing about what
+ * can be loaded, asks nothing about the exercise, and gives the same answer
+ * for a barbell, a dumbbell and a machine. It is input hygiene: the field
+ * declining to hold a number the athlete cannot have meant. `142.555556` is
+ * not a weight that exists in any gym, and the only reason it ever reached the
+ * record was that `type="number" step="0.5"` constrains the spinner arrows and
+ * `checkValidity()`, neither of which this screen uses.
+ *
+ * It was checked against the catalogue rather than assumed safe. Every loading
+ * mode resolves to a multiple of 0.5 — the barbell at 2.5
+ * (`training/src/loading.rs`, `BARBELL_RESOLUTION`), the dumbbell rack at 2.0
+ * (`training/src/exercise.rs`, `RACK`), bodyweight at 0 — so no weight the
+ * program can prescribe is disturbed by snapping, and no correct number is
+ * ever changed behind the athlete's back. The unit tests hold that claim down.
+ *
+ * The cost is stated rather than hidden: a `Loading::Machine { increment }`
+ * with a stack that is not a multiple of 0.5 could not be logged exactly.
+ * Nothing in the catalogue is like that today, and the alternative — refusing
+ * the value and blocking the log — is worse on the screen that gets used
+ * mid-set, offline, with chalk on your hands.
+ *
+ * What it is not: this does not round a weight to something *loadable*. The
+ * carried difference an edit propagates is still whatever the athlete's edit
+ * made it, a multiple of 0.5 and not necessarily a multiple of 2.5, because
+ * the client has no plate arithmetic and is not getting any (D-11).
+ *
+ * It incidentally closes a gap on the way out. Every multiple of 0.5 is exact
+ * in two decimal places, so nothing that survives the field can be altered by
+ * the `numeric(6,2)` column it lands in, and the log can no longer disagree
+ * with what was on screen. That was true before only by luck.
+ */
+export const snap = (kg: number) => Math.round(kg * 2) / 2;
+
 function replace(
 	session: LocalSession,
 	position: number,
@@ -161,6 +256,21 @@ function replace(
 		...session,
 		sets: session.sets.map((set) => (set.position === position ? change(set) : set))
 	};
+}
+
+function prescriptionRunEnd(sets: LocalSet[], targetIndex: number): number {
+	const target = sets[targetIndex];
+	let end = targetIndex + 1;
+
+	while (
+		end < sets.length &&
+		sets[end].exercise === target.exercise &&
+		sets[end].prescribedWeight === target.prescribedWeight
+	) {
+		end += 1;
+	}
+
+	return end;
 }
 
 /**
@@ -174,21 +284,16 @@ function replace(
  * `pending`. Correcting an already-logged set changes what happened; it must
  * not rewrite the plan for sets not yet performed.
  *
- * What carries is the **difference**, not the weight: `delta = the new weight
- * minus the edited set's own prescription`, applied to each later pending
- * set's *own* prescription and clamped at zero. 5/3/1 BBB prescribes a main
- * lift and its Boring But Big backoff under one `exercise` key at two
- * different percentages (D-04); carrying the raw weight would pre-fill five
- * backoff sets at the main lift's number. Carrying the delta instead means
- * editing set one from 90 to 95 leaves later main-lift sets at their own
- * prescription +5 and the backoff sets at their own prescription +5, and
- * editing back to 90 returns every carried set to exactly its own
- * prescription.
+ * What carries is the **exact edited weight**, but only through the later
+ * pending rows in the same contiguous run of equal exercise and prescription.
+ * 5/3/1 BBB puts its main lift and Boring But Big backoff under one `exercise`
+ * key at different prescriptions (D-04); the prescription boundary prevents
+ * a main-lift edit from pre-filling the backoff rows.
  *
- * The carry stops at the next exercise — which is a different bar, and
- * possibly not even the same bar, the boundary D-04 already draws for the
- * plate chain. Retyping the same correction five times is the app making an
- * honest answer cost more than a dishonest one (D-07).
+ * The carry stops at the next exercise or prescription — which is a different
+ * bar, or a different loading block under the same exercise key. Retyping the
+ * same correction five times is the app making an honest answer cost more than
+ * a dishonest one (D-07).
  *
  * A **rep** edit never carries. It is about that set — an AMRAP that went
  * well, a set cut short at eight — whereas a weight edit is about the bar,
@@ -205,8 +310,9 @@ export function editSet(
 	position: number,
 	values: { weight?: number; reps?: number }
 ): LocalSession {
-	const target = session.sets.find((set) => set.position === position);
-	if (!target) return session;
+	const targetIndex = session.sets.findIndex((set) => set.position === position);
+	if (targetIndex === -1) return session;
+	const target = session.sets[targetIndex];
 
 	const edited = replace(session, position, (set) => {
 		const actualWeight = values.weight ?? set.actualWeight;
@@ -220,17 +326,17 @@ export function editSet(
 
 	if (values.weight === undefined || target.status !== 'pending') return edited;
 
-	const delta = values.weight - target.prescribedWeight;
+	const runEnd = prescriptionRunEnd(session.sets, targetIndex);
+	const weight = values.weight;
 
 	return {
 		...edited,
-		sets: edited.sets.map((set) => {
-			const carries =
-				set.exercise === target.exercise && set.position > position && set.status === 'pending';
+		sets: edited.sets.map((set, index) => {
+			const carries = index > targetIndex && index < runEnd && set.status === 'pending';
 
 			if (!carries) return set;
 
-			const actualWeight = Math.max(0, set.prescribedWeight + delta);
+			const actualWeight = weight;
 			return {
 				...set,
 				actualWeight,
@@ -249,12 +355,12 @@ export function editSet(
  * constraint it refuses one on a pending set with, and a chip tapped on a set
  * that never drifted must not take the whole submission down with it.
  *
- * Carries to the same sets a weight edit carries to — later pending sets of
- * the same exercise — because it is one decision continuing, and recording
- * four of five carried sets as unanswered would misreport it. A set among
- * those whose carried weight happens to land back on its own prescription
- * gets `null` regardless, since there is nothing left for the reason to be
- * about.
+ * A pending target carries to the same bounded run a weight edit carries to —
+ * later pending sets with the same exercise and prescription — because it is
+ * one decision continuing. An answered target is a direct correction and
+ * applies only to itself. A set among the propagated rows whose carried weight
+ * is on its prescription gets `null` regardless, since there is nothing left
+ * for the reason to be about.
  */
 export function setDriftReason(
 	session: LocalSession,
@@ -263,13 +369,18 @@ export function setDriftReason(
 ): LocalSession {
 	const target = session.sets.find((set) => set.position === position);
 	if (!target) return session;
+	const targetIndex = session.sets.findIndex((set) => set.position === position);
+	const runEnd = prescriptionRunEnd(session.sets, targetIndex);
 
 	return {
 		...session,
-		sets: session.sets.map((set) => {
+		sets: session.sets.map((set, index) => {
 			const applies =
-				set.position === position ||
-				(set.exercise === target.exercise && set.position > position && set.status === 'pending');
+				index === targetIndex ||
+				(target.status === 'pending' &&
+					index > targetIndex &&
+					index < runEnd &&
+					set.status === 'pending');
 
 			if (!applies) return set;
 
@@ -306,9 +417,31 @@ export function noteSet(session: LocalSession, position: number, note: string): 
  * `at` is passed in rather than read from the clock in here, so that this stays
  * a pure function of its arguments and the timing rules can be tested without
  * faking a global. Every caller passes `new Date().toISOString()`.
+ *
+ * The weight is `snap`ped on the way in — the last place it can be, and the
+ * one place that cannot be bypassed. The field snaps on `change`, but `change`
+ * only fires when the field is left, and the whole point of this screen is
+ * that a set can be logged with a thumb without anything else being touched
+ * first. A number typed and never blurred would otherwise go into the record
+ * with six decimals on it.
+ *
+ * Snapping can move a weight back onto its own prescription — 97.6 becomes
+ * 97.5 — and the drift reason has to go with it, exactly as it does in
+ * `editSet`. Without that, a chip tapped while the field read 97.6 would
+ * travel on a set the submission reports as sitting at its prescription, and
+ * the server's check constraint would refuse the whole session over it.
  */
 export function logSet(session: LocalSession, position: number, at: string): LocalSession {
-	return replace(session, position, (set) => ({ ...set, status: 'done', loggedAt: at }));
+	return replace(session, position, (set) => {
+		const actualWeight = snap(set.actualWeight);
+		return {
+			...set,
+			actualWeight,
+			driftReason: actualWeight === set.prescribedWeight ? null : set.driftReason,
+			status: 'done',
+			loggedAt: at
+		};
+	});
 }
 
 /**
@@ -357,14 +490,11 @@ export function setsDone(session: LocalSession): number {
 }
 
 /**
- * Whether the session can be submitted as `completed`.
- *
- * Anything else has to answer D-08's one question, including a session where
- * every set was *skipped* — skipping is work not done, which is the second axis
- * of drift and not a way to finish early without saying so.
+ * Whether the session can be submitted as `completed`: every set has been
+ * answered, whether it was logged or skipped.
  */
 export function isComplete(session: LocalSession): boolean {
-	return session.sets.every((set) => set.status === 'done');
+	return session.sets.every((set) => set.status !== 'pending');
 }
 
 /** The first set not yet answered — where the logger should be looking. */

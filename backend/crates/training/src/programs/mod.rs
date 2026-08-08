@@ -33,9 +33,11 @@ pub fn find(key: &str) -> Option<&'static dyn Program> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
-    use crate::exercise;
     use crate::meta::Length;
+    use crate::{exercise, Loading};
 
     #[test]
     fn every_program_is_resolvable_by_its_own_key() {
@@ -140,6 +142,64 @@ mod tests {
                     Ok(_) => panic!("{key} declares {missing} but starts without it"),
                 }
             }
+        }
+    }
+
+    #[test]
+    fn weighted_exercise_adjustment_metadata_matches_every_weighted_prescription() {
+        let maxes = crate::testing::maxes();
+
+        for program in REGISTRY {
+            let key = program.meta().key;
+            let declared: BTreeSet<_> = program.meta().weighted_exercises.iter().copied().collect();
+
+            assert!(!declared.is_empty(), "{key} declares no weighted exercises");
+            assert!(
+                !declared.contains("hanging-leg-raise"),
+                "{key} declares a bodyweight exercise as adjustable"
+            );
+
+            for exercise_key in &declared {
+                let exercise = exercise::find(exercise_key)
+                    .unwrap_or_else(|| panic!("{key} declares unknown exercise {exercise_key}"));
+                assert!(
+                    !matches!(exercise.loading, Loading::Bodyweight),
+                    "{key} declares bodyweight exercise {exercise_key} as adjustable"
+                );
+            }
+
+            for exercise_key in program.meta().required_maxes {
+                let exercise = exercise::find(exercise_key).expect("required max resolves");
+                if !matches!(exercise.loading, Loading::Bodyweight) {
+                    assert!(
+                        declared.contains(exercise_key),
+                        "{key} omits weighted required max {exercise_key}"
+                    );
+                }
+            }
+
+            let mut state = program.start(&maxes).expect("starts");
+            let mut prescribed = BTreeSet::new();
+            for _ in 0..20 {
+                let Ok(session) = program.session(&state) else {
+                    break;
+                };
+
+                for block in &session.blocks {
+                    let exercise = exercise::find(&block.exercise).expect("prescription resolves");
+                    if !matches!(exercise.loading, Loading::Bodyweight) {
+                        prescribed.insert(exercise.key);
+                    }
+                }
+
+                let logged = crate::testing::logged_as_prescribed(&session);
+                state = program.advance(state, &logged).expect("advances");
+            }
+
+            assert_eq!(
+                declared, prescribed,
+                "{key} must enumerate every and only adjustable prescription, including accessories"
+            );
         }
     }
 }

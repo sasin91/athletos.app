@@ -14,12 +14,14 @@
 		logSet,
 		nextSetPosition,
 		noteSet,
+		numberFromText,
 		plateChangeFor,
 		resetSet,
 		setDriftReason,
 		setsDone,
 		setsRemaining,
 		skipSet,
+		snap,
 		summarise,
 		toSubmission
 	} from '$lib/session';
@@ -120,18 +122,23 @@
 		}
 	}
 
+	// The rule this used to hold inline now lives in `numberFromText`, with the
+	// whole of its reasoning: why an empty field is "no edit" rather than a
+	// typed zero, why a comma is a decimal separator, and why junk still comes
+	// back `undefined`. It moved so that it could be unit tested without a DOM
+	// — it is a fact about a string, and the event is only where the string
+	// came from. Nothing is left here but the reach into the element.
 	function numberFrom(event: Event): number | undefined {
-		// Empty or all-whitespace is "no edit", not zero. `Number('')` is `0`,
-		// finite and indistinguishable from a typed zero, and this fires on
-		// every keystroke: without this check, clearing the field to retype a
-		// number applies `delta = -prescribedWeight` and carries a 0 kg to
-		// every later pending set of the exercise before the athlete finishes
-		// typing the number they meant.
-		const raw = (event.currentTarget as HTMLInputElement).value;
-		if (raw.trim().length === 0) return undefined;
+		return numberFromText((event.currentTarget as HTMLInputElement).value);
+	}
 
-		const value = Number(raw);
-		return Number.isFinite(value) ? value : undefined;
+	/** A receipt change is already computed by the server; this only adds its sign for display. */
+	function formatWeightChange(change: number): string {
+		return `${change > 0 ? '+' : ''}${change} kg`;
+	}
+
+	function weightChangeKey(change: WorkoutReceipt['summary']['weight_changes'][number]): string {
+		return JSON.stringify([change.exercise, change.prescribed_weight, change.actual_weight]);
 	}
 </script>
 
@@ -182,21 +189,32 @@
 				{#if receipt}
 					{@const ending = receipt.summary}
 					<dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-						<!--
-							Load and drift on the same screen, deliberately. D-08 refused a
-							drift total here because it would have been the first place in
-							the product drift appeared alone; beside the load actually
-							moved and the athlete's own average, it is not alone (D-13).
-						-->
-						<dt class="eyebrow">load moved</dt>
+						<dt class="eyebrow">Load moved</dt>
 						<dd class="tabular">{Math.round(ending.load_moved_kg)} kg</dd>
 
-						{#if ending.sets_over > 0 || ending.sets_under > 0}
-							<dt class="eyebrow">against the prescription</dt>
-							<dd class="tabular">
-								{Math.round(ending.load_moved_kg - ending.load_prescribed_kg)} kg
-								{#if ending.sets_over > 0}· over on {ending.sets_over}{/if}
-								{#if ending.sets_under > 0}· under on {ending.sets_under}{/if}
+						<dt class="eyebrow">Load prescribed</dt>
+						<dd class="tabular">{Math.round(ending.load_prescribed_kg)} kg</dd>
+
+						{#if ending.weight_changes.length > 0}
+							<dt class="eyebrow">Weight changes</dt>
+							<dd>
+								<ol class="space-y-1">
+									{#each ending.weight_changes as change (weightChangeKey(change))}
+										<li class="grid grid-cols-[1fr_auto] gap-x-3 tabular">
+											<span class="font-medium">{change.label}</span>
+											<span>{change.prescribed_weight} → {change.actual_weight} kg</span>
+											<span class="text-sm opacity-70">
+												<span
+													>{formatWeightChange(
+														change.actual_weight - change.prescribed_weight
+													)}</span
+												>
+												<span aria-hidden="true"> · </span>
+												<span>{change.sets} set{change.sets === 1 ? '' : 's'}</span>
+											</span>
+										</li>
+									{/each}
+								</ol>
 							</dd>
 						{/if}
 
@@ -212,19 +230,23 @@
 
 						{#if ending.intervals}
 							<dt class="eyebrow">between sets</dt>
-							<dd class="tabular">
-								{formatElapsed(ending.intervals.min_seconds * 1000)} ·
-								{formatElapsed(ending.intervals.median_seconds * 1000)} ·
-								{formatElapsed(ending.intervals.max_seconds * 1000)}
+							<dd class="grid grid-cols-3 gap-2 tabular">
+								<span>
+									<span class="block eyebrow">Fastest</span>
+									{formatElapsed(ending.intervals.min_seconds * 1000)}
+								</span>
+								<span>
+									<span class="block eyebrow">Average</span>
+									{formatElapsed(ending.intervals.average_seconds * 1000)}
+								</span>
+								<span>
+									<span class="block eyebrow">Longest</span>
+									{formatElapsed(ending.intervals.max_seconds * 1000)}
+								</span>
 							</dd>
-							<!--
-								The middle figure is a median, not a mean: one interval spent
-								talking to somebody moves a mean of twelve by a minute, and
-								the tail of this distribution is not signal (D-10).
-							-->
 							<dt class="sr-only">what those three are</dt>
 							<dd class="col-span-2 text-xs opacity-50">
-								fastest · typical · slowest
+								fastest · average · longest
 								{#if ending.intervals.discarded > 0}
 									· {ending.intervals.discarded} gap{ending.intervals.discarded === 1 ? '' : 's'} too
 									long to believe, left out
@@ -386,13 +408,33 @@
 									response and nothing stops an exercise carrying the same one
 									twice, which is exactly how the peek screen threw
 									`each_key_duplicate`.
+
+									Folded away by default. The layout of the cues was never the
+									problem; showing six of them to someone who has read them
+									forty times is, and squat carries six. On a phone that is a
+									large fraction of a card that also has to hold the weight,
+									the plate drawing and two inputs.
+
+									No open state is stored and none is cleared, and that is the
+									intent rather than an omission. The cues render only for the
+									set being performed, so advancing the session unmounts this
+									`<details>` and mounts a fresh, closed one for the next set.
+									Someone who wants them on every set taps once per set;
+									someone who wants them on the one lift they are unsure about
+									pays nothing on the others. Persisting the open state would
+									have to decide which of those two people it was for, and
+									would be wrong for the other one on every session after the
+									first.
 								-->
 								{#if cues.length > 0}
-									<ul class="list-disc space-y-1 pl-5 text-sm opacity-60 marker:opacity-50">
-										{#each cues as cue, index (index)}
-											<li>{cue}</li>
-										{/each}
-									</ul>
+									<details>
+										<summary class="eyebrow">form cues</summary>
+										<ul class="list-disc space-y-1 pl-5 text-sm opacity-60 marker:opacity-50">
+											{#each cues as cue, index (index)}
+												<li>{cue}</li>
+											{/each}
+										</ul>
+									</details>
 								{/if}
 							{:else}
 								<div class="flex items-baseline justify-between">
@@ -410,19 +452,73 @@
 							{/if}
 
 							<div class="flex items-center gap-2">
+								<!--
+									Two handlers on one field, doing different jobs.
+
+									`oninput` records the number as typed, unsnapped, exactly as
+									it always has. It is what makes the drift chips and the plate
+									guidance react while the athlete is still holding the phone,
+									and it is the only handler that fires if the field is never
+									left — a set logged with a thumb straight after typing never
+									blurs anything.
+
+									`onchange` additionally snaps to the nearest half kilo, and
+									the field re-renders to the snapped number because it is
+									bound to the state. Snapping per keystroke would rewrite the
+									field mid-typing: `142.5` passes through `142.` on its way,
+									which parses as `142`, which snaps to `142`, and the caret
+									would land back before the athlete had finished the number.
+									`change` fires once, when the number is finished.
+
+									**This is `type="text"`, and that is the fix rather than a
+									regression.** It was `type="number" step="0.5" min="0"`, and
+									that field silently ate the thing this whole change was
+									about. A number input reports `""` from `.value` for any text
+									it does not consider a valid floating-point number, and
+									whether a comma qualifies is the engine's business, not ours:
+									measured, not assumed, Chromium on Windows normalises `99,5`
+									to `"99.5"` at every locale tried, and Chromium on Linux
+									hands back `""` with `validity.badInput`. On the second one
+									the athlete's typing never reached our parser at all — the
+									field showed `99,5`, the state kept the old weight, and the
+									set logged at the prescription. Fixing `numberFromText` to
+									accept a comma could not close that, because the comma never
+									got there. CI on Linux is what caught it; this machine never
+									would have.
+
+									`step` and `min` went with it and are not missed. `step`
+									constrained the spinner arrows and `checkValidity()`, and
+									this screen uses neither; `min="0"` never stopped anyone
+									typing a negative either. `inputmode="decimal"` is what
+									actually summons the numeric keypad on a phone, and it stays.
+
+									What `type="number"` was accidentally protecting is now
+									`numberFromText`'s job: `142.` is a half-typed number, not
+									the number 142, and returning `undefined` for a trailing
+									separator is what keeps the controlled `value` binding from
+									rewriting the field and eating the point mid-typing.
+
+									`snap` is applied again in `logSet`, which is the
+									place that cannot be bypassed; see the exception to D-11
+									written out there.
+								-->
 								<label class="flex items-center gap-1">
 									<span class="sr-only">Weight in kilograms</span>
 									<input
-										type="number"
+										type="text"
 										inputmode="decimal"
-										step="0.5"
-										min="0"
 										class="input-bordered input w-24 text-lg"
 										value={set.actualWeight}
 										oninput={(event) => {
 											const weight = numberFrom(event);
 											if (weight !== undefined) {
 												void apply((s) => editSet(s, set.position, { weight }));
+											}
+										}}
+										onchange={(event) => {
+											const weight = numberFrom(event);
+											if (weight !== undefined) {
+												void apply((s) => editSet(s, set.position, { weight: snap(weight) }));
 											}
 										}}
 									/>
@@ -551,7 +647,7 @@
 										type="button"
 										onclick={() => apply((s) => skipSet(s, set.position, new Date().toISOString()))}
 									>
-										Skip
+										Skip set
 									</button>
 								{:else}
 									{@const interval = intervalBefore(session, set.position)}
@@ -592,7 +688,7 @@
 		</main>
 
 		<footer class="sticky bottom-0 border-t bg-base-100 p-3">
-			{#if phase === 'ending'}
+			{#if phase === 'ending' && !isComplete(session)}
 				<!--
 					The one question, asked once, when a session ends before the
 					last set (D-08). The program advances whatever the answer is —

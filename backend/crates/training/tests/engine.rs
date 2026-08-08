@@ -8,8 +8,8 @@
 use std::collections::BTreeMap;
 
 use athletos_training::{
-    exercise, programs, testing, Length, Loading, LoggedSession, Maxes, Program, Readout, Session,
-    State,
+    adjusted_load, apply_exercise_adjustments, exercise, programs, testing, AdjustmentPercent,
+    Length, Loading, LoggedSession, Maxes, Program, Readout, Session, State,
 };
 
 /// 5/3/1's four main lifts and what a completed cycle adds to each.
@@ -21,6 +21,19 @@ const MAIN_LIFTS: [(&str, f64); 4] = [
 ];
 
 const SESSIONS_PER_CYCLE: usize = 16;
+
+#[test]
+fn adjustment_percent_accepts_only_nonzero_values_inside_the_hard_boundary() {
+    for invalid in [-51, 0, 51] {
+        assert!(
+            AdjustmentPercent::try_from(invalid).is_err(),
+            "{invalid} must not enter the engine"
+        );
+    }
+
+    assert_eq!(AdjustmentPercent::try_from(-50).unwrap().get(), -50);
+    assert_eq!(AdjustmentPercent::try_from(50).unwrap().get(), 50);
+}
 
 fn wendler() -> &'static dyn Program {
     programs::find("wendler-531-bbb").expect("5/3/1 is in the registry")
@@ -57,6 +70,133 @@ fn training_maxes(program: &dyn Program, state: &State) -> BTreeMap<&'static str
         .iter()
         .map(|(lift, _)| (*lift, training_max(program, state, lift)))
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Enrollment adjustments: change the generated prescription, never program
+// state or the number the program generated it from.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn adjustment_rounds_the_generated_load_for_each_weighted_loading_model() {
+    let barbell_100 = Loading::Barbell.round_down(100.0);
+    let increased_barbell = adjusted_load(
+        &barbell_100,
+        Loading::Barbell,
+        AdjustmentPercent::try_from(10).unwrap(),
+    );
+    let decreased_barbell = adjusted_load(
+        &barbell_100,
+        Loading::Barbell,
+        AdjustmentPercent::try_from(-7).unwrap(),
+    );
+    assert_eq!(increased_barbell.weight, 110.0);
+    assert_eq!(decreased_barbell.weight, 92.5);
+    assert_eq!(
+        increased_barbell.plates_per_side.iter().sum::<f64>() * 2.0 + 20.0,
+        increased_barbell.weight,
+        "the rebuilt barbell breakdown makes the adjusted load"
+    );
+
+    let rack = Loading::Dumbbell { increment: 2.0 };
+    let dumbbell_22 = rack.round_down(22.5);
+    assert_eq!(
+        adjusted_load(&dumbbell_22, rack, AdjustmentPercent::try_from(10).unwrap()).weight,
+        24.0
+    );
+
+    let stack = Loading::Machine { increment: 5.0 };
+    let machine_40 = stack.round_down(43.0);
+    assert_eq!(
+        adjusted_load(
+            &machine_40,
+            stack,
+            AdjustmentPercent::try_from(-10).unwrap()
+        )
+        .weight,
+        35.0
+    );
+
+    let bodyweight = Loading::Bodyweight.round_down(100.0);
+    assert_eq!(
+        adjusted_load(
+            &bodyweight,
+            Loading::Bodyweight,
+            AdjustmentPercent::try_from(50).unwrap()
+        )
+        .weight,
+        0.0
+    );
+}
+
+#[test]
+fn adjustment_changes_only_every_matching_weighted_lift_in_a_generated_session() {
+    let program = smolov();
+    let maxes = testing::maxes();
+    let state = program.start(&maxes).expect("starts");
+    let state_before = state.clone();
+    let maxes_before = maxes.clone();
+    let mut session = program.session(&state).expect("has a session");
+    let prescribed = session.clone();
+    let readout_before = program.readout(&state).expect("reports its numbers");
+    let adjustments = BTreeMap::from([
+        ("squat".to_owned(), AdjustmentPercent::try_from(10).unwrap()),
+        (
+            "no-such-exercise".to_owned(),
+            AdjustmentPercent::try_from(50).unwrap(),
+        ),
+    ]);
+
+    apply_exercise_adjustments(&mut session, &adjustments);
+
+    assert_eq!(session.blocks[0].exercise, "squat");
+    assert_eq!(
+        prescribed.blocks[0]
+            .lifts
+            .iter()
+            .map(|lift| lift.load.weight)
+            .collect::<Vec<_>>(),
+        vec![70.0, 82.5, 97.5],
+        "the adjustment starts from the generated, already rounded loads"
+    );
+    assert_eq!(
+        session.blocks[0]
+            .lifts
+            .iter()
+            .map(|lift| lift.load.weight)
+            .collect::<Vec<_>>(),
+        vec![75.0, 90.0, 105.0],
+        "each squat prescription is adjusted once, then rounded down"
+    );
+
+    for (before, after) in prescribed.blocks.iter().zip(&session.blocks) {
+        for (before_lift, after_lift) in before.lifts.iter().zip(&after.lifts) {
+            assert_eq!(
+                (after_lift.sets, after_lift.reps, after_lift.amrap),
+                (before_lift.sets, before_lift.reps, before_lift.amrap),
+                "{} keeps its prescription shape",
+                before.exercise
+            );
+        }
+
+        if before.exercise != "squat" {
+            assert_eq!(after, before, "{} is not adjusted", before.exercise);
+        }
+    }
+
+    assert_eq!(
+        state, state_before,
+        "session adjustment cannot mutate state"
+    );
+    assert_eq!(
+        maxes, maxes_before,
+        "session adjustment cannot mutate maxes"
+    );
+    assert_eq!(
+        program.readout(&state).expect("reports its numbers"),
+        readout_before,
+        "session adjustment cannot mutate program numbers"
+    );
 }
 
 // ---------------------------------------------------------------------------

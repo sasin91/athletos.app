@@ -1,3 +1,4 @@
+pub mod adjustments;
 pub mod auth;
 pub mod enrollments;
 pub mod exercises;

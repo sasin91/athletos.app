@@ -276,6 +276,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/enrollments/{id}/exercise-adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reads adjustments for an enrolment owned by the authenticated athlete.
+         *     Closed enrolments remain readable so their settings do not disappear from
+         *     history and settings screens merely because the block ended.
+         */
+        get: operations["show_exercise_adjustments"];
+        /**
+         * Replaces every adjustment for one active enrolment.
+         * @description The request first lands as generic JSON so a fractional number can be
+         *     translated into this API's RFC 9457 422 response. Extracting the DTO
+         *     directly would let Axum own that rejection instead of `ApiError`.
+         */
+        put: operations["replace_exercise_adjustments"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/enrollments/{id}/next-session": {
         parameters: {
             query?: never;
@@ -653,6 +680,30 @@ export interface components {
         };
         /** @enum {string} */
         EnrollmentStatus: "active" | "finished" | "abandoned";
+        /** @description First-to-latest estimated-strength change over the trend window. */
+        EstimateChange: {
+            /** Format: double */
+            kg: number;
+            /**
+             * Format: double
+             * @description Absent when the first estimate is zero: no finite percentage exists.
+             */
+            percent?: number | null;
+        };
+        /** @description The canonical non-zero adjustments stored for one enrolment. */
+        ExerciseAdjustments: {
+            /**
+             * @example {
+             *       "bench": 10,
+             *       "squat": -5
+             *     }
+             */
+            adjustments: {
+                [key: string]: number;
+            };
+            /** Format: uuid */
+            enrollment_id: string;
+        };
         /**
          * @description Every exercise the compiled-in programs know about.
          *
@@ -722,6 +773,13 @@ export interface components {
         /** @description The shape of one session's intervals: fastest, typical, slowest. */
         IntervalSpread: {
             /**
+             * Format: double
+             * @description Arithmetic mean over the same believable answer-to-answer intervals as
+             *     the other figures. Kept alongside the median so clients can choose the
+             *     shape that best answers their question without restating the filter.
+             */
+            average_seconds: number;
+            /**
              * Format: int32
              * @description Intervals thrown away as impossible, so a screen showing these figures
              *     can say why they account for less than the wall clock.
@@ -772,6 +830,7 @@ export interface components {
         };
         LiftTrend: {
             bests: components["schemas"]["Best"][];
+            estimate_change?: null | components["schemas"]["EstimateChange"];
             /** @example squat */
             exercise: string;
             /** @example Squat */
@@ -1160,6 +1219,11 @@ export interface components {
              *     trip before the first form renders.
              */
             required_maxes: components["schemas"]["RequiredMax"][];
+            /**
+             * @description Every loaded exercise this program may prescribe and therefore allows
+             *     an enrolment-specific percentage adjustment for.
+             */
+            weighted_exercises: components["schemas"]["WeightedExercise"][];
         };
         ProgramTotals: {
             /** Format: uuid */
@@ -1260,6 +1324,19 @@ export interface components {
              */
             password: string;
         };
+        /** @description The complete adjustment document supplied by a client. */
+        ReplaceExerciseAdjustments: {
+            /**
+             * @description Integer percentages keyed by exercise. Zero removes an adjustment.
+             * @example {
+             *       "bench": 10,
+             *       "squat": -5
+             *     }
+             */
+            adjustments: {
+                [key: string]: number;
+            };
+        };
         /** @description One lift a program needs a max for, ready to be a labelled form field. */
         RequiredMax: {
             /** @example military-press */
@@ -1331,6 +1408,11 @@ export interface components {
             sets_over: number;
             /** Format: int32 */
             sets_under: number;
+            /**
+             * @description Done sets whose actual weight differed from what was prescribed,
+             *     grouped in the order each exact change was first performed.
+             */
+            weight_changes: components["schemas"]["WeightChange"][];
         };
         /** @description Where one session's time went. */
         SessionTiming: {
@@ -1475,10 +1557,22 @@ export interface components {
             drift_kg: number;
             /**
              * Format: double
-             * @description The best estimate across that session's done sets of this lift. `None`
-             *     when every set was skipped, or every set was above the rep ceiling.
+             * @description The best (highest) estimate across that session's done sets of this
+             *     lift. A point with no done sets is never emitted, so this is `None`
+             *     only when every done set failed to produce an estimate — each one
+             *     carrying no weight or no reps, [`athletos_training::estimate`]'s own
+             *     two absence cases. One weightless set among several does not null this
+             *     field; the max is taken across sets, so a single done set with a real
+             *     weight and rep count is enough. A set above the rep ceiling still
+             *     contributes an estimate: the ceiling caps what the formula reads
+             *     rather than refusing the set (D-13, amended).
              */
             estimate?: number | null;
+            /**
+             * Format: double
+             * @description Kilograms moved by done sets of this exercise in this workout.
+             */
+            load_moved_kg: number;
             /**
              * @description Every reason the athlete gave on this lift that session. Travels on
              *     every point; the screen renders them only on downward moves, and that
@@ -1496,6 +1590,23 @@ export interface components {
              *     must draw a gap rather than a zero.
              */
             training_max?: number | null;
+            /**
+             * @description What kind of number `training_max` is — `Readout::TRAINING_MAX` when
+             *     the program derived it and moves it on its own, `Readout::ENTERED_MAX`
+             *     when a prescriptive program has none to report and the athlete's own
+             *     typed number stands in so the chart draws a line rather than a gap.
+             *     Present exactly when `training_max` is, and absent in exactly the same
+             *     cases — never one without the other.
+             *
+             *     Not decoration: without this field the two numbers are indistinguishable
+             *     on the wire, which is precisely the confusion D-04 introduced the label
+             *     to prevent — "so the two can sit on one screen without either being
+             *     mistaken for the other." A client that dropped this field would render
+             *     an entered 1RM under the name reserved for a governor that climbs on its
+             *     own.
+             * @example Training max
+             */
+            training_max_label?: string | null;
             /** Format: uuid */
             workout_id: string;
         };
@@ -1505,6 +1616,29 @@ export interface components {
          * @enum {string}
          */
         Unit: "kg" | "count" | "seconds";
+        /** @description One exact weight change, grouped across matching done sets. */
+        WeightChange: {
+            /** Format: double */
+            actual_weight: number;
+            /** @example barbell-row */
+            exercise: string;
+            /** @example Barbell row */
+            label: string;
+            /** Format: double */
+            prescribed_weight: number;
+            /** Format: int32 */
+            sets: number;
+        };
+        /**
+         * @description One adjustable exercise, labelled for a client that cannot read Rust's
+         *     compiled registry.
+         */
+        WeightedExercise: {
+            /** @example squat */
+            exercise: string;
+            /** @example Squat */
+            label: string;
+        };
         /**
          * @description One workout, expanded.
          *
@@ -2077,6 +2211,110 @@ export interface operations {
                 };
             };
             /** @description The athlete has not entered a max this program needs */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    show_exercise_adjustments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The enrolment's id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The enrolment's exercise adjustments */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExerciseAdjustments"];
+                };
+            };
+            /** @description Missing or invalid access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such enrolment belongs to this athlete */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    replace_exercise_adjustments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The enrolment's id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceExerciseAdjustments"];
+            };
+        };
+        responses: {
+            /** @description The adjustments as now stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExerciseAdjustments"];
+                };
+            };
+            /** @description Missing or invalid access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such enrolment belongs to this athlete */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The enrolment is closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description An exercise or percentage is not adjustable */
             422: {
                 headers: {
                     [name: string]: unknown;

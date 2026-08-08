@@ -25,6 +25,37 @@ pub const BARBELL_RESOLUTION: f64 = 2.5;
 /// down to 97.5.
 const TOLERANCE: f64 = 1e-9;
 
+/// A non-zero enrollment adjustment accepted by the training engine.
+///
+/// Zero is represented by absence from the exercise map. Keeping the hard
+/// boundary in this type means no internal caller can bypass the same rule the
+/// API and database expose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AdjustmentPercent(i16);
+
+impl AdjustmentPercent {
+    pub const MIN: i16 = -50;
+    pub const MAX: i16 = 50;
+
+    pub fn get(self) -> i16 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("an adjustment must be a non-zero whole percentage from -50 through 50")]
+pub struct InvalidAdjustmentPercent;
+
+impl TryFrom<i16> for AdjustmentPercent {
+    type Error = InvalidAdjustmentPercent;
+
+    fn try_from(value: i16) -> Result<Self, Self::Error> {
+        (value != 0 && (Self::MIN..=Self::MAX).contains(&value))
+            .then_some(Self(value))
+            .ok_or(InvalidAdjustmentPercent)
+    }
+}
+
 /// How an exercise is loaded, and therefore what weights exist for it (D-04).
 ///
 /// This is a property of the exercise, not of the program: a barbell has 2.5 kg
@@ -106,6 +137,17 @@ impl Loading {
             }
         }
     }
+}
+
+/// Applies an enrollment adjustment to a generated load and rebuilds it through
+/// the exercise's loading model.
+///
+/// The percentage applies to the already-generated prescription, not to a
+/// training max or other program input. Re-entering through [`Loading::round_down`]
+/// is what keeps the result loadable and rebuilds a barbell's plate breakdown.
+pub fn adjusted_load(load: &Load, loading: Loading, percent: AdjustmentPercent) -> Load {
+    let target = load.weight * (1.0 + f64::from(percent.get()) / 100.0);
+    loading.round_down(target)
 }
 
 /// The greedy walk shared by [`break_down`] and [`fill`]: plates placed

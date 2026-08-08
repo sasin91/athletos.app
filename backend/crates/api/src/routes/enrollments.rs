@@ -33,14 +33,14 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use athletos_training::{
-    exercise, plan, programs, Loading, Progress, Readout, Session, State as ProgramState,
-    BAR_WEIGHT,
+    apply_exercise_adjustments, exercise, plan, programs, Loading, Progress, Readout, Session,
+    State as ProgramState, BAR_WEIGHT,
 };
 
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
 use crate::pace::{self, PaceProjection};
-use crate::routes::maxes;
+use crate::routes::{adjustments, maxes, programs as program_routes};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -527,7 +527,7 @@ pub async fn list(
     let mut enrollments = Vec::with_capacity(rows.len());
 
     for (id, program_key, stored_state, status, started_at, ended_at) in rows {
-        let program = unknown_program(&program_key)?;
+        let program = program_routes::resolve_stored_program(&program_key)?;
         let program_state = ProgramState::from_json(stored_state);
         let progress = program.progress(&program_state)?;
         let readout = program.readout(&program_state)?;
@@ -599,10 +599,12 @@ pub async fn next_session(
         )));
     }
 
-    let program = unknown_program(&program_key)?;
+    let program = program_routes::resolve_stored_program(&program_key)?;
     let program_state = ProgramState::from_json(stored_state);
 
-    let session = program.session(&program_state)?;
+    let mut session = program.session(&program_state)?;
+    let adjustments = adjustments::load(&state.db, id).await?;
+    apply_exercise_adjustments(&mut session, &adjustments);
     let progress = program.progress(&program_state)?;
 
     let prescribed_sets = prescribed_sets_of(&session);
@@ -625,20 +627,6 @@ pub async fn next_session(
         prescribed_sets,
         pace,
     }))
-}
-
-/// Resolves a stored `program_key` back to compiled code.
-///
-/// `pub(crate)` and an internal error rather than a 404: the key was written by
-/// this server from the registry, so a key with no program means a program was
-/// deleted out from under live enrolments, which is a deploy mistake and not
-/// something the caller did.
-pub(crate) fn unknown_program(key: &str) -> ApiResult<&'static dyn athletos_training::Program> {
-    programs::find(key).ok_or_else(|| {
-        ApiError::Internal(format!(
-            "enrolment names program {key}, which is not in the registry"
-        ))
-    })
 }
 
 fn blocks_of(session: &Session) -> Vec<BlockView> {
