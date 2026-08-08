@@ -3163,61 +3163,129 @@ async fn progress_pools_interval_spreads_without_bridging_workouts_or_enrollment
     let first_enrollment = enrol(&server, &token, "wendler-531-bbb").await;
     let second_enrollment = enrol(&server, &token, "wendler-531-bbb").await;
     let first_session = next_session(&server, &token, first_enrollment).await;
-    let second_session = next_session(&server, &token, second_enrollment).await;
+    let other_enrollment_session = next_session(&server, &token, second_enrollment).await;
 
     let now = chrono::Utc::now();
-    let first_start = now - chrono::Duration::hours(3);
-    let second_start = now - chrono::Duration::hours(1);
+    let first_start = now - chrono::Duration::minutes(70);
+    let second_start = now - chrono::Duration::minutes(58);
+    let other_start = now - chrono::Duration::minutes(42);
 
-    let mut first = logged_as_prescribed(Uuid::now_v7(), first_enrollment, &first_session);
-    first["started_at"] = json!(first_start.to_rfc3339());
-    first["ended_at"] = json!((first_start + chrono::Duration::seconds(3_000)).to_rfc3339());
-
-    let mut second = logged_as_prescribed(Uuid::now_v7(), second_enrollment, &second_session);
-    second["started_at"] = json!(second_start.to_rfc3339());
-    second["ended_at"] = json!((second_start + chrono::Duration::seconds(4_200)).to_rfc3339());
-
-    for (body, start, offsets) in [
-        (&mut first, first_start, [300_i64, 360, 480]),
-        (&mut second, second_start, [300_i64, 390, 540]),
-    ] {
+    let stamp = |body: &mut serde_json::Value,
+                 start: chrono::DateTime<chrono::Utc>,
+                 offsets: &[i64],
+                 skipped: Option<usize>| {
         let sets = body["sets"]
             .as_array_mut()
             .expect("a prescribed session has sets");
-        assert!(sets.len() >= 3, "the fixture needs two measured gaps");
+        assert!(
+            sets.len() >= offsets.len(),
+            "the fixture needs every measured answer"
+        );
 
-        for (set, offset) in sets.iter_mut().take(3).zip(offsets) {
-            set["logged_at"] = json!((start + chrono::Duration::seconds(offset)).to_rfc3339());
+        for (set, offset) in sets.iter_mut().zip(offsets) {
+            set["logged_at"] = json!((start + chrono::Duration::seconds(*offset)).to_rfc3339());
         }
 
-        // The middle answer is deliberately a skip. Its stamp remains a
-        // boundary: first -> skip and skip -> third are both real intervals.
-        sets[1]["status"] = json!("skipped");
-        sets[1]["actual_weight"] = serde_json::Value::Null;
-        sets[1]["actual_reps"] = serde_json::Value::Null;
-    }
+        if let Some(index) = skipped {
+            // The answer remains timestamped. It contributes no performed
+            // load or estimate, but closes one interval and opens the next.
+            sets[index]["status"] = json!("skipped");
+            sets[index]["actual_weight"] = serde_json::Value::Null;
+            sets[index]["actual_reps"] = serde_json::Value::Null;
+        }
+    };
 
-    // Move the second session's main lift enough to make the trend's
+    let first_id = Uuid::now_v7();
+    let mut first = logged_as_prescribed(first_id, first_enrollment, &first_session);
+    first["started_at"] = json!(first_start.to_rfc3339());
+    first["ended_at"] = json!((first_start + chrono::Duration::seconds(600)).to_rfc3339());
+    stamp(&mut first, first_start, &[120, 180, 300, 360], Some(2));
+
+    let skipped = &first["sets"][2];
+    let skipped_planned_load = skipped["prescribed_weight"].as_f64().unwrap()
+        * skipped["prescribed_reps"].as_f64().unwrap();
+    assert!(skipped_planned_load > 0.0, "the skip must omit real work");
+    let skipped_exercise = skipped["exercise"].as_str().unwrap().to_owned();
+    assert_eq!(skipped_exercise, first["sets"][0]["exercise"]);
+
+    let expected_first_load: f64 = first["sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|set| set["status"] == "done")
+        .map(|set| set["actual_weight"].as_f64().unwrap() * set["actual_reps"].as_f64().unwrap())
+        .sum();
+    let expected_first_estimate = first["sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|set| set["status"] == "done" && set["exercise"] == skipped_exercise)
+        .filter_map(|set| {
+            athletos_training::estimate(
+                set["actual_weight"].as_f64()?,
+                u32::try_from(set["actual_reps"].as_u64()?).ok()?,
+            )
+        })
+        .reduce(f64::max)
+        .expect("the main lift has a done set");
+    let skipped_implied_estimate = athletos_training::estimate(
+        skipped["prescribed_weight"].as_f64().unwrap(),
+        u32::try_from(skipped["prescribed_reps"].as_u64().unwrap()).unwrap(),
+    )
+    .expect("the skipped main-lift set carries a real prescription");
+    assert!(
+        skipped_implied_estimate > expected_first_estimate,
+        "including the skipped prescription must change the estimate assertion"
+    );
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&first)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    // A second workout under the same enrollment supplies two intervals,
+    // versus the first workout's three. Its raw sample is [30, 90].
+    let second_session = next_session(&server, &token, first_enrollment).await;
+    let second_id = Uuid::now_v7();
+    let mut second = logged_as_prescribed(second_id, first_enrollment, &second_session);
+    second["started_at"] = json!(second_start.to_rfc3339());
+    second["ended_at"] = json!((second_start + chrono::Duration::seconds(900)).to_rfc3339());
+    stamp(&mut second, second_start, &[120, 150, 240], None);
+
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&second)
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let other_id = Uuid::now_v7();
+    let mut other = logged_as_prescribed(other_id, second_enrollment, &other_enrollment_session);
+    other["started_at"] = json!(other_start.to_rfc3339());
+    other["ended_at"] = json!((other_start + chrono::Duration::seconds(1_200)).to_rfc3339());
+    stamp(&mut other, other_start, &[120, 300], None);
+
+    // Move the other enrollment's main lift enough to make the trend's
     // first-to-latest estimate change observable on the wire.
-    let main_lift = second["sets"][0]["exercise"]
+    let main_lift = other["sets"][0]["exercise"]
         .as_str()
         .expect("the first set names its lift")
         .to_owned();
-    for set in second["sets"].as_array_mut().unwrap() {
+    for set in other["sets"].as_array_mut().unwrap() {
         if set["exercise"] == main_lift && set["status"] == "done" {
             let weight = set["actual_weight"].as_f64().expect("done is loaded");
             set["actual_weight"] = json!(weight + 10.0);
         }
     }
 
-    for body in [&first, &second] {
-        server
-            .post("/v1/workouts")
-            .authorization_bearer(&token)
-            .json(body)
-            .await
-            .assert_status(StatusCode::CREATED);
-    }
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&other)
+        .await
+        .assert_status(StatusCode::CREATED);
 
     let view = progress(&server, &token).await;
     let value = |list: &serde_json::Value, key: &str| {
@@ -3236,23 +3304,27 @@ async fn progress_pools_interval_spreads_without_bridging_workouts_or_enrollment
     };
 
     let first_indicators = &program_for(first_enrollment)["indicators"];
-    assert_eq!(value(first_indicators, "average_duration"), 3_000.0);
-    assert_eq!(value(first_indicators, "interval_min"), 60.0);
-    assert_eq!(value(first_indicators, "interval_average"), 90.0);
+    assert_eq!(value(first_indicators, "average_duration"), 750.0);
+    assert_eq!(value(first_indicators, "interval_min"), 30.0);
+    // Raw pooled mean: [60, 120, 60, 30, 90] / 5 = 72. The
+    // mean of workout means would be (80 + 60) / 2 = 70 and must fail.
+    assert_eq!(value(first_indicators, "interval_average"), 72.0);
     assert_eq!(value(first_indicators, "interval_max"), 120.0);
 
     let second_indicators = &program_for(second_enrollment)["indicators"];
-    assert_eq!(value(second_indicators, "average_duration"), 4_200.0);
-    assert_eq!(value(second_indicators, "interval_min"), 90.0);
-    assert_eq!(value(second_indicators, "interval_average"), 120.0);
-    assert_eq!(value(second_indicators, "interval_max"), 150.0);
+    assert_eq!(value(second_indicators, "average_duration"), 1_200.0);
+    assert_eq!(value(second_indicators, "interval_min"), 180.0);
+    assert_eq!(value(second_indicators, "interval_average"), 180.0);
+    assert_eq!(value(second_indicators, "interval_max"), 180.0);
 
-    // Four raw samples are pooled: [60, 120] and [90, 150]. There is no
-    // synthetic interval from the end of one workout to the start of the next.
-    assert_eq!(value(&view["overall"], "average_duration"), 3_600.0);
-    assert_eq!(value(&view["overall"], "interval_min"), 60.0);
-    assert_eq!(value(&view["overall"], "interval_average"), 105.0);
-    assert_eq!(value(&view["overall"], "interval_max"), 150.0);
+    // Six raw samples are pooled: [60, 120, 60], [30, 90], and [180].
+    // Their mean is 90; the mean of workout means would be 106.67. The
+    // between-workout gaps are deliberately believable 480 and 840 seconds,
+    // so either one being bridged would raise the asserted maximum.
+    assert_eq!(value(&view["overall"], "average_duration"), 900.0);
+    assert_eq!(value(&view["overall"], "interval_min"), 30.0);
+    assert_eq!(value(&view["overall"], "interval_average"), 90.0);
+    assert_eq!(value(&view["overall"], "interval_max"), 180.0);
 
     for key in [
         "average_duration",
@@ -3263,6 +3335,44 @@ async fn progress_pools_interval_spreads_without_bridging_workouts_or_enrollment
         assert_eq!(progress_indicator(&view["overall"], key)["unit"], "seconds");
     }
 
+    let first_figures = view["sessions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["workout_id"] == first_id.to_string())
+        .expect("the skipped workout has session figures");
+    assert!(
+        (first_figures["load_moved_kg"].as_f64().unwrap() - expected_first_load).abs()
+            < f64::EPSILON,
+        "a skipped set contributes no moved load"
+    );
+    assert!(
+        (first_figures["load_planned_kg"].as_f64().unwrap()
+            - expected_first_load
+            - skipped_planned_load)
+            .abs()
+            < f64::EPSILON,
+        "the skipped work remains prescribed while contributing no moved load"
+    );
+
+    let skipped_lift = view["lifts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|lift| lift["exercise"] == skipped_exercise)
+        .expect("the skipped set's lift has a trend");
+    let skipped_point = skipped_lift["points"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|point| point["workout_id"] == first_id.to_string())
+        .expect("the skipped workout has a trend point");
+    assert!(
+        (skipped_point["estimate"].as_f64().unwrap() - expected_first_estimate).abs()
+            < f64::EPSILON,
+        "the stamped skip is a timing boundary, not strength evidence"
+    );
+
     let lift = view["lifts"]
         .as_array()
         .expect("lifts are a list")
@@ -3270,9 +3380,13 @@ async fn progress_pools_interval_spreads_without_bridging_workouts_or_enrollment
         .find(|lift| lift["exercise"] == main_lift)
         .expect("the main lift has a trend");
     let points = lift["points"].as_array().expect("points are a list");
-    assert_eq!(points.len(), 2);
-    let first_estimate = points[0]["estimate"].as_f64().expect("estimated");
-    let latest_estimate = points[1]["estimate"].as_f64().expect("estimated");
+    let estimates: Vec<f64> = points
+        .iter()
+        .filter_map(|point| point["estimate"].as_f64())
+        .collect();
+    assert!(estimates.len() >= 2);
+    let first_estimate = estimates[0];
+    let latest_estimate = *estimates.last().unwrap();
     let change = &lift["estimate_change"];
     let expected_kg = latest_estimate - first_estimate;
     let expected_percent = expected_kg / first_estimate * 100.0;

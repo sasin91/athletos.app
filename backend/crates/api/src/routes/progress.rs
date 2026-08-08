@@ -258,8 +258,8 @@ pub fn indicators_from(totals: &Totals) -> Vec<Indicator> {
         ),
     ];
 
-    // Omitted rather than zeroed: a median across nothing is not a number, and
-    // an absent card is the honest way to say so.
+    // Omitted rather than zeroed: neither an average nor a spread across no
+    // observations is a number, and an absent card is the honest way to say so.
     if let Some(seconds) = mean(&totals.durations) {
         indicators.push(indicator(
             "average_duration",
@@ -326,10 +326,10 @@ pub fn mean(values: &[i64]) -> Option<f64> {
 
 /// Median, sorting in place. `None` for an empty sample.
 ///
-/// Median rather than mean throughout this module, for the reason `pace` gives:
-/// the tail of these distributions is not signal. An even sample takes the
-/// mean of the middle pair, matching `pace::median`, so the figure does not
-/// depend on which side of the list a tie fell.
+/// Median remains on the wire beside the arithmetic average and interval
+/// spread. It is the tail-resistant reading `pace` describes; an even sample
+/// takes the mean of the middle pair, matching `pace::median`, so the figure
+/// does not depend on which side of the list a tie fell.
 pub fn median(values: &mut [i64]) -> Option<i64> {
     if values.is_empty() {
         return None;
