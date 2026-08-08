@@ -178,6 +178,19 @@ fn logged_as_prescribed(
     })
 }
 
+/// Array indices in a complete submission belonging to one real prescribed
+/// exercise. Tests use this instead of assuming a program's block happens to
+/// begin at a particular array offset.
+fn set_indices(body: &serde_json::Value, exercise: &str) -> Vec<usize> {
+    body["sets"]
+        .as_array()
+        .expect("a workout body carries its prescribed sets")
+        .iter()
+        .enumerate()
+        .filter_map(|(index, set)| (set["exercise"] == exercise).then_some(index))
+        .collect()
+}
+
 /// The heaviest weight prescribed for the session's main lift.
 ///
 /// For 5/3/1 that is the AMRAP set of week 1–3, which is exactly the number that
@@ -3273,26 +3286,41 @@ async fn completion_report_groups_changed_weights_and_recomputes_interval_averag
 
     let workout_id = Uuid::now_v7();
     let mut body = logged_as_prescribed(workout_id, enrollment, &session);
-    let sets = body["sets"].as_array_mut().expect("sets are an array");
-    assert!(
-        sets.len() >= 6
-            && sets[..6].iter().all(|set| {
-                set["exercise"] == "squat" && set["prescribed_weight"] == json!(85.0)
-            }),
-        "Smolov Jr opens with six 85 kg squat sets"
-    );
+    let squat = set_indices(&body, "squat");
+    let prescribed_weight = squat
+        .iter()
+        .map(|index| body["sets"][*index]["prescribed_weight"].as_f64().unwrap())
+        .find(|candidate| {
+            squat
+                .iter()
+                .filter(|index| {
+                    body["sets"][**index]["prescribed_weight"].as_f64() == Some(*candidate)
+                })
+                .count()
+                >= 5
+        })
+        .expect("the session has enough equally prescribed squat rows");
+    let squat: Vec<usize> = squat
+        .into_iter()
+        .filter(|index| {
+            body["sets"][*index]["prescribed_weight"].as_f64() == Some(prescribed_weight)
+        })
+        .collect();
+    assert!(squat.len() >= 5);
+    assert!(![95.0, 100.0].contains(&prescribed_weight));
 
     let started: DateTime<Utc> = "2026-08-01T09:00:00Z".parse().unwrap();
-    for (index, seconds) in [60, 120, 210, 330, 1_630].into_iter().enumerate() {
+    let sets = body["sets"].as_array_mut().expect("sets are an array");
+    for (index, seconds) in squat.iter().copied().zip([60, 120, 210, 330, 1_630]) {
         sets[index]["logged_at"] =
             json!((started + chrono::Duration::seconds(seconds)).to_rfc3339());
     }
-    sets[0]["actual_weight"] = json!(100.0);
-    sets[1]["actual_weight"] = json!(100.0);
-    sets[2]["actual_weight"] = json!(95.0);
-    sets[4]["status"] = json!("skipped");
-    sets[4]["actual_weight"] = json!(null);
-    sets[4]["actual_reps"] = json!(null);
+    sets[squat[0]]["actual_weight"] = json!(100.0);
+    sets[squat[1]]["actual_weight"] = json!(100.0);
+    sets[squat[2]]["actual_weight"] = json!(95.0);
+    sets[squat[4]]["status"] = json!("skipped");
+    sets[squat[4]]["actual_weight"] = json!(null);
+    sets[squat[4]]["actual_reps"] = json!(null);
     body["started_at"] = json!(started.to_rfc3339());
     body["ended_at"] = json!((started + chrono::Duration::minutes(30)).to_rfc3339());
 
@@ -3310,14 +3338,14 @@ async fn completion_report_groups_changed_weights_and_recomputes_interval_averag
             {
                 "exercise": "squat",
                 "label": "Squat",
-                "prescribed_weight": 85.0,
+                "prescribed_weight": prescribed_weight,
                 "actual_weight": 100.0,
                 "sets": 2,
             },
             {
                 "exercise": "squat",
                 "label": "Squat",
-                "prescribed_weight": 85.0,
+                "prescribed_weight": prescribed_weight,
                 "actual_weight": 95.0,
                 "sets": 1,
             },
@@ -3542,34 +3570,45 @@ async fn a_lift_trend_load_excludes_other_exercises_and_unperformed_sets(pool: P
     let server = server(pool);
     let token = register(&server, EMAIL).await;
     set_maxes(&server, &token, full_maxes()).await;
-    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let enrollment = enrol(&server, &token, "smolov-jr").await;
+    let prescribed = next_session(&server, &token, enrollment).await;
     let workout = Uuid::now_v7();
     let now = chrono::Utc::now();
-    let body = json!({
-        "id": workout,
-        "enrollment_id": enrollment,
-        "started_at": now,
-        "ended_at": now + chrono::Duration::hours(1),
-        "outcome": "cut_short",
-        "cut_reason": "enough",
-        "sets": [
-            { "position": 0, "exercise": "squat", "prescribed_weight": 100.0,
-              "prescribed_reps": 5, "actual_weight": 100.0, "actual_reps": 5,
-              "status": "done" },
-            { "position": 1, "exercise": "deadlift", "prescribed_weight": 180.0,
-              "prescribed_reps": 3, "actual_weight": 180.0, "actual_reps": 3,
-              "status": "done" },
-            { "position": 2, "exercise": "lateral-raise", "prescribed_weight": 10.0,
-              "prescribed_reps": 10, "actual_weight": 10.0, "actual_reps": 10,
-              "status": "done" },
-            { "position": 3, "exercise": "squat", "prescribed_weight": 100.0,
-              "prescribed_reps": 5, "actual_weight": null, "actual_reps": null,
-              "status": "skipped" },
-            { "position": 4, "exercise": "squat", "prescribed_weight": 120.0,
-              "prescribed_reps": 1, "actual_weight": 120.0, "actual_reps": 1,
-              "status": "pending" }
-        ]
-    });
+    let mut body = logged_as_prescribed(workout, enrollment, &prescribed);
+    let squat = set_indices(&body, "squat");
+    assert!(squat.len() >= 3, "the real session needs three squat rows");
+
+    let sets = body["sets"].as_array_mut().unwrap();
+    for (index, status) in [(squat[1], "skipped"), (squat[2], "pending")] {
+        sets[index]["status"] = json!(status);
+        sets[index]["actual_weight"] = json!(null);
+        sets[index]["actual_reps"] = json!(null);
+    }
+    body["started_at"] = json!(now.to_rfc3339());
+    body["ended_at"] = json!((now + chrono::Duration::hours(1)).to_rfc3339());
+    body["outcome"] = json!("cut_short");
+    body["cut_reason"] = json!("enough");
+
+    let done_load = |set: &serde_json::Value| {
+        if set["status"] == "done" {
+            set["actual_weight"].as_f64().expect("done set weight")
+                * set["actual_reps"].as_f64().expect("done set reps")
+        } else {
+            0.0
+        }
+    };
+    let sets = body["sets"].as_array().unwrap();
+    let squat_load: f64 = sets
+        .iter()
+        .filter(|set| set["exercise"] == "squat")
+        .map(done_load)
+        .sum();
+    let whole_workout_load: f64 = sets.iter().map(done_load).sum();
+    assert!(squat_load > 0.0);
+    assert!(
+        whole_workout_load > squat_load,
+        "the real session must include performed non-squat load"
+    );
 
     server
         .post("/v1/workouts")
@@ -3591,7 +3630,7 @@ async fn a_lift_trend_load_excludes_other_exercises_and_unperformed_sets(pool: P
         .iter()
         .find(|point| point["workout_id"] == workout.to_string())
         .expect("this workout's squat point");
-    assert_eq!(point["load_moved_kg"].as_f64(), Some(500.0));
+    assert_eq!(point["load_moved_kg"].as_f64(), Some(squat_load));
 
     let session = view["sessions"]
         .as_array()
@@ -3599,7 +3638,7 @@ async fn a_lift_trend_load_excludes_other_exercises_and_unperformed_sets(pool: P
         .iter()
         .find(|session| session["workout_id"] == workout.to_string())
         .expect("whole-workout figures remain available");
-    assert_eq!(session["load_moved_kg"].as_f64(), Some(1_140.0));
+    assert_eq!(session["load_moved_kg"].as_f64(), Some(whole_workout_load));
 }
 
 /// The other arm: a prescriptive program has no training max, and
@@ -4140,30 +4179,20 @@ async fn a_set_lifted_at_no_weight_earns_no_record(pool: PgPool) {
     let server = server(pool);
     let token = register(&server, EMAIL).await;
     set_maxes(&server, &token, full_maxes()).await;
-    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let enrollment = enrol(&server, &token, "smolov-jr").await;
     let session = next_session(&server, &token, enrollment).await;
 
     let mut body = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
-    let after_the_last = body["sets"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|set| set["position"].as_u64())
-        .max()
-        .expect("the session prescribes sets")
-        + 1;
-
-    // Fifteen reps at nothing: above every bucket in the grid, so an
-    // implementation that failed to exclude it would fill all six with zeroes.
-    body["sets"].as_array_mut().unwrap().push(json!({
-        "position": after_the_last,
-        "exercise": "hanging-leg-raise",
-        "prescribed_weight": 0.0,
-        "prescribed_reps": 15,
-        "actual_weight": 0.0,
-        "actual_reps": 15,
-        "status": "done",
-    }));
+    let bodyweight = set_indices(&body, "hanging-leg-raise");
+    let bodyweight = *bodyweight
+        .first()
+        .expect("Smolov Jr day one prescribes hanging leg raises");
+    let set = &mut body["sets"].as_array_mut().unwrap()[bodyweight];
+    assert_eq!(set["prescribed_weight"].as_f64(), Some(0.0));
+    let prescribed_reps = set["prescribed_reps"].clone();
+    set["status"] = json!("done");
+    set["actual_weight"] = json!(0.0);
+    set["actual_reps"] = prescribed_reps;
 
     // `/v1/progress` windows to the last twelve months measured from `now()`;
     // the fixture's fixed date cannot move (see `log_a_recent_session`), so this
