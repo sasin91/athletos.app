@@ -111,6 +111,7 @@ impl Modify for BearerToken {
         crate::timing::LongestInterval,
         crate::timing::IntervalSpread,
         crate::report::SessionReport,
+        crate::report::WeightChange,
         // The progress screen. `ProgressView` registers as `AthleteProgress`
         // via `#[schema(as = ...)]` — `routes::enrollments::ProgressView` holds
         // the unqualified name, and utoipa would otherwise overwrite it with

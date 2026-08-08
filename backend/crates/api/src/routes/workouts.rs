@@ -685,8 +685,21 @@ async fn recorded_report(
     let reported: Vec<ReportedSet> = rows
         .iter()
         .map(
-            |(_, _, prescribed_weight, prescribed_reps, actual_weight, actual_reps, status, _)| {
+            |(
+                _,
+                exercise,
+                prescribed_weight,
+                prescribed_reps,
+                actual_weight,
+                actual_reps,
+                status,
+                _,
+            )| {
                 ReportedSet {
+                    exercise: exercise.clone(),
+                    label: exercise::find(exercise)
+                        .map(|found| found.label.to_owned())
+                        .unwrap_or_else(|| exercise.clone()),
                     prescribed_weight: *prescribed_weight,
                     prescribed_reps: u32::try_from(*prescribed_reps).unwrap_or_default(),
                     actual_weight: *actual_weight,

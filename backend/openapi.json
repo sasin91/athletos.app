@@ -1345,11 +1345,17 @@
         "description": "The shape of one session's intervals: fastest, typical, slowest.",
         "required": [
           "min_seconds",
+          "average_seconds",
           "median_seconds",
           "max_seconds",
           "discarded"
         ],
         "properties": {
+          "average_seconds": {
+            "type": "number",
+            "format": "double",
+            "description": "Arithmetic mean over the same believable answer-to-answer intervals as\nthe other figures. Kept alongside the median so clients can choose the\nshape that best answers their question without restating the filter."
+          },
           "discarded": {
             "type": "integer",
             "format": "int32",
@@ -2264,6 +2270,7 @@
           "load_prescribed_kg",
           "sets_over",
           "sets_under",
+          "weight_changes",
           "duration_seconds"
         ],
         "properties": {
@@ -2310,6 +2317,13 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          },
+          "weight_changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeightChange"
+            },
+            "description": "Done sets whose actual weight differed from what was prescribed,\ngrouped in the order each exact change was first performed."
           }
         }
       },
@@ -2566,6 +2580,40 @@
           "count",
           "seconds"
         ]
+      },
+      "WeightChange": {
+        "type": "object",
+        "description": "One exact weight change, grouped across matching done sets.",
+        "required": [
+          "exercise",
+          "label",
+          "prescribed_weight",
+          "actual_weight",
+          "sets"
+        ],
+        "properties": {
+          "actual_weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "exercise": {
+            "type": "string",
+            "example": "barbell-row"
+          },
+          "label": {
+            "type": "string",
+            "example": "Barbell row"
+          },
+          "prescribed_weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "sets": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
       },
       "WorkoutDetail": {
         "type": "object",

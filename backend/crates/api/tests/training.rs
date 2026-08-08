@@ -2688,6 +2688,88 @@ async fn a_retry_reports_the_same_ending_as_the_first_submit(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn completion_report_groups_changed_weights_and_recomputes_interval_average_on_retry(
+    pool: PgPool,
+) {
+    let server = server(pool);
+    let token = register(&server, "completion-report@example.com").await;
+    let mut maxes = full_maxes();
+    maxes["squat"] = json!(122.0);
+    set_maxes(&server, &token, maxes).await;
+    let enrollment = enrol(&server, &token, "smolov-jr").await;
+    let session = next_session(&server, &token, enrollment).await;
+
+    let workout_id = Uuid::now_v7();
+    let mut body = logged_as_prescribed(workout_id, enrollment, &session);
+    let sets = body["sets"].as_array_mut().expect("sets are an array");
+    assert!(
+        sets.len() >= 6
+            && sets[..6].iter().all(|set| {
+                set["exercise"] == "squat" && set["prescribed_weight"] == json!(85.0)
+            }),
+        "Smolov Jr opens with six 85 kg squat sets"
+    );
+
+    let started: DateTime<Utc> = "2026-08-01T09:00:00Z".parse().unwrap();
+    for (index, seconds) in [60, 120, 210, 330, 1_630].into_iter().enumerate() {
+        sets[index]["logged_at"] =
+            json!((started + chrono::Duration::seconds(seconds)).to_rfc3339());
+    }
+    sets[0]["actual_weight"] = json!(100.0);
+    sets[1]["actual_weight"] = json!(100.0);
+    sets[2]["actual_weight"] = json!(95.0);
+    sets[4]["status"] = json!("skipped");
+    sets[4]["actual_weight"] = json!(null);
+    sets[4]["actual_reps"] = json!(null);
+    body["started_at"] = json!(started.to_rfc3339());
+    body["ended_at"] = json!((started + chrono::Duration::minutes(30)).to_rfc3339());
+
+    let first = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await;
+    first.assert_status(StatusCode::CREATED);
+    let first: serde_json::Value = first.json();
+
+    assert_eq!(
+        first["summary"]["weight_changes"],
+        json!([
+            {
+                "exercise": "squat",
+                "label": "Squat",
+                "prescribed_weight": 85.0,
+                "actual_weight": 100.0,
+                "sets": 2,
+            },
+            {
+                "exercise": "squat",
+                "label": "Squat",
+                "prescribed_weight": 85.0,
+                "actual_weight": 95.0,
+                "sets": 1,
+            },
+        ])
+    );
+    assert_eq!(
+        first["summary"]["intervals"]["average_seconds"],
+        json!(90.0)
+    );
+    assert_eq!(first["summary"]["intervals"]["discarded"], json!(1));
+
+    let retry = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&body)
+        .await;
+    retry.assert_status(StatusCode::OK);
+    let retry: serde_json::Value = retry.json();
+
+    assert_eq!(retry["duplicate"], json!(true));
+    assert_eq!(retry["summary"], first["summary"]);
+}
+
+#[sqlx::test]
 async fn the_ending_has_no_average_before_three_sessions(pool: PgPool) {
     let server = server(pool);
     let token = register(&server, EMAIL).await;
