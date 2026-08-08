@@ -56,6 +56,8 @@ impl Modify for BearerToken {
         crate::routes::enrollments::create,
         crate::routes::enrollments::list,
         crate::routes::enrollments::next_session,
+        crate::routes::adjustments::show,
+        crate::routes::adjustments::replace,
         crate::routes::workouts::submit,
         crate::routes::workouts::history,
         crate::routes::workouts::show,
@@ -79,6 +81,7 @@ impl Modify for BearerToken {
         crate::routes::programs::ProgramLength,
         crate::routes::programs::ProgramRecoveryDemand,
         crate::routes::programs::RequiredMax,
+        crate::routes::programs::WeightedExercise,
         crate::routes::exercises::ExerciseCatalogue,
         crate::routes::exercises::ExerciseSummary,
         crate::routes::maxes::MaxesDocument,
@@ -93,6 +96,8 @@ impl Modify for BearerToken {
         crate::routes::enrollments::LiftView,
         crate::routes::enrollments::PrescribedSet,
         crate::routes::enrollments::PlateChangeView,
+        crate::routes::adjustments::ReplaceExerciseAdjustments,
+        crate::routes::adjustments::ExerciseAdjustments,
         crate::pace::PaceProjection,
         crate::routes::workouts::WorkoutSubmission,
         crate::routes::workouts::WorkoutOutcome,
@@ -111,6 +116,7 @@ impl Modify for BearerToken {
         crate::timing::LongestInterval,
         crate::timing::IntervalSpread,
         crate::report::SessionReport,
+        crate::report::WeightChange,
         // The progress screen. `ProgressView` registers as `AthleteProgress`
         // via `#[schema(as = ...)]` — `routes::enrollments::ProgressView` holds
         // the unqualified name, and utoipa would otherwise overwrite it with
@@ -119,6 +125,7 @@ impl Modify for BearerToken {
         crate::routes::progress::Unit,
         crate::routes::progress::TrendPoint,
         crate::routes::progress::Best,
+        crate::routes::progress::EstimateChange,
         crate::routes::progress::LiftTrend,
         crate::routes::progress::SessionFigures,
         crate::routes::progress::ProgramTotals,

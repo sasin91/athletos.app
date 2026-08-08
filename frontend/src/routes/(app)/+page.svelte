@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { loadActiveSession } from '$lib/storage';
+	import EnrollmentAdjustments from '$lib/EnrollmentAdjustments.svelte';
+	import ProgressDashboard from '$lib/ProgressDashboard.svelte';
 	import type { LocalSession } from '$lib/session';
-	import type { PageData } from './$types';
+	import { loadActiveSession } from '$lib/storage';
+	import type { ActionData, PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	/**
 	 * A session already committed on this device, if there is one.
@@ -57,18 +59,30 @@
 				<a class="btn btn-primary" href={resolve(`/peek/${enrollment.id}`)}>
 					What am I doing today?
 				</a>
+
+				<EnrollmentAdjustments {enrollment} {form} />
 			</div>
 		</li>
 	{/each}
 </ul>
 
+<ProgressDashboard
+	progress={data.progress}
+	enrollments={data.enrollments}
+	requestedLift={data.requestedLift}
+/>
+
 {#if pastEnrollments.length > 0}
 	<h2 class="mt-6 mb-2 font-bold">Finished</h2>
 	<ul class="space-y-2">
 		{#each pastEnrollments as enrollment (enrollment.id)}
-			<li class="border p-2 text-sm">
-				{enrollment.program_name} — {enrollment.status},
-				{enrollment.progress.completed} sessions
+			<li class="border p-3 text-sm">
+				<p>
+					{enrollment.program_name} — {enrollment.status},
+					{enrollment.progress.completed} sessions
+				</p>
+
+				<EnrollmentAdjustments {enrollment} {form} />
 			</li>
 		{/each}
 	</ul>

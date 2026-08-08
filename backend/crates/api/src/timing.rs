@@ -310,6 +310,10 @@ pub fn compute(
 #[derive(Debug, Serialize, ToSchema, PartialEq)]
 pub struct IntervalSpread {
     pub min_seconds: i64,
+    /// Arithmetic mean over the same believable answer-to-answer intervals as
+    /// the other figures. Kept alongside the median so clients can choose the
+    /// shape that best answers their question without restating the filter.
+    pub average_seconds: f64,
     /// Median, not mean. One interval spent talking to somebody moves a mean
     /// of twelve by a minute, and the tail of this distribution is not signal —
     /// the same rule, and the same reason, as [`crate::pace`].
@@ -360,6 +364,7 @@ pub fn spread(started_at: DateTime<Utc>, sets: &[(u16, TimedSet)]) -> Option<Int
 
     Some(IntervalSpread {
         min_seconds: intervals[0],
+        average_seconds: intervals.iter().sum::<i64>() as f64 / intervals.len() as f64,
         median_seconds: median,
         max_seconds: intervals[intervals.len() - 1],
         discarded: found.discarded,
@@ -540,13 +545,13 @@ mod tests {
     }
 
     #[test]
-    fn the_spread_is_min_median_max_of_the_believable_intervals() {
-        // Lead-in 0:00 -> 2:00, then gaps of 60, 180, 120 seconds.
+    fn the_spread_is_min_average_median_max_of_the_believable_intervals() {
+        // Lead-in 0:00 -> 2:00, then gaps of 60, 90, 120 seconds.
         let sets = vec![
             (0_u16, set("squat", Some(at(2, 0)))),
             (1, set("squat", Some(at(3, 0)))),
-            (2, set("squat", Some(at(6, 0)))),
-            (3, set("squat", Some(at(8, 0)))),
+            (2, set("squat", Some(at(4, 30)))),
+            (3, set("squat", Some(at(6, 30)))),
         ];
 
         let spread = spread(at(0, 0), &sets).expect("stamps exist");
@@ -554,9 +559,24 @@ mod tests {
         // The lead-in is not an interval between sets and is excluded — D-10 holds
         // it apart precisely so it cannot be ranked against a lift.
         assert_eq!(spread.min_seconds, 60);
-        assert_eq!(spread.median_seconds, 120);
-        assert_eq!(spread.max_seconds, 180);
+        assert_eq!(spread.average_seconds, 90.0);
+        assert_eq!(spread.median_seconds, 90);
+        assert_eq!(spread.max_seconds, 120);
         assert_eq!(spread.discarded, 0);
+    }
+
+    #[test]
+    fn the_spread_average_keeps_fractional_seconds() {
+        // Lead-in 0:00 -> 2:00, then gaps of 60 and 61 seconds.
+        let sets = vec![
+            (0_u16, set("squat", Some(at(2, 0)))),
+            (1, set("squat", Some(at(3, 0)))),
+            (2, set("squat", Some(at(4, 1)))),
+        ];
+
+        let spread = spread(at(0, 0), &sets).expect("stamps exist");
+
+        assert_eq!(spread.average_seconds, 60.5);
     }
 
     #[test]

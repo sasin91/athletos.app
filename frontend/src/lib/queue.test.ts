@@ -30,6 +30,7 @@ function receipt(id: string): WorkoutReceipt {
 			load_prescribed_kg: 950,
 			sets_over: 1,
 			sets_under: 0,
+			weight_changes: [],
 			duration_seconds: 3300,
 			average_duration_seconds: null,
 			intervals: null

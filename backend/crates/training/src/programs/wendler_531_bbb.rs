@@ -100,6 +100,7 @@ const META: ProgramMeta = ProgramMeta {
     // Four, in Wendler's day order — which is the fourth lift Smolov Jr does
     // not need, and the reason this is a list rather than three named fields.
     required_maxes: &[MILITARY_PRESS.key, DEADLIFT.key, BENCH.key, SQUAT.key],
+    weighted_exercises: &[MILITARY_PRESS.key, DEADLIFT.key, BENCH.key, SQUAT.key],
 };
 
 /// This program's private memory (D-03).

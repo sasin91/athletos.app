@@ -66,6 +66,10 @@ pub fn app(state: AppState) -> Router {
             "/v1/enrollments/{id}/next-session",
             get(routes::enrollments::next_session),
         )
+        .route(
+            "/v1/enrollments/{id}/exercise-adjustments",
+            get(routes::adjustments::show).put(routes::adjustments::replace),
+        )
         // Idempotent on a client-minted id (D-09); the history the same rows
         // read back (D-13).
         .route(

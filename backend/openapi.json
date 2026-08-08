@@ -519,6 +519,151 @@
         ]
       }
     },
+    "/v1/enrollments/{id}/exercise-adjustments": {
+      "get": {
+        "tags": [
+          "enrollments"
+        ],
+        "summary": "Reads adjustments for an enrolment owned by the authenticated athlete.\nClosed enrolments remain readable so their settings do not disappear from\nhistory and settings screens merely because the block ended.",
+        "operationId": "show_exercise_adjustments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The enrolment's id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The enrolment's exercise adjustments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseAdjustments"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such enrolment belongs to this athlete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "enrollments"
+        ],
+        "summary": "Replaces every adjustment for one active enrolment.",
+        "description": "The request first lands as generic JSON so a fractional number can be\ntranslated into this API's RFC 9457 422 response. Extracting the DTO\ndirectly would let Axum own that rejection instead of `ApiError`.",
+        "operationId": "replace_exercise_adjustments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The enrolment's id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceExerciseAdjustments"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The adjustments as now stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseAdjustments"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such enrolment belongs to this athlete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The enrolment is closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "An exercise or percentage is not adjustable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
     "/v1/enrollments/{id}/next-session": {
       "get": {
         "tags": [
@@ -1226,6 +1371,55 @@
           "abandoned"
         ]
       },
+      "EstimateChange": {
+        "type": "object",
+        "description": "First-to-latest estimated-strength change over the trend window.",
+        "required": [
+          "kg"
+        ],
+        "properties": {
+          "kg": {
+            "type": "number",
+            "format": "double"
+          },
+          "percent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Absent when the first estimate is zero: no finite percentage exists."
+          }
+        }
+      },
+      "ExerciseAdjustments": {
+        "type": "object",
+        "description": "The canonical non-zero adjustments stored for one enrolment.",
+        "required": [
+          "enrollment_id",
+          "adjustments"
+        ],
+        "properties": {
+          "adjustments": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "example": {
+              "bench": 10,
+              "squat": -5
+            }
+          },
+          "enrollment_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "ExerciseCatalogue": {
         "type": "object",
         "description": "Every exercise the compiled-in programs know about.\n\nAn object rather than a bare array, so this can grow a cursor or a filter\nwithout changing the type of the response (D-12).",
@@ -1345,11 +1539,17 @@
         "description": "The shape of one session's intervals: fastest, typical, slowest.",
         "required": [
           "min_seconds",
+          "average_seconds",
           "median_seconds",
           "max_seconds",
           "discarded"
         ],
         "properties": {
+          "average_seconds": {
+            "type": "number",
+            "format": "double",
+            "description": "Arithmetic mean over the same believable answer-to-answer intervals as\nthe other figures. Kept alongside the median so clients can choose the\nshape that best answers their question without restating the filter."
+          },
           "discarded": {
             "type": "integer",
             "format": "int32",
@@ -1442,6 +1642,17 @@
             "items": {
               "$ref": "#/components/schemas/Best"
             }
+          },
+          "estimate_change": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EstimateChange",
+                "description": "Change from the first to the latest present estimate in `points`.\nAbsent when fewer than two sessions produced an estimate."
+              }
+            ]
           },
           "exercise": {
             "type": "string",
@@ -2003,7 +2214,8 @@
           "length",
           "recovery_demand",
           "estimated_session_minutes",
-          "required_maxes"
+          "required_maxes",
+          "weighted_exercises"
         ],
         "properties": {
           "days_per_week": {
@@ -2048,6 +2260,13 @@
               "$ref": "#/components/schemas/RequiredMax"
             },
             "description": "The one-rep maxes this program refuses to start without (D-04).\n\nHere so that a client can render the maxes form *before* enrolling,\nwithout holding its own copy of which lifts which program wants. The\nalternative was the 422 from `POST /v1/enrollments`, which names one\nmissing key at a time and only after the athlete has pressed the button.\n\nLabels are resolved from the compiled exercise registry for the same\nreason `BlockView` resolves them: a browser cannot look a key up in a\nRust `static`, and a `/v1/exercises` endpoint to cache would be a round\ntrip before the first form renders."
+          },
+          "weighted_exercises": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeightedExercise"
+            },
+            "description": "Every loaded exercise this program may prescribe and therefore allows\nan enrolment-specific percentage adjustment for."
           }
         }
       },
@@ -2185,6 +2404,30 @@
           }
         }
       },
+      "ReplaceExerciseAdjustments": {
+        "type": "object",
+        "description": "The complete adjustment document supplied by a client.",
+        "required": [
+          "adjustments"
+        ],
+        "properties": {
+          "adjustments": {
+            "type": "object",
+            "description": "Integer percentages keyed by exercise. Zero removes an adjustment.",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "example": {
+              "bench": 10,
+              "squat": -5
+            }
+          }
+        }
+      },
       "RequiredMax": {
         "type": "object",
         "description": "One lift a program needs a max for, ready to be a labelled form field.",
@@ -2264,6 +2507,7 @@
           "load_prescribed_kg",
           "sets_over",
           "sets_under",
+          "weight_changes",
           "duration_seconds"
         ],
         "properties": {
@@ -2310,6 +2554,13 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          },
+          "weight_changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeightChange"
+            },
+            "description": "Done sets whose actual weight differed from what was prescribed,\ngrouped in the order each exact change was first performed."
           }
         }
       },
@@ -2496,6 +2747,7 @@
         "required": [
           "workout_id",
           "at",
+          "load_moved_kg",
           "drift_kg",
           "sets_over",
           "sets_under",
@@ -2518,6 +2770,11 @@
             ],
             "format": "double",
             "description": "The best (highest) estimate across that session's done sets of this\nlift. A point with no done sets is never emitted, so this is `None`\nonly when every done set failed to produce an estimate — each one\ncarrying no weight or no reps, [`athletos_training::estimate`]'s own\ntwo absence cases. One weightless set among several does not null this\nfield; the max is taken across sets, so a single done set with a real\nweight and rep count is enough. A set above the rep ceiling still\ncontributes an estimate: the ceiling caps what the formula reads\nrather than refusing the set (D-13, amended)."
+          },
+          "load_moved_kg": {
+            "type": "number",
+            "format": "double",
+            "description": "Kilograms moved by done sets of this exercise in this workout."
           },
           "reasons": {
             "type": "array",
@@ -2566,6 +2823,58 @@
           "count",
           "seconds"
         ]
+      },
+      "WeightChange": {
+        "type": "object",
+        "description": "One exact weight change, grouped across matching done sets.",
+        "required": [
+          "exercise",
+          "label",
+          "prescribed_weight",
+          "actual_weight",
+          "sets"
+        ],
+        "properties": {
+          "actual_weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "exercise": {
+            "type": "string",
+            "example": "barbell-row"
+          },
+          "label": {
+            "type": "string",
+            "example": "Barbell row"
+          },
+          "prescribed_weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "sets": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "WeightedExercise": {
+        "type": "object",
+        "description": "One adjustable exercise, labelled for a client that cannot read Rust's\ncompiled registry.",
+        "required": [
+          "exercise",
+          "label"
+        ],
+        "properties": {
+          "exercise": {
+            "type": "string",
+            "example": "squat"
+          },
+          "label": {
+            "type": "string",
+            "example": "Squat"
+          }
+        }
       },
       "WorkoutDetail": {
         "type": "object",
