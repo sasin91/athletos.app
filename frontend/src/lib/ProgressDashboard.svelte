@@ -16,9 +16,7 @@
 	} = $props();
 
 	const selectedLift = $derived(progress ? selectLift(progress, requestedLift) : null);
-	const selectedPoints = $derived(
-		selectedLift && progress ? chartPoints(selectedLift, progress.sessions) : []
-	);
+	const selectedPoints = $derived(selectedLift ? chartPoints(selectedLift) : []);
 	const latestPoint = $derived(selectedPoints.at(-1) ?? null);
 	const decimal = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
 

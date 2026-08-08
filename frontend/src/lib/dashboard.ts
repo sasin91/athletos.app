@@ -2,20 +2,12 @@ import type { components } from './api/schema';
 
 export type ProgressView = components['schemas']['AthleteProgress'];
 export type LiftTrend = components['schemas']['LiftTrend'];
-export type SessionFigures = components['schemas']['SessionFigures'];
 export type TrendPoint = components['schemas']['TrendPoint'];
 
 /**
- * One chronological lift fact with the matching session's server-computed load.
- *
- * The join is intentionally narrow. Drift, estimates, training maxes and load
- * have already been calculated by Rust; this type only puts facts sharing a
- * workout id on the same drawing row. An absent session remains absent instead
- * of turning into a zero-load workout that never happened.
+ * One chronological lift fact, calculated entirely by Rust for one exercise.
  */
-export type DashboardPoint = TrendPoint & {
-	load_moved_kg?: number;
-};
+export type DashboardPoint = TrendPoint;
 
 function latestEstimateAt(lift: LiftTrend): number | null {
 	let latest: number | null = null;
@@ -58,14 +50,7 @@ export function selectLift(progress: ProgressView, requested: string | null): Li
 	);
 }
 
-/** Join server facts by workout id while preserving the lift trend's order. */
-export function chartPoints(lift: LiftTrend, sessions: SessionFigures[]): DashboardPoint[] {
-	const loadByWorkout = new Map(
-		sessions.map((session) => [session.workout_id, session.load_moved_kg] as const)
-	);
-
-	return lift.points.map((point) => {
-		const load = loadByWorkout.get(point.workout_id);
-		return load === undefined ? { ...point } : { ...point, load_moved_kg: load };
-	});
+/** Preserve the selected lift's server-provided chronological facts. */
+export function chartPoints(lift: LiftTrend): DashboardPoint[] {
+	return lift.points;
 }

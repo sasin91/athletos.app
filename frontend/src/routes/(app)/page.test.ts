@@ -40,6 +40,7 @@ const observedProgress: ProgressView = {
 					workout_id: 'workout-1',
 					at: '2026-08-02T08:00:00Z',
 					estimate: 150,
+					load_moved_kg: 500,
 					training_max: 135,
 					training_max_label: 'Training max',
 					drift_kg: -5,
@@ -239,6 +240,8 @@ describe('Train page SSR', () => {
 		expect(body).toContain('Estimated strength');
 		expect(body).toContain('Drift from prescription');
 		expect(body).toContain('Load moved');
+		expect(body).toContain('500 kg');
+		expect(body).toContain('5,000 kg');
 	});
 
 	it('keeps an empty statistics block for every enrollment without inventing zeroes', () => {

@@ -1569,6 +1569,11 @@ export interface components {
              */
             estimate?: number | null;
             /**
+             * Format: double
+             * @description Kilograms moved by done sets of this exercise in this workout.
+             */
+            load_moved_kg: number;
+            /**
              * @description Every reason the athlete gave on this lift that session. Travels on
              *     every point; the screen renders them only on downward moves, and that
              *     test is presentation rather than a fact about training.

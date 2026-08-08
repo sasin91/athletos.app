@@ -176,7 +176,7 @@ describe('ProgressChart SSR', () => {
 				estimate: null,
 				training_max: null,
 				training_max_label: null,
-				load_moved_kg: undefined
+				load_moved_kg: 4500
 			}),
 			point({
 				workout_id: 'workout-3',
@@ -202,6 +202,7 @@ describe('ProgressChart SSR', () => {
 		).toEqual(['workout-1', 'workout-3']);
 		expect(series(body, 'rect', 'load').map((bar) => bar['data-workout-id'])).toEqual([
 			'workout-1',
+			'workout-2',
 			'workout-3'
 		]);
 	});

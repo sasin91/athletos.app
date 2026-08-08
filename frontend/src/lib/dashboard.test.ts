@@ -5,16 +5,17 @@ import { chartPoints, selectLift } from './dashboard';
 
 type ProgressView = components['schemas']['AthleteProgress'];
 type LiftTrend = components['schemas']['LiftTrend'];
-type SessionFigures = components['schemas']['SessionFigures'];
 
 const point = (
 	workout_id: string,
 	at: string,
-	estimate: number | null = 100
+	estimate: number | null = 100,
+	load_moved_kg = 500
 ): components['schemas']['TrendPoint'] => ({
 	workout_id,
 	at,
 	estimate,
+	load_moved_kg,
 	training_max: 90,
 	training_max_label: 'Training max',
 	drift_kg: 0,
@@ -78,42 +79,47 @@ describe('selectLift', () => {
 });
 
 describe('chartPoints', () => {
-	it('joins session load by workout id without changing lift-point order', () => {
+	it('uses selected-lift load instead of the matching whole-workout load', () => {
 		const trend = lift('squat', [
-			point('workout-b', '2026-02-01T08:00:00Z', 110),
-			point('workout-a', '2026-01-01T08:00:00Z', 100),
-			point('missing', '2026-03-01T08:00:00Z', 115)
+			point('workout-b', '2026-02-01T08:00:00Z', 110, 500),
+			point('workout-a', '2026-01-01T08:00:00Z', 100, 420),
+			point('workout-c', '2026-03-01T08:00:00Z', 115, 610)
 		]);
-		const sessions: SessionFigures[] = [
-			{
-				workout_id: 'workout-a',
-				enrollment_id: 'enrollment-a',
-				at: '2026-01-01T08:00:00Z',
-				load_moved_kg: 4200,
-				load_planned_kg: 4000,
-				sets_over: 1,
-				sets_under: 0,
-				duration_seconds: 3600
-			},
-			{
-				workout_id: 'workout-b',
-				enrollment_id: 'enrollment-b',
-				at: '2026-02-01T08:00:00Z',
-				load_moved_kg: 5000,
-				load_planned_kg: 4800,
-				sets_over: 2,
-				sets_under: 0,
-				duration_seconds: 3700
-			}
-		];
+		const view: ProgressView = {
+			...progress([trend]),
+			sessions: [
+				{
+					workout_id: 'workout-a',
+					enrollment_id: 'enrollment-a',
+					at: '2026-01-01T08:00:00Z',
+					load_moved_kg: 42_000,
+					load_planned_kg: 4000,
+					sets_over: 1,
+					sets_under: 0,
+					duration_seconds: 3600
+				},
+				{
+					workout_id: 'workout-b',
+					enrollment_id: 'enrollment-b',
+					at: '2026-02-01T08:00:00Z',
+					load_moved_kg: 50_000,
+					load_planned_kg: 4800,
+					sets_over: 2,
+					sets_under: 0,
+					duration_seconds: 3700
+				}
+			]
+		};
 
-		const joined = chartPoints(trend, sessions);
+		const selected = selectLift(view, 'squat');
+		expect(selected).not.toBeNull();
+		const points = chartPoints(selected!);
 
-		expect(joined.map(({ workout_id }) => workout_id)).toEqual([
+		expect(points.map(({ workout_id }) => workout_id)).toEqual([
 			'workout-b',
 			'workout-a',
-			'missing'
+			'workout-c'
 		]);
-		expect(joined.map(({ load_moved_kg }) => load_moved_kg)).toEqual([5000, 4200, undefined]);
+		expect(points.map(({ load_moved_kg }) => load_moved_kg)).toEqual([500, 420, 610]);
 	});
 });
