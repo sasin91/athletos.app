@@ -98,6 +98,45 @@ async fn next_session(server: &TestServer, token: &str, enrollment: Uuid) -> ser
     response.json()
 }
 
+async fn exercise_adjustments(
+    server: &TestServer,
+    token: &str,
+    enrollment: Uuid,
+) -> serde_json::Value {
+    let response = server
+        .get(&format!(
+            "/v1/enrollments/{enrollment}/exercise-adjustments"
+        ))
+        .authorization_bearer(token)
+        .await;
+
+    response.assert_status_ok();
+    response.json()
+}
+
+fn assert_barbell_prescriptions_are_consistent(session: &serde_json::Value) {
+    for set in session["prescribed_sets"]
+        .as_array()
+        .expect("the session carries prescribed sets")
+    {
+        let Some(change) = set.get("plate_change") else {
+            continue;
+        };
+
+        let plates: f64 = change["plates_per_side"]
+            .as_array()
+            .expect("a barbell set carries a resulting plate stack")
+            .iter()
+            .map(|plate| plate.as_f64().expect("a plate is a number"))
+            .sum();
+        assert_eq!(
+            20.0 + 2.0 * plates,
+            set["prescribed_weight"].as_f64().unwrap(),
+            "the plate change must produce the adjusted prescription: {set}"
+        );
+    }
+}
+
 /// A submission logging the session exactly as prescribed: every set done,
 /// every rep made.
 ///
@@ -3605,5 +3644,311 @@ async fn advanced_at_moves_between_statements_in_one_transaction(pool: PgPool) {
         stamps[1].1 > stamps[0].1,
         "clock_timestamp() must advance between two statements in one \
          transaction — if this ties, the default reverted to now()"
+    );
+}
+
+// --- per-enrolment exercise adjustments ----------------------------------
+
+#[sqlx::test]
+async fn exercise_adjustments_are_an_idempotent_full_replacement(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    assert_eq!(
+        exercise_adjustments(&server, &token, enrollment).await,
+        json!({ "enrollment_id": enrollment, "adjustments": {} })
+    );
+
+    let first = json!({
+        "adjustments": {
+            "bench": -5,
+            "deadlift": 0,
+            "squat": 10
+        }
+    });
+    let expected_first = json!({
+        "enrollment_id": enrollment,
+        "adjustments": { "bench": -5, "squat": 10 }
+    });
+
+    for _ in 0..2 {
+        let response = server
+            .put(&format!(
+                "/v1/enrollments/{enrollment}/exercise-adjustments"
+            ))
+            .authorization_bearer(&token)
+            .json(&first)
+            .await;
+        response.assert_status_ok();
+        assert_eq!(response.json::<serde_json::Value>(), expected_first);
+    }
+
+    let replaced = server
+        .put(&format!(
+            "/v1/enrollments/{enrollment}/exercise-adjustments"
+        ))
+        .authorization_bearer(&token)
+        .json(&json!({
+            "adjustments": { "military-press": 5, "squat": -10 }
+        }))
+        .await;
+    replaced.assert_status_ok();
+    assert_eq!(
+        replaced.json::<serde_json::Value>(),
+        json!({
+            "enrollment_id": enrollment,
+            "adjustments": { "military-press": 5, "squat": -10 }
+        })
+    );
+
+    let row_count: i64 = sqlx::query_scalar(
+        "select count(*) from enrollment_exercise_adjustments where enrollment_id = $1",
+    )
+    .bind(enrollment)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row_count, 2, "removed and zero-valued keys leave no rows");
+
+    let cleared = server
+        .put(&format!(
+            "/v1/enrollments/{enrollment}/exercise-adjustments"
+        ))
+        .authorization_bearer(&token)
+        .json(&json!({ "adjustments": {} }))
+        .await;
+    cleared.assert_status_ok();
+    assert_eq!(
+        cleared.json::<serde_json::Value>(),
+        json!({ "enrollment_id": enrollment, "adjustments": {} })
+    );
+}
+
+#[sqlx::test]
+async fn exercise_adjustments_reject_invalid_replacements_without_changing_old_rows(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let path = format!("/v1/enrollments/{enrollment}/exercise-adjustments");
+
+    server
+        .put(&path)
+        .authorization_bearer(&token)
+        .json(&json!({ "adjustments": { "squat": 10 } }))
+        .await
+        .assert_status_ok();
+
+    let invalid = [
+        (
+            "unknown exercise",
+            json!({ "adjustments": { "squat": -10, "jetpack-press": 5 } }),
+        ),
+        (
+            "exercise outside program metadata",
+            json!({ "adjustments": { "squat": -10, "lateral-raise": 5 } }),
+        ),
+        (
+            "bodyweight exercise",
+            json!({ "adjustments": { "squat": -10, "hanging-leg-raise": 5 } }),
+        ),
+        (
+            "fractional percentage",
+            json!({ "adjustments": { "squat": -10, "bench": 1.5 } }),
+        ),
+        (
+            "percentage above the range",
+            json!({ "adjustments": { "squat": -10, "bench": 51 } }),
+        ),
+        (
+            "percentage below the range",
+            json!({ "adjustments": { "squat": -10, "bench": -51 } }),
+        ),
+    ];
+
+    for (case, body) in invalid {
+        let response = server
+            .put(&path)
+            .authorization_bearer(&token)
+            .json(&body)
+            .await;
+        response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+        let problem: serde_json::Value = response.json();
+        assert_eq!(problem["title"], "Unprocessable Entity", "{case}");
+        assert_eq!(problem["status"], 422, "{case}");
+        assert_eq!(
+            exercise_adjustments(&server, &token, enrollment).await,
+            json!({
+                "enrollment_id": enrollment,
+                "adjustments": { "squat": 10 }
+            }),
+            "{case} changed rows before the complete body was validated"
+        );
+    }
+}
+
+#[sqlx::test]
+async fn exercise_adjustments_are_scoped_to_the_authenticated_athlete(pool: PgPool) {
+    let server = server(pool);
+    let owner = register(&server, EMAIL).await;
+    set_maxes(&server, &owner, full_maxes()).await;
+    let enrollment = enrol(&server, &owner, "wendler-531-bbb").await;
+    let rival = register(&server, "rival@example.com").await;
+    let path = format!("/v1/enrollments/{enrollment}/exercise-adjustments");
+
+    server
+        .get(&path)
+        .authorization_bearer(&rival)
+        .await
+        .assert_status_not_found();
+    server
+        .put(&path)
+        .authorization_bearer(&rival)
+        .json(&json!({ "adjustments": { "squat": 10 } }))
+        .await
+        .assert_status_not_found();
+}
+
+#[sqlx::test]
+async fn exercise_adjustments_on_closed_enrollments_are_readable_but_not_writable(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let path = format!("/v1/enrollments/{enrollment}/exercise-adjustments");
+
+    server
+        .put(&path)
+        .authorization_bearer(&token)
+        .json(&json!({ "adjustments": { "squat": 10 } }))
+        .await
+        .assert_status_ok();
+
+    sqlx::query("update enrollments set status = 'abandoned', ended_at = now() where id = $1")
+        .bind(enrollment)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        exercise_adjustments(&server, &token, enrollment).await,
+        json!({
+            "enrollment_id": enrollment,
+            "adjustments": { "squat": 10 }
+        })
+    );
+    server
+        .put(&path)
+        .authorization_bearer(&token)
+        .json(&json!({ "adjustments": { "squat": -10 } }))
+        .await
+        .assert_status(StatusCode::CONFLICT);
+    assert_eq!(
+        exercise_adjustments(&server, &token, enrollment).await["adjustments"],
+        json!({ "squat": 10 })
+    );
+}
+
+#[sqlx::test]
+async fn exercise_adjustments_are_applied_once_and_rebuild_plate_instructions(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let path = format!("/v1/enrollments/{enrollment}/exercise-adjustments");
+
+    server
+        .put(&path)
+        .authorization_bearer(&token)
+        .json(&json!({ "adjustments": { "military-press": 10 } }))
+        .await
+        .assert_status_ok();
+    let heavier = next_session(&server, &token, enrollment).await;
+    assert_eq!(heavier["blocks"][0]["lifts"][0]["weight"], 37.5);
+    assert_eq!(heavier["prescribed_sets"][0]["prescribed_weight"], 37.5);
+    assert_barbell_prescriptions_are_consistent(&heavier);
+
+    server
+        .put(&path)
+        .authorization_bearer(&token)
+        .json(&json!({ "adjustments": { "military-press": -10 } }))
+        .await
+        .assert_status_ok();
+    let lighter = next_session(&server, &token, enrollment).await;
+    assert_eq!(lighter["blocks"][0]["lifts"][0]["weight"], 30.0);
+    assert_eq!(lighter["prescribed_sets"][0]["prescribed_weight"], 30.0);
+    assert_barbell_prescriptions_are_consistent(&lighter);
+}
+
+#[sqlx::test]
+async fn exercise_adjustments_do_not_rewrite_a_committed_preview_on_submit(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+
+    let committed = next_session(&server, &token, enrollment).await;
+    let expected: Vec<f64> = committed["prescribed_sets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|set| set["prescribed_weight"].as_f64().unwrap())
+        .collect();
+
+    server
+        .put(&format!(
+            "/v1/enrollments/{enrollment}/exercise-adjustments"
+        ))
+        .authorization_bearer(&token)
+        .json(&json!({ "adjustments": { "military-press": 10 } }))
+        .await
+        .assert_status_ok();
+    let current = next_session(&server, &token, enrollment).await;
+    assert_ne!(
+        current["prescribed_sets"][0]["prescribed_weight"],
+        committed["prescribed_sets"][0]["prescribed_weight"]
+    );
+
+    let workout = Uuid::now_v7();
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&logged_as_prescribed(workout, enrollment, &committed))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let stored: Vec<f64> = sqlx::query_scalar(
+        "select prescribed_weight::float8 from workout_sets
+         where workout_id = $1 order by \"position\"",
+    )
+    .bind(workout)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored, expected);
+}
+
+#[sqlx::test]
+async fn exercise_adjustments_are_advertised_as_labelled_weighted_exercises(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+
+    let response = server
+        .get("/v1/programs/wendler-531-bbb")
+        .authorization_bearer(&token)
+        .await;
+    response.assert_status_ok();
+    let program: serde_json::Value = response.json();
+
+    assert_eq!(
+        program["weighted_exercises"],
+        json!([
+            { "exercise": "military-press", "label": "Military Press" },
+            { "exercise": "deadlift", "label": "Deadlift" },
+            { "exercise": "bench", "label": "Bench Press" },
+            { "exercise": "squat", "label": "Squat" }
+        ])
     );
 }

@@ -63,6 +63,9 @@ pub struct ProgramSummary {
     /// Rust `static`, and a `/v1/exercises` endpoint to cache would be a round
     /// trip before the first form renders.
     pub required_maxes: Vec<RequiredMax>,
+    /// Every loaded exercise this program may prescribe and therefore allows
+    /// an enrolment-specific percentage adjustment for.
+    pub weighted_exercises: Vec<WeightedExercise>,
 }
 
 /// One lift a program needs a max for, ready to be a labelled form field.
@@ -71,6 +74,16 @@ pub struct RequiredMax {
     #[schema(example = "military-press")]
     pub exercise: String,
     #[schema(example = "Military Press")]
+    pub label: String,
+}
+
+/// One adjustable exercise, labelled for a client that cannot read Rust's
+/// compiled registry.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WeightedExercise {
+    #[schema(example = "squat")]
+    pub exercise: String,
+    #[schema(example = "Squat")]
     pub label: String,
 }
 
@@ -144,6 +157,16 @@ impl From<&ProgramMeta> for ProgramSummary {
                     // A program naming an exercise the registry does not hold
                     // is caught by the training crate's own test; falling back
                     // to the key keeps the form renderable either way.
+                    label: athletos_training::exercise::find(key)
+                        .map(|exercise| exercise.label.to_owned())
+                        .unwrap_or_else(|| (*key).to_owned()),
+                })
+                .collect(),
+            weighted_exercises: meta
+                .weighted_exercises
+                .iter()
+                .map(|key| WeightedExercise {
+                    exercise: (*key).to_owned(),
                     label: athletos_training::exercise::find(key)
                         .map(|exercise| exercise.label.to_owned())
                         .unwrap_or_else(|| (*key).to_owned()),

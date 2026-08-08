@@ -33,14 +33,14 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use athletos_training::{
-    exercise, plan, programs, Loading, Progress, Readout, Session, State as ProgramState,
-    BAR_WEIGHT,
+    apply_exercise_adjustments, exercise, plan, programs, Loading, Progress, Readout, Session,
+    State as ProgramState, BAR_WEIGHT,
 };
 
 use crate::auth::AuthenticatedAthlete;
 use crate::error::{ApiError, ApiResult};
 use crate::pace::{self, PaceProjection};
-use crate::routes::maxes;
+use crate::routes::{adjustments, maxes};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -602,7 +602,9 @@ pub async fn next_session(
     let program = unknown_program(&program_key)?;
     let program_state = ProgramState::from_json(stored_state);
 
-    let session = program.session(&program_state)?;
+    let mut session = program.session(&program_state)?;
+    let adjustments = adjustments::load(&state.db, id).await?;
+    apply_exercise_adjustments(&mut session, &adjustments);
     let progress = program.progress(&program_state)?;
 
     let prescribed_sets = prescribed_sets_of(&session);

@@ -519,6 +519,151 @@
         ]
       }
     },
+    "/v1/enrollments/{id}/exercise-adjustments": {
+      "get": {
+        "tags": [
+          "enrollments"
+        ],
+        "summary": "Reads adjustments for an enrolment owned by the authenticated athlete.\nClosed enrolments remain readable so their settings do not disappear from\nhistory and settings screens merely because the block ended.",
+        "operationId": "show_exercise_adjustments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The enrolment's id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The enrolment's exercise adjustments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseAdjustments"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such enrolment belongs to this athlete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "enrollments"
+        ],
+        "summary": "Replaces every adjustment for one active enrolment.",
+        "description": "The request first lands as generic JSON so a fractional number can be\ntranslated into this API's RFC 9457 422 response. Extracting the DTO\ndirectly would let Axum own that rejection instead of `ApiError`.",
+        "operationId": "replace_exercise_adjustments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The enrolment's id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceExerciseAdjustments"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The adjustments as now stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseAdjustments"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such enrolment belongs to this athlete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The enrolment is closed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "An exercise or percentage is not adjustable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
     "/v1/enrollments/{id}/next-session": {
       "get": {
         "tags": [
@@ -1225,6 +1370,34 @@
           "finished",
           "abandoned"
         ]
+      },
+      "ExerciseAdjustments": {
+        "type": "object",
+        "description": "The canonical non-zero adjustments stored for one enrolment.",
+        "required": [
+          "enrollment_id",
+          "adjustments"
+        ],
+        "properties": {
+          "adjustments": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "example": {
+              "bench": 10,
+              "squat": -5
+            }
+          },
+          "enrollment_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       },
       "ExerciseCatalogue": {
         "type": "object",
@@ -2009,7 +2182,8 @@
           "length",
           "recovery_demand",
           "estimated_session_minutes",
-          "required_maxes"
+          "required_maxes",
+          "weighted_exercises"
         ],
         "properties": {
           "days_per_week": {
@@ -2054,6 +2228,13 @@
               "$ref": "#/components/schemas/RequiredMax"
             },
             "description": "The one-rep maxes this program refuses to start without (D-04).\n\nHere so that a client can render the maxes form *before* enrolling,\nwithout holding its own copy of which lifts which program wants. The\nalternative was the 422 from `POST /v1/enrollments`, which names one\nmissing key at a time and only after the athlete has pressed the button.\n\nLabels are resolved from the compiled exercise registry for the same\nreason `BlockView` resolves them: a browser cannot look a key up in a\nRust `static`, and a `/v1/exercises` endpoint to cache would be a round\ntrip before the first form renders."
+          },
+          "weighted_exercises": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeightedExercise"
+            },
+            "description": "Every loaded exercise this program may prescribe and therefore allows\nan enrolment-specific percentage adjustment for."
           }
         }
       },
@@ -2188,6 +2369,30 @@
           "password": {
             "type": "string",
             "description": "Checked against the guessability policy of NIST SP 800-63B-4 §3.1.1.2\nbefore the account exists — see `auth::password`."
+          }
+        }
+      },
+      "ReplaceExerciseAdjustments": {
+        "type": "object",
+        "description": "The complete adjustment document supplied by a client.",
+        "required": [
+          "adjustments"
+        ],
+        "properties": {
+          "adjustments": {
+            "type": "object",
+            "description": "Integer percentages keyed by exercise. Zero removes an adjustment.",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "example": {
+              "bench": 10,
+              "squat": -5
+            }
           }
         }
       },
@@ -2612,6 +2817,24 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "WeightedExercise": {
+        "type": "object",
+        "description": "One adjustable exercise, labelled for a client that cannot read Rust's\ncompiled registry.",
+        "required": [
+          "exercise",
+          "label"
+        ],
+        "properties": {
+          "exercise": {
+            "type": "string",
+            "example": "squat"
+          },
+          "label": {
+            "type": "string",
+            "example": "Squat"
           }
         }
       },
