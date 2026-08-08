@@ -24,18 +24,20 @@
 //!    `advance()` is a read-modify-write of `enrollments.state`, so two
 //!    *different* workouts arriving together would otherwise both read the old
 //!    state and one advance would be lost.
-//! 2. `insert into workouts ... on conflict (id) do nothing returning id`. The
-//!    `returning` is the whole detection mechanism — a row comes back if and
-//!    only if this insert is the one that created it. Deliberately not a
-//!    `select` first: between the select and the insert is exactly where the
-//!    duplicate gets in.
-//! 3. Only if a row came back: insert the sets, run `advance()`, write the new
-//!    `State`.
-//! 4. Commit.
+//! 2. Look up the client-minted workout id while that enrolment lock is held.
+//!    A row already accepted for this enrolment returns its stored receipt
+//!    before today's semantic rules run. An id belonging to another enrolment
+//!    remains a conflict.
+//! 3. For a genuinely new id, validate the complete document against the
+//!    current prescribed session, then `insert ... on conflict (id) do nothing
+//!    returning id`. The primary key is still the arbiter if the same id races
+//!    across two different enrolment locks.
+//! 4. Only if a row came back: insert the sets, run `advance()`, write the new
+//!    `State`, and commit.
 //!
-//! A crash anywhere after step 2 rolls the whole thing back, sets included, and
-//! the client's retry re-runs it from the top. A duplicate skips steps 3 and 4's
-//! state write entirely and answers 200 instead of 201 — success, because from
+//! A crash anywhere after step 3 rolls the whole thing back, sets included, and
+//! the client's retry re-runs it from the top. A duplicate skips validation and
+//! every write entirely and answers 200 instead of 201 — success, because from
 //! the client's point of view the retry did succeed, and nothing moved.
 
 use std::collections::BTreeSet;
@@ -410,7 +412,7 @@ pub async fn submit(
     athlete: AuthenticatedAthlete,
     Json(body): Json<WorkoutSubmission>,
 ) -> ApiResult<(StatusCode, Json<WorkoutReceipt>)> {
-    validate(&body)?;
+    validate_syntax(&body)?;
 
     let mut tx = state.db.begin().await?;
 
@@ -436,6 +438,21 @@ pub async fn submit(
     let program = resolve_stored_program(&program_key)?;
     let program_state = ProgramState::from_json(stored_state);
 
+    // Retries are judged by the row already accepted, not by rules introduced
+    // after it was stored. The enrollment lock makes this lookup race-free for
+    // two submissions to the same enrollment; the insert's PK conflict path
+    // below remains necessary for the same id racing across two enrollments.
+    if let Some((week, day)) = already_recorded(&mut tx, body.id, body.enrollment_id).await? {
+        let progress = program.progress(&program_state)?;
+        let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
+        tx.commit().await?;
+
+        return Ok((
+            StatusCode::OK,
+            Json(receipt(&body, week, day, true, progress.into(), summary)),
+        ));
+    }
+
     // The session the enrolment is currently pointing at, which is the one the
     // athlete was shown by `next-session` and therefore the one they just did.
     // The server decides this, not the request: a client naming its own week and
@@ -453,33 +470,20 @@ pub async fn submit(
     };
 
     let Some(session) = current else {
-        // Nothing new can be accepted against a closed enrolment, so there is
-        // no insert to attempt and therefore no race a lookup could lose.
-        let (week, day) = already_recorded(&mut tx, body.id, body.enrollment_id)
-            .await?
-            .ok_or_else(|| {
-                ApiError::Conflict(format!(
-                    "this enrolment is {status} and has no session left to log"
-                ))
-            })?;
-
-        let progress = program.progress(&program_state)?;
-        let summary = recorded_report(&mut tx, body.id, body.enrollment_id).await?;
-        tx.commit().await?;
-
-        return Ok((
-            StatusCode::OK,
-            Json(receipt(&body, week, day, true, progress.into(), summary)),
-        ));
+        return Err(ApiError::Conflict(format!(
+            "this enrolment is {status} and has no session left to log"
+        )));
     };
+
+    validate_session_semantics(&body, &session)?;
 
     let week = smallint(session.week, "week")?;
     let day = smallint(session.day, "day")?;
 
     // The one statement everything else hangs off. `returning id` yields a row
-    // if and only if this call is the one that inserted it — a `select` first
-    // would leave a window for the retry to slip through, and rows-affected on a
-    // conflict is zero, which is the same signal read a less direct way.
+    // if and only if this call is the one that inserted it. The earlier lookup
+    // is serialised for this enrolment, while this PK conflict remains the
+    // authority when the same id races across different enrolment locks.
     let inserted: Option<(Uuid,)> = sqlx::query_as(
         "insert into workouts
              (id, enrollment_id, week, day, started_at, ended_at, outcome, cut_reason, notes)
@@ -531,7 +535,7 @@ pub async fn submit(
     // By `position`, not by the order the phone happened to serialise `sets`
     // in — the training migration calls wire order "an accident of the wire"
     // for exactly this reason, and `position` is the one the schema treats as
-    // canonical. `validate` has already confirmed every position is unique,
+    // canonical. `validate_syntax` has already confirmed every position is unique,
     // so this is a total order and the sort is unambiguous. Without it, a
     // program whose fold reads `LoggedSession.sets` order-sensitively — 5/3/1
     // BBB's `made_the_minimum` breaks a weight tie with `max_by`, which
@@ -1080,8 +1084,11 @@ fn logged_set(
 
 /// Where a workout id that is already taken actually sits.
 ///
-/// Called only once an insert has conflicted, or once it is known that no insert
-/// will be attempted — never speculatively, which is what would make it a race.
+/// Called after the owned enrollment row is locked, and again after an insert
+/// conflict. The first lookup lets an accepted legacy workout bypass semantic
+/// rules added later. It is race-free for the same enrollment because every
+/// submit locks that enrollment first; the second lookup resolves the remaining
+/// cross-enrollment primary-key race.
 ///
 /// The `Some(_)` arm is the case worth being explicit about: the id exists, but
 /// under a different enrolment, possibly another athlete's. Answering 200 there
@@ -1217,7 +1224,7 @@ async fn insert_sets(
 /// point of doing them here: a constraint violation surfaces as a 500 with
 /// "an internal error occurred", which tells a client with a queued offline
 /// workout nothing at all about why it will never be accepted.
-fn validate(body: &WorkoutSubmission) -> ApiResult<()> {
+fn validate_syntax(body: &WorkoutSubmission) -> ApiResult<()> {
     if body.ended_at < body.started_at {
         return Err(ApiError::Validation(
             "a session cannot end before it started".to_owned(),
@@ -1234,24 +1241,6 @@ fn validate(body: &WorkoutSubmission) -> ApiResult<()> {
             return Err(ApiError::Validation(
                 "only a session that was cut short carries a reason".to_owned(),
             ))
-        }
-        _ => {}
-    }
-
-    let has_pending = body
-        .sets
-        .iter()
-        .any(|set| matches!(set.status, SetStatus::Pending));
-    match (body.outcome, has_pending) {
-        (WorkoutOutcome::Completed, true) => {
-            return Err(ApiError::Validation(
-                "a completed session cannot contain pending sets".to_owned(),
-            ));
-        }
-        (WorkoutOutcome::CutShort, false) => {
-            return Err(ApiError::Validation(
-                "a session with no pending sets must be completed".to_owned(),
-            ));
         }
         _ => {}
     }
@@ -1363,6 +1352,60 @@ fn validate(body: &WorkoutSubmission) -> ApiResult<()> {
     }
 
     Ok(())
+}
+
+/// Rules that require the locked enrollment state and its current session.
+///
+/// Every prescribed row must travel even when it was not performed. Weight is
+/// deliberately absent from the shape comparison: an offline committed preview
+/// may predate an enrollment adjustment, and its stored prescription is the
+/// historical fact the athlete actually saw.
+fn validate_session_semantics(body: &WorkoutSubmission, session: &Session) -> ApiResult<()> {
+    let mut expected = Vec::new();
+    for block in &session.blocks {
+        for lift in &block.lifts {
+            for _ in 0..lift.sets {
+                expected.push((block.exercise.as_str(), lift.reps));
+            }
+        }
+    }
+
+    if body.sets.len() != expected.len() {
+        return Err(ApiError::Validation(format!(
+            "this session requires exactly {} prescribed set rows",
+            expected.len()
+        )));
+    }
+
+    let mut submitted: Vec<&SubmittedSet> = body.sets.iter().collect();
+    submitted.sort_by_key(|set| set.position);
+
+    for (position, (set, (exercise, reps))) in submitted.into_iter().zip(expected).enumerate() {
+        if usize::from(set.position) != position {
+            return Err(ApiError::Validation(format!(
+                "the submitted sets do not contain prescribed position {position}"
+            )));
+        }
+        if set.exercise.trim() != exercise || set.prescribed_reps != reps {
+            return Err(ApiError::Validation(format!(
+                "the set at position {position} does not match the prescribed exercise and reps"
+            )));
+        }
+    }
+
+    let has_pending = body
+        .sets
+        .iter()
+        .any(|set| matches!(set.status, SetStatus::Pending));
+    match (body.outcome, has_pending) {
+        (WorkoutOutcome::Completed, true) => Err(ApiError::Validation(
+            "a completed session cannot contain pending sets".to_owned(),
+        )),
+        (WorkoutOutcome::CutShort, false) => Err(ApiError::Validation(
+            "a session with no pending sets must be completed".to_owned(),
+        )),
+        _ => Ok(()),
+    }
 }
 
 fn weight(value: f64, field: &str) -> ApiResult<()> {
@@ -1515,6 +1558,7 @@ impl From<&SubmittedSet> for LoggedSet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use athletos_training::{Block, Lift, Loading};
 
     fn submitted_set(position: u16, status: SetStatus) -> SubmittedSet {
         SubmittedSet {
@@ -1554,63 +1598,173 @@ mod tests {
         }
     }
 
-    fn validation_detail(body: &WorkoutSubmission) -> Option<String> {
-        match validate(body) {
-            Err(ApiError::Validation(detail)) => Some(detail),
-            other => {
-                assert!(other.is_ok(), "unexpected validation result: {other:?}");
-                None
-            }
+    fn prescribed_session() -> Session {
+        Session {
+            week: 1,
+            day: 1,
+            focus: Some("squat".to_owned()),
+            blocks: vec![
+                Block {
+                    exercise: "squat".to_owned(),
+                    lifts: vec![Lift::new(2, 5, Loading::Barbell.round_down(100.0))],
+                },
+                Block {
+                    exercise: "deadlift".to_owned(),
+                    lifts: vec![Lift::new(1, 3, Loading::Barbell.round_down(180.0))],
+                },
+            ],
         }
+    }
+
+    fn full_submission(
+        outcome: WorkoutOutcome,
+        cut_reason: Option<CutReason>,
+        statuses: [SetStatus; 3],
+    ) -> WorkoutSubmission {
+        let mut body = submission(outcome, cut_reason, &statuses);
+        body.sets[2].exercise = "deadlift".to_owned();
+        body.sets[2].prescribed_weight = 180.0;
+        body.sets[2].prescribed_reps = 3;
+        body
+    }
+
+    fn validate_new(body: &WorkoutSubmission, session: &Session) -> ApiResult<()> {
+        validate_syntax(body)?;
+        validate_session_semantics(body, session)
+    }
+
+    fn is_validation_error(result: ApiResult<()>) -> bool {
+        matches!(result, Err(ApiError::Validation(_)))
     }
 
     #[test]
     fn completed_refuses_any_pending_set() {
-        let body = submission(
+        let body = full_submission(
             WorkoutOutcome::Completed,
             None,
-            &[SetStatus::Done, SetStatus::Pending],
+            [SetStatus::Done, SetStatus::Done, SetStatus::Pending],
         );
 
-        assert_eq!(
-            validation_detail(&body).as_deref(),
-            Some("a completed session cannot contain pending sets")
-        );
+        assert!(is_validation_error(validate_new(
+            &body,
+            &prescribed_session()
+        )));
     }
 
     #[test]
     fn cut_short_requires_pending_work() {
-        let body = submission(
+        let body = full_submission(
             WorkoutOutcome::CutShort,
             Some(CutReason::Enough),
-            &[SetStatus::Done, SetStatus::Skipped],
+            [SetStatus::Done, SetStatus::Skipped, SetStatus::Done],
         );
 
-        assert_eq!(
-            validation_detail(&body).as_deref(),
-            Some("a session with no pending sets must be completed")
-        );
+        assert!(is_validation_error(validate_new(
+            &body,
+            &prescribed_session()
+        )));
     }
 
     #[test]
     fn done_and_skipped_is_a_valid_completed_session() {
-        let body = submission(
+        let body = full_submission(
             WorkoutOutcome::Completed,
             None,
-            &[SetStatus::Done, SetStatus::Skipped],
+            [SetStatus::Done, SetStatus::Skipped, SetStatus::Done],
         );
 
-        assert!(validate(&body).is_ok());
+        assert!(validate_new(&body, &prescribed_session()).is_ok());
     }
 
     #[test]
     fn pending_work_with_a_reason_is_a_valid_cut_short_session() {
-        let body = submission(
+        let body = full_submission(
             WorkoutOutcome::CutShort,
             Some(CutReason::OutOfTime),
-            &[SetStatus::Done, SetStatus::Pending],
+            [SetStatus::Done, SetStatus::Skipped, SetStatus::Pending],
         );
 
-        assert!(validate(&body).is_ok());
+        assert!(validate_new(&body, &prescribed_session()).is_ok());
+    }
+
+    #[test]
+    fn empty_partial_duplicate_and_extra_documents_are_refused() {
+        let session = prescribed_session();
+
+        let mut empty = full_submission(
+            WorkoutOutcome::Completed,
+            None,
+            [SetStatus::Done, SetStatus::Done, SetStatus::Done],
+        );
+        empty.sets.clear();
+
+        let mut partial = full_submission(
+            WorkoutOutcome::Completed,
+            None,
+            [SetStatus::Done, SetStatus::Done, SetStatus::Done],
+        );
+        partial.sets.pop();
+
+        let mut duplicate = full_submission(
+            WorkoutOutcome::Completed,
+            None,
+            [SetStatus::Done, SetStatus::Done, SetStatus::Done],
+        );
+        duplicate.sets[2].position = duplicate.sets[1].position;
+
+        let mut extra = full_submission(
+            WorkoutOutcome::Completed,
+            None,
+            [SetStatus::Done, SetStatus::Done, SetStatus::Done],
+        );
+        extra.sets.push(submitted_set(3, SetStatus::Done));
+
+        for (case, body) in [
+            ("empty", empty),
+            ("partial", partial),
+            ("duplicate", duplicate),
+            ("extra", extra),
+        ] {
+            assert!(
+                is_validation_error(validate_new(&body, &session)),
+                "{case} document was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn every_position_keeps_the_prescribed_exercise_and_reps() {
+        let session = prescribed_session();
+
+        let mut wrong_exercise = full_submission(
+            WorkoutOutcome::Completed,
+            None,
+            [SetStatus::Done, SetStatus::Done, SetStatus::Done],
+        );
+        wrong_exercise.sets[1].exercise = "bench".to_owned();
+
+        let mut wrong_reps = full_submission(
+            WorkoutOutcome::Completed,
+            None,
+            [SetStatus::Done, SetStatus::Done, SetStatus::Done],
+        );
+        wrong_reps.sets[2].prescribed_reps = 5;
+
+        assert!(is_validation_error(validate_new(&wrong_exercise, &session)));
+        assert!(is_validation_error(validate_new(&wrong_reps, &session)));
+    }
+
+    #[test]
+    fn a_committed_previews_older_weights_do_not_change_its_shape() {
+        let mut body = full_submission(
+            WorkoutOutcome::Completed,
+            None,
+            [SetStatus::Done, SetStatus::Done, SetStatus::Done],
+        );
+        body.sets[0].prescribed_weight = 92.5;
+        body.sets[1].prescribed_weight = 92.5;
+        body.sets[2].prescribed_weight = 170.0;
+
+        assert!(validate_new(&body, &prescribed_session()).is_ok());
     }
 }

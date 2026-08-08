@@ -313,6 +313,114 @@ async fn posting_the_same_workout_twice_advances_the_program_exactly_once(pool: 
     );
 }
 
+/// A row accepted by an older build remains idempotently retryable even when
+/// its body would fail today's session-shape rules. New validation cannot turn
+/// an already-successful offline write into a permanently rejected queue item.
+#[sqlx::test]
+async fn a_legacy_partial_workout_retries_from_storage_before_new_semantics(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let workout = Uuid::now_v7();
+    let state_before: serde_json::Value =
+        sqlx::query_scalar("select state from enrollments where id = $1")
+            .bind(enrollment)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    sqlx::query(
+        "insert into workouts
+             (id, enrollment_id, week, day, started_at, ended_at, outcome)
+         values ($1, $2, 1, 1, $3, $4, 'completed')",
+    )
+    .bind(workout)
+    .bind(enrollment)
+    .bind("2026-08-01T09:00:00Z".parse::<DateTime<Utc>>().unwrap())
+    .bind("2026-08-01T10:00:00Z".parse::<DateTime<Utc>>().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "insert into enrollment_advances
+             (workout_id, enrollment_id, state_before, state_after, engine_version)
+         values ($1, $2, $3::jsonb, $3::jsonb, 'legacy-test')",
+    )
+    .bind(workout)
+    .bind(enrollment)
+    .bind(&state_before)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let legacy_body = json!({
+        "id": workout,
+        "enrollment_id": enrollment,
+        "started_at": "2026-08-01T09:00:00Z",
+        "ended_at": "2026-08-01T10:00:00Z",
+        "outcome": "completed",
+        "sets": []
+    });
+    let response = server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&legacy_body)
+        .await;
+    response.assert_status_ok();
+    let receipt: serde_json::Value = response.json();
+    assert_eq!(receipt["duplicate"], true);
+
+    let state_after: serde_json::Value =
+        sqlx::query_scalar("select state from enrollments where id = $1")
+            .bind(enrollment)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let advances: i64 =
+        sqlx::query_scalar("select count(*) from enrollment_advances where enrollment_id = $1")
+            .bind(enrollment)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let workouts: i64 = sqlx::query_scalar("select count(*) from workouts where id = $1")
+        .bind(workout)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(state_after, state_before, "retry must not advance state");
+    assert_eq!(advances, 1, "retry must not append an advance");
+    assert_eq!(workouts, 1, "retry must not insert a second workout");
+}
+
+#[sqlx::test]
+async fn an_existing_workout_id_in_another_enrollment_remains_a_conflict(pool: PgPool) {
+    let server = server(pool);
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let first_enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let second_enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let workout = Uuid::now_v7();
+
+    let first = next_session(&server, &token, first_enrollment).await;
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&logged_as_prescribed(workout, first_enrollment, &first))
+        .await
+        .assert_status(StatusCode::CREATED);
+
+    let second = next_session(&server, &token, second_enrollment).await;
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&logged_as_prescribed(workout, second_enrollment, &second))
+        .await
+        .assert_status(StatusCode::CONFLICT);
+}
+
 /// The failure the idempotency key exists to prevent, observed at the only place
 /// it is visible: the training max.
 ///
@@ -2749,6 +2857,70 @@ async fn answered_done_and_skipped_work_requires_completed(pool: PgPool) {
         .post("/v1/workouts")
         .authorization_bearer(&token)
         .json(&body)
+        .await
+        .assert_status(StatusCode::CREATED);
+}
+
+#[sqlx::test]
+async fn a_new_workout_requires_the_complete_prescribed_set_document(pool: PgPool) {
+    let server = server(pool.clone());
+    let token = register(&server, EMAIL).await;
+    set_maxes(&server, &token, full_maxes()).await;
+    let enrollment = enrol(&server, &token, "wendler-531-bbb").await;
+    let session = next_session(&server, &token, enrollment).await;
+    let complete = logged_as_prescribed(Uuid::now_v7(), enrollment, &session);
+
+    let mut empty = complete.clone();
+    empty["id"] = json!(Uuid::now_v7());
+    empty["sets"] = json!([]);
+
+    let mut partial = complete.clone();
+    partial["id"] = json!(Uuid::now_v7());
+    partial["sets"].as_array_mut().unwrap().pop();
+
+    let mut duplicate = complete.clone();
+    duplicate["id"] = json!(Uuid::now_v7());
+    let repeated = duplicate["sets"][0].clone();
+    duplicate["sets"].as_array_mut().unwrap().push(repeated);
+
+    let mut extra = complete.clone();
+    extra["id"] = json!(Uuid::now_v7());
+    let next_position = extra["sets"].as_array().unwrap().len();
+    let mut additional = extra["sets"][0].clone();
+    additional["position"] = json!(next_position);
+    extra["sets"].as_array_mut().unwrap().push(additional);
+
+    for (case, body) in [
+        ("empty", empty),
+        ("partial", partial),
+        ("duplicate", duplicate),
+        ("extra", extra),
+    ] {
+        let id = body["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+        server
+            .post("/v1/workouts")
+            .authorization_bearer(&token)
+            .json(&body)
+            .await
+            .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+        let stored: i64 = sqlx::query_scalar("select count(*) from workouts where id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(stored, 0, "{case} document mutated the database");
+    }
+
+    let mut mixed = complete;
+    mixed["id"] = json!(Uuid::now_v7());
+    let skipped = mixed["sets"].as_array_mut().unwrap().last_mut().unwrap();
+    skipped["status"] = json!("skipped");
+    skipped["actual_weight"] = json!(null);
+    skipped["actual_reps"] = json!(null);
+    server
+        .post("/v1/workouts")
+        .authorization_bearer(&token)
+        .json(&mixed)
         .await
         .assert_status(StatusCode::CREATED);
 }
