@@ -276,6 +276,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/enrollments/{id}/exercise-adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reads adjustments for an enrolment owned by the authenticated athlete.
+         *     Closed enrolments remain readable so their settings do not disappear from
+         *     history and settings screens merely because the block ended.
+         */
+        get: operations["show_exercise_adjustments"];
+        /**
+         * Replaces every adjustment for one active enrolment.
+         * @description The request first lands as generic JSON so a fractional number can be
+         *     translated into this API's RFC 9457 422 response. Extracting the DTO
+         *     directly would let Axum own that rejection instead of `ApiError`.
+         */
+        put: operations["replace_exercise_adjustments"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/enrollments/{id}/next-session": {
         parameters: {
             query?: never;
@@ -653,6 +680,20 @@ export interface components {
         };
         /** @enum {string} */
         EnrollmentStatus: "active" | "finished" | "abandoned";
+        /** @description The canonical non-zero adjustments stored for one enrolment. */
+        ExerciseAdjustments: {
+            /**
+             * @example {
+             *       "bench": 10,
+             *       "squat": -5
+             *     }
+             */
+            adjustments: {
+                [key: string]: number;
+            };
+            /** Format: uuid */
+            enrollment_id: string;
+        };
         /**
          * @description Every exercise the compiled-in programs know about.
          *
@@ -1167,6 +1208,11 @@ export interface components {
              *     trip before the first form renders.
              */
             required_maxes: components["schemas"]["RequiredMax"][];
+            /**
+             * @description Every loaded exercise this program may prescribe and therefore allows
+             *     an enrolment-specific percentage adjustment for.
+             */
+            weighted_exercises: components["schemas"]["WeightedExercise"][];
         };
         ProgramTotals: {
             /** Format: uuid */
@@ -1266,6 +1312,19 @@ export interface components {
              *     before the account exists — see `auth::password`.
              */
             password: string;
+        };
+        /** @description The complete adjustment document supplied by a client. */
+        ReplaceExerciseAdjustments: {
+            /**
+             * @description Integer percentages keyed by exercise. Zero removes an adjustment.
+             * @example {
+             *       "bench": 10,
+             *       "squat": -5
+             *     }
+             */
+            adjustments: {
+                [key: string]: number;
+            };
         };
         /** @description One lift a program needs a max for, ready to be a labelled form field. */
         RequiredMax: {
@@ -1553,6 +1612,16 @@ export interface components {
             prescribed_weight: number;
             /** Format: int32 */
             sets: number;
+        };
+        /**
+         * @description One adjustable exercise, labelled for a client that cannot read Rust's
+         *     compiled registry.
+         */
+        WeightedExercise: {
+            /** @example squat */
+            exercise: string;
+            /** @example Squat */
+            label: string;
         };
         /**
          * @description One workout, expanded.
@@ -2126,6 +2195,110 @@ export interface operations {
                 };
             };
             /** @description The athlete has not entered a max this program needs */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    show_exercise_adjustments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The enrolment's id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The enrolment's exercise adjustments */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExerciseAdjustments"];
+                };
+            };
+            /** @description Missing or invalid access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such enrolment belongs to this athlete */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    replace_exercise_adjustments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The enrolment's id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceExerciseAdjustments"];
+            };
+        };
+        responses: {
+            /** @description The adjustments as now stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExerciseAdjustments"];
+                };
+            };
+            /** @description Missing or invalid access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No such enrolment belongs to this athlete */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The enrolment is closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description An exercise or percentage is not adjustable */
             422: {
                 headers: {
                     [name: string]: unknown;
