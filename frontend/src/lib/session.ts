@@ -54,6 +54,8 @@ export type LocalSet = {
 	 */
 	plateChange: PlateChange | null;
 	actualWeight: number;
+	/** True only when automatic propagation supplied the current actual weight. */
+	weightInherited?: boolean;
 	actualReps: number;
 	status: SetStatus;
 	/**
@@ -142,6 +144,7 @@ export function commitSession(next: NextSession, options: CommitOptions): LocalS
 			platesPerSide: set.plates_per_side,
 			plateChange: set.plate_change ?? null,
 			actualWeight: set.prescribed_weight,
+			weightInherited: false,
 			actualReps: set.prescribed_reps,
 			status: 'pending',
 			loggedAt: null,
@@ -319,6 +322,7 @@ export function editSet(
 		return {
 			...set,
 			actualWeight,
+			weightInherited: false,
 			actualReps: values.reps ?? set.actualReps,
 			driftReason: actualWeight === set.prescribedWeight ? null : set.driftReason
 		};
@@ -340,6 +344,7 @@ export function editSet(
 			return {
 				...set,
 				actualWeight,
+				weightInherited: actualWeight !== set.prescribedWeight,
 				driftReason: actualWeight === set.prescribedWeight ? null : target.driftReason
 			};
 		})
@@ -437,6 +442,7 @@ export function logSet(session: LocalSession, position: number, at: string): Loc
 		return {
 			...set,
 			actualWeight,
+			weightInherited: actualWeight === set.prescribedWeight ? false : set.weightInherited,
 			driftReason: actualWeight === set.prescribedWeight ? null : set.driftReason,
 			status: 'done',
 			loggedAt: at
@@ -472,6 +478,7 @@ export function resetSet(session: LocalSession, position: number): LocalSession 
 		...set,
 		status: 'pending',
 		actualWeight: set.prescribedWeight,
+		weightInherited: false,
 		actualReps: set.prescribedReps,
 		// Cleared with the status. A stamp surviving an undo would report an
 		// interval for a set the athlete decided they had not done.
