@@ -167,6 +167,37 @@ test('a live plate change instructs what to move, and draws the resulting stack'
 	await expect(page.getByText('20 kg bar plus 20, 10 kg per side', { exact: true })).toBeVisible();
 });
 
+test('plate layout defaults to Bumper and persists Old school', async ({ page }) => {
+	await seedSession(
+		page,
+		session([set({ plateChange: plateChange({ plates_per_side: [20, 10] }) })])
+	);
+	await page.goto('/session');
+
+	const twenty = page.locator('[data-plate-weight="20"]').first();
+	const ten = page.locator('[data-plate-weight="10"]').first();
+	const bumper = page.getByRole('button', { name: 'Bumper', exact: true });
+	const oldSchool = page.getByRole('button', { name: 'Old school', exact: true });
+
+	await expect(bumper).toHaveAttribute('aria-pressed', 'true');
+	let twentyBox = await twenty.boundingBox();
+	let tenBox = await ten.boundingBox();
+	expect(twentyBox?.height).toBe(tenBox?.height);
+	expect(twentyBox?.width).not.toBe(tenBox?.width);
+
+	await oldSchool.click();
+	twentyBox = await twenty.boundingBox();
+	tenBox = await ten.boundingBox();
+	expect(twentyBox?.height).toBeGreaterThan(tenBox?.height ?? 0);
+	expect(twentyBox?.width).toBe(tenBox?.width);
+
+	await page.reload();
+	await expect(page.getByRole('button', { name: 'Old school', exact: true })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+});
+
 // ---------------------------------------------------------------------------
 // Arm 2 — "bar is already loaded". The Critical bug (fixed in b8b0c61) was
 // here: a skipped set stood in for a lifted one because `barUnchangedFrom`
