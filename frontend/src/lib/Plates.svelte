@@ -35,6 +35,41 @@
 		'1.25': 38
 	};
 
+	type PlateLayout = 'bumper' | 'old-school';
+	const STORAGE_KEY = 'athletos:plate-layout';
+	const BUMPER_WIDTH: Record<string, number> = {
+		'25': 26,
+		'20': 24,
+		'15': 21,
+		'10': 18,
+		'5': 15,
+		'2.5': 12,
+		'1.25': 10
+	};
+	const LAYOUT_OPTIONS: readonly { value: PlateLayout; label: string }[] = [
+		{ value: 'bumper', label: 'Bumper' },
+		{ value: 'old-school', label: 'Old school' }
+	];
+	let layout = $state<PlateLayout>('bumper');
+
+	$effect.pre(() => {
+		try {
+			const stored = localStorage.getItem(STORAGE_KEY);
+			if (stored === 'bumper' || stored === 'old-school') layout = stored;
+		} catch {
+			// Bumper remains the in-memory default.
+		}
+	});
+
+	function chooseLayout(next: PlateLayout) {
+		layout = next;
+		try {
+			localStorage.setItem(STORAGE_KEY, next);
+		} catch {
+			// The selection still applies for this page.
+		}
+	}
+
 	const COLOUR: Record<string, string> = {
 		'25': 'var(--color-plate-25)',
 		'20': 'var(--color-plate-20)',
@@ -64,6 +99,9 @@
 	   than vanishing. A plate the app does not recognise is still a plate. */
 	const key = (p: number) => String(p);
 	const heightOf = (p: number) => HEIGHT[key(p)] ?? 55;
+	const widthOf = (p: number) => BUMPER_WIDTH[key(p)] ?? 18;
+	const plateHeightOf = (p: number) => (layout === 'bumper' ? 100 : heightOf(p));
+	const plateWidthOf = (p: number) => (layout === 'bumper' ? widthOf(p) : 18);
 	const colourOf = (p: number) => COLOUR[key(p)] ?? 'var(--color-plate-1-25)';
 	const inkOf = (p: number) => INK[key(p)] ?? 'var(--color-plate-1-25-ink)';
 
@@ -74,7 +112,7 @@
 	   gives the small ones their space back. Picking a maximum out of a list of
 	   heights this file already owns is not arithmetic about the load (D-11):
 	   nothing here is computed from a weight. */
-	const tallest = $derived(plates.length > 0 ? Math.max(...plates.map(heightOf)) : 0);
+	const tallest = $derived(plates.length > 0 ? Math.max(...plates.map(plateHeightOf)) : 0);
 </script>
 
 {#if plates.length > 0}
@@ -111,8 +149,11 @@
 					nothing for a screen reader to repeat.
 				-->
 				<div
-					class="flex w-[18px] items-center justify-center rounded-[3px] border"
-					style="height: {heightOf(plate)}px; background: {colourOf(plate)};
+					class="flex items-center justify-center rounded-[3px] border"
+					data-plate-weight={plate}
+					style="height: {plateHeightOf(plate)}px; width: {plateWidthOf(
+						plate
+					)}px; background: {colourOf(plate)};
 					       border-color: var(--color-plate-edge)"
 				>
 					<span
@@ -128,6 +169,20 @@
 			></div>
 		</div>
 	</div>
+
+	<fieldset class="mt-2 flex items-center gap-1">
+		<legend class="sr-only">Plate layout</legend>
+		{#each LAYOUT_OPTIONS as option (option.value)}
+			<button
+				class="btn btn-xs"
+				class:btn-primary={layout === option.value}
+				class:btn-ghost={layout !== option.value}
+				type="button"
+				aria-pressed={layout === option.value}
+				onclick={() => chooseLayout(option.value)}>{option.label}</button
+			>
+		{/each}
+	</fieldset>
 
 	<!-- The drawing is decorative; this is what a screen reader gets, and what
 	     anyone loading the bar actually needs said out loud. -->

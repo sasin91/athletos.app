@@ -132,9 +132,11 @@
 		return numberFromText((event.currentTarget as HTMLInputElement).value);
 	}
 
+	const weightDecimal = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+
 	/** A receipt change is already computed by the server; this only adds its sign for display. */
 	function formatWeightChange(change: number): string {
-		return `${change > 0 ? '+' : ''}${change} kg`;
+		return `${change > 0 ? '+' : ''}${weightDecimal.format(change)} kg`;
 	}
 
 	function weightChangeKey(change: WorkoutReceipt['summary']['weight_changes'][number]): string {
@@ -230,26 +232,26 @@
 
 						{#if ending.intervals}
 							<dt class="eyebrow">between sets</dt>
-							<dd class="grid grid-cols-3 gap-2 tabular">
-								<span>
-									<span class="block eyebrow">Fastest</span>
-									{formatElapsed(ending.intervals.min_seconds * 1000)}
-								</span>
-								<span>
-									<span class="block eyebrow">Average</span>
-									{formatElapsed(ending.intervals.average_seconds * 1000)}
-								</span>
-								<span>
-									<span class="block eyebrow">Longest</span>
-									{formatElapsed(ending.intervals.max_seconds * 1000)}
-								</span>
-							</dd>
-							<dt class="sr-only">what those three are</dt>
-							<dd class="col-span-2 text-xs opacity-50">
-								fastest · average · longest
+							<dd class="tabular">
+								<dl>
+									<div class="flex justify-between" data-testid="between-set-interval-row">
+										<dt>Fastest</dt>
+										<dd>{formatElapsed(ending.intervals.min_seconds * 1000)}</dd>
+									</div>
+									<div class="flex justify-between" data-testid="between-set-interval-row">
+										<dt>Average</dt>
+										<dd>{formatElapsed(ending.intervals.average_seconds * 1000)}</dd>
+									</div>
+									<div class="flex justify-between" data-testid="between-set-interval-row">
+										<dt>Longest</dt>
+										<dd>{formatElapsed(ending.intervals.max_seconds * 1000)}</dd>
+									</div>
+								</dl>
 								{#if ending.intervals.discarded > 0}
-									· {ending.intervals.discarded} gap{ending.intervals.discarded === 1 ? '' : 's'} too
-									long to believe, left out
+									<p class="text-xs opacity-50">
+										{ending.intervals.discarded} gap{ending.intervals.discarded === 1 ? '' : 's'} too
+										long to believe, left out
+									</p>
 								{/if}
 							</dd>
 						{/if}
@@ -523,6 +525,11 @@
 										}}
 									/>
 									<span>kg</span>
+									{#if set.actualWeight !== set.prescribedWeight}
+										<span class="badge badge-ghost tabular" data-testid="weight-change">
+											{formatWeightChange(set.actualWeight - set.prescribedWeight)}
+										</span>
+									{/if}
 								</label>
 
 								<label class="flex items-center gap-1">
@@ -552,7 +559,7 @@
 								tap either way — honesty must never cost more than dishonesty
 								(D-07).
 							-->
-							{#if set.position === current && set.actualWeight !== set.prescribedWeight}
+							{#if set.position === current && set.actualWeight !== set.prescribedWeight && set.weightInherited !== true}
 								<fieldset class="flex flex-wrap items-baseline gap-2">
 									<legend class="eyebrow">why</legend>
 									{#each DRIFT_REASONS as reason (reason.value)}
@@ -621,7 +628,7 @@
 									</button>
 								{:else}
 									<button
-										class="self-start text-sm opacity-50"
+										class="min-h-11 min-w-11 self-start px-3 text-sm opacity-50"
 										type="button"
 										onclick={() => (noting = set.position)}
 									>

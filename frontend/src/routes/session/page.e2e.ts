@@ -167,6 +167,37 @@ test('a live plate change instructs what to move, and draws the resulting stack'
 	await expect(page.getByText('20 kg bar plus 20, 10 kg per side', { exact: true })).toBeVisible();
 });
 
+test('plate layout defaults to Bumper and persists Old school', async ({ page }) => {
+	await seedSession(
+		page,
+		session([set({ plateChange: plateChange({ plates_per_side: [20, 10] }) })])
+	);
+	await page.goto('/session');
+
+	const twenty = page.locator('[data-plate-weight="20"]').first();
+	const ten = page.locator('[data-plate-weight="10"]').first();
+	const bumper = page.getByRole('button', { name: 'Bumper', exact: true });
+	const oldSchool = page.getByRole('button', { name: 'Old school', exact: true });
+
+	await expect(bumper).toHaveAttribute('aria-pressed', 'true');
+	let twentyBox = await twenty.boundingBox();
+	let tenBox = await ten.boundingBox();
+	expect(twentyBox?.height).toBe(tenBox?.height);
+	expect(twentyBox?.width).not.toBe(tenBox?.width);
+
+	await oldSchool.click();
+	twentyBox = await twenty.boundingBox();
+	tenBox = await ten.boundingBox();
+	expect(twentyBox?.height).toBeGreaterThan(tenBox?.height ?? 0);
+	expect(twentyBox?.width).toBe(tenBox?.width);
+
+	await page.reload();
+	await expect(page.getByRole('button', { name: 'Old school', exact: true })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+});
+
 // ---------------------------------------------------------------------------
 // Arm 2 — "bar is already loaded". The Critical bug (fixed in b8b0c61) was
 // here: a skipped set stood in for a lifted one because `barUnchangedFrom`
@@ -287,6 +318,44 @@ test('drift-reason chips are hidden at the prescription and appear once the weig
 	await expect(page.getByRole('button', { name: 'too easy', exact: true })).toBeVisible();
 });
 
+test('the live weight shows its signed change from prescription', async ({ page }) => {
+	await seedSession(page, session([set({ actualWeight: 115 })]));
+	await page.goto('/session');
+	await expect(page.getByTestId('weight-change')).toHaveText('+15 kg');
+	await page.getByLabel('Weight in kilograms').fill('90');
+	await expect(page.getByTestId('weight-change')).toHaveText('-10 kg');
+	await page.getByLabel('Weight in kilograms').fill('100');
+	await expect(page.getByTestId('weight-change')).not.toBeVisible();
+});
+
+test('the live weight formats a decimal change without floating-point noise', async ({ page }) => {
+	await seedSession(page, session([set({ prescribedWeight: 97.5, actualWeight: 97.5 })]));
+	await page.goto('/session');
+	await page.getByLabel('Weight in kilograms').fill('99.9');
+	await expect(page.getByTestId('weight-change')).toHaveText('+2.4 kg');
+});
+
+test('an inherited weight hides reasons until directly edited', async ({ page }) => {
+	await seedSession(page, session([set({ actualWeight: 115, weightInherited: true })]));
+	await page.goto('/session');
+	await expect(page.getByRole('button', { name: 'too easy', exact: true })).not.toBeVisible();
+	await page.getByLabel('Reps').fill('3');
+	await expect(page.getByRole('button', { name: 'too easy', exact: true })).not.toBeVisible();
+	await page.getByLabel('Weight in kilograms').fill('110');
+	await expect(page.getByRole('button', { name: 'too easy', exact: true })).toBeVisible();
+});
+
+test('Add note has a full touch target and opens the editor', async ({ page }) => {
+	await seedSession(page, session([set()]));
+	await page.goto('/session');
+	const addNote = page.getByRole('button', { name: 'Add note', exact: true });
+	const box = await addNote.boundingBox();
+	expect(box?.width).toBeGreaterThanOrEqual(44);
+	expect(box?.height).toBeGreaterThanOrEqual(44);
+	await addNote.click();
+	await expect(page.getByLabel('Note for this set')).toBeVisible();
+});
+
 test('tapping a drift-reason chip marks it pressed, and tapping it again clears it', async ({
 	page
 }) => {
@@ -346,6 +415,13 @@ test('a fully answered mixed session finishes normally and shows its receipt', a
 	for (const value of ['Barbell row', '85 → 100 kg', '+15 kg', '2 sets']) {
 		await expect(page.getByText(value, { exact: true })).toBeVisible();
 	}
+	const rows = page.getByTestId('between-set-interval-row');
+	await expect(rows).toHaveCount(3);
+	const tops = await rows.evaluateAll((items) =>
+		items.map((item) => item.getBoundingClientRect().top)
+	);
+	expect(new Set(tops).size).toBe(3);
+	await expect(page.getByText('fastest · average · longest', { exact: false })).not.toBeVisible();
 	await expect(page.getByText('Bench press', { exact: true })).toBeVisible();
 	await expect(page.getByText('80 → 90 kg', { exact: true })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'See where the hour went' })).toBeVisible();

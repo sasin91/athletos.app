@@ -129,6 +129,7 @@ describe('commitSession', () => {
 		for (const set of session.sets) {
 			expect(set.actualWeight).toBe(set.prescribedWeight);
 			expect(set.actualReps).toBe(set.prescribedReps);
+			expect(set.weightInherited).toBe(false);
 		}
 	});
 
@@ -285,6 +286,7 @@ describe('toSubmission', () => {
 			cutReason: 'pain'
 		});
 
+		expect('weightInherited' in body.sets[0]).toBe(false);
 		expect(body.sets.map((set) => set.prescribed_weight)).toEqual([97.5, 97.5, 97.5, 0]);
 		expect(body.sets.map((set) => set.prescribed_reps)).toEqual([5, 5, 5, 12]);
 		expect(body.sets.map((set) => set.position)).toEqual([0, 1, 2, 3]);
@@ -520,6 +522,30 @@ function bbbFixture(): LocalSession {
 }
 
 describe('a weight edit carries through the exercise', () => {
+	it('marks propagated weights as inherited but the edited target as direct', () => {
+		const edited = editSet(committed, 0, { weight: 100 });
+		expect(edited.sets.slice(0, 3).map((set) => set.weightInherited)).toEqual([false, true, true]);
+	});
+
+	it('a direct edit takes ownership of an inherited weight', () => {
+		const inherited = editSet(committed, 0, { weight: 100 });
+		const direct = editSet(inherited, 1, { weight: 100 });
+		expect(direct.sets[1].weightInherited).toBe(false);
+	});
+
+	it('keeps an inherited weight inherited when only reps change', () => {
+		const inherited = editSet(committed, 0, { weight: 100 });
+		const edited = editSet(inherited, 1, { reps: 3 });
+
+		expect(edited.sets[1].weightInherited).toBe(true);
+		expect(edited.sets[1].actualReps).toBe(3);
+	});
+
+	it('undo clears inherited weight state', () => {
+		const inherited = editSet(committed, 0, { weight: 100 });
+		expect(resetSet(inherited, 1).sets[1].weightInherited).toBe(false);
+	});
+
 	it('rewrites every later pending set of the same exercise', () => {
 		const edited = editSet(committed, 0, { weight: 100 });
 
