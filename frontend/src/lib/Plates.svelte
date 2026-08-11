@@ -172,7 +172,7 @@
 
 	<fieldset class="mt-2 flex items-center gap-1">
 		<legend class="sr-only">Plate layout</legend>
-		{#each LAYOUT_OPTIONS as option}
+		{#each LAYOUT_OPTIONS as option (option.value)}
 			<button
 				class="btn btn-xs"
 				class:btn-primary={layout === option.value}
