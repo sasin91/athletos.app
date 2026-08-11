@@ -524,11 +524,7 @@ function bbbFixture(): LocalSession {
 describe('a weight edit carries through the exercise', () => {
 	it('marks propagated weights as inherited but the edited target as direct', () => {
 		const edited = editSet(committed, 0, { weight: 100 });
-		expect(edited.sets.slice(0, 3).map((set) => set.weightInherited)).toEqual([
-			false,
-			true,
-			true
-		]);
+		expect(edited.sets.slice(0, 3).map((set) => set.weightInherited)).toEqual([false, true, true]);
 	});
 
 	it('a direct edit takes ownership of an inherited weight', () => {

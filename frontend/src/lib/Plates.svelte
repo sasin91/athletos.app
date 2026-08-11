@@ -151,7 +151,9 @@
 				<div
 					class="flex items-center justify-center rounded-[3px] border"
 					data-plate-weight={plate}
-					style="height: {plateHeightOf(plate)}px; width: {plateWidthOf(plate)}px; background: {colourOf(plate)};
+					style="height: {plateHeightOf(plate)}px; width: {plateWidthOf(
+						plate
+					)}px; background: {colourOf(plate)};
 					       border-color: var(--color-plate-edge)"
 				>
 					<span
