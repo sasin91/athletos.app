@@ -322,7 +322,7 @@ export function editSet(
 		return {
 			...set,
 			actualWeight,
-			weightInherited: false,
+			weightInherited: values.weight === undefined ? set.weightInherited : false,
 			actualReps: values.reps ?? set.actualReps,
 			driftReason: actualWeight === set.prescribedWeight ? null : set.driftReason
 		};

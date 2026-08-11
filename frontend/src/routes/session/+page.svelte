@@ -132,9 +132,11 @@
 		return numberFromText((event.currentTarget as HTMLInputElement).value);
 	}
 
+	const weightDecimal = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+
 	/** A receipt change is already computed by the server; this only adds its sign for display. */
 	function formatWeightChange(change: number): string {
-		return `${change > 0 ? '+' : ''}${change} kg`;
+		return `${change > 0 ? '+' : ''}${weightDecimal.format(change)} kg`;
 	}
 
 	function weightChangeKey(change: WorkoutReceipt['summary']['weight_changes'][number]): string {

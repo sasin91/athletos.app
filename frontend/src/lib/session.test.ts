@@ -533,6 +533,14 @@ describe('a weight edit carries through the exercise', () => {
 		expect(direct.sets[1].weightInherited).toBe(false);
 	});
 
+	it('keeps an inherited weight inherited when only reps change', () => {
+		const inherited = editSet(committed, 0, { weight: 100 });
+		const edited = editSet(inherited, 1, { reps: 3 });
+
+		expect(edited.sets[1].weightInherited).toBe(true);
+		expect(edited.sets[1].actualReps).toBe(3);
+	});
+
 	it('undo clears inherited weight state', () => {
 		const inherited = editSet(committed, 0, { weight: 100 });
 		expect(resetSet(inherited, 1).sets[1].weightInherited).toBe(false);

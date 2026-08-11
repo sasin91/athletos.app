@@ -328,9 +328,18 @@ test('the live weight shows its signed change from prescription', async ({ page 
 	await expect(page.getByTestId('weight-change')).not.toBeVisible();
 });
 
+test('the live weight formats a decimal change without floating-point noise', async ({ page }) => {
+	await seedSession(page, session([set({ prescribedWeight: 97.5, actualWeight: 97.5 })]));
+	await page.goto('/session');
+	await page.getByLabel('Weight in kilograms').fill('99.9');
+	await expect(page.getByTestId('weight-change')).toHaveText('+2.4 kg');
+});
+
 test('an inherited weight hides reasons until directly edited', async ({ page }) => {
 	await seedSession(page, session([set({ actualWeight: 115, weightInherited: true })]));
 	await page.goto('/session');
+	await expect(page.getByRole('button', { name: 'too easy', exact: true })).not.toBeVisible();
+	await page.getByLabel('Reps').fill('3');
 	await expect(page.getByRole('button', { name: 'too easy', exact: true })).not.toBeVisible();
 	await page.getByLabel('Weight in kilograms').fill('110');
 	await expect(page.getByRole('button', { name: 'too easy', exact: true })).toBeVisible();
