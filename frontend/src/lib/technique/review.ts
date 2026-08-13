@@ -72,7 +72,14 @@ export function createTechniqueReview(
 	}
 
 	async function requestPreview(video?: HTMLVideoElement): Promise<void> {
-		const reason = unsupportedReason(recorder.capabilities());
+		let reason: string | null;
+		try {
+			reason = unsupportedReason(recorder.capabilities());
+		} catch (error) {
+			publish(cameraError(error));
+			return;
+		}
+
 		if (reason !== null) {
 			publish({ phase: 'unsupported', reason });
 			return;
@@ -149,6 +156,20 @@ export function createTechniqueReview(
 		}
 	}
 
+	async function handleSafely(intent: TechniqueReviewIntent): Promise<void> {
+		try {
+			await handle(intent);
+		} catch (error) {
+			publish(cameraError(error));
+		}
+	}
+
+	function enqueue(intent: TechniqueReviewIntent): Promise<void> {
+		const run = () => handleSafely(intent);
+		serial = serial.then(run, run);
+		return serial;
+	}
+
 	return {
 		snapshot: () => state,
 		subscribe(subscriber) {
@@ -157,12 +178,10 @@ export function createTechniqueReview(
 			return () => subscribers.delete(subscriber);
 		},
 		send(intent) {
-			serial = serial.then(() => handle(intent));
-			return serial;
+			return enqueue(intent);
 		},
 		dispose() {
-			serial = serial.then(() => handle({ type: 'discard' }));
-			return serial;
+			return enqueue({ type: 'discard' });
 		}
 	};
 }

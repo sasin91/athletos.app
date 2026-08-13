@@ -50,4 +50,27 @@ describe('createTechniqueReview', () => {
 		await review.dispose();
 		expect(recorder.dispose).toHaveBeenCalledOnce();
 	});
+
+	it('contains capability-check failures and keeps the queue usable for disposal', async () => {
+		const recorder = fakeRecorder();
+		recorder.capabilities = () => {
+			throw new Error('camera capability lookup failed');
+		};
+		const review = createTechniqueReview(
+			{ workoutId: 'w', setPosition: 0, exercise: 'squat' },
+			recorder,
+			{ now: () => 0 }
+		);
+
+		await expect(review.send({ type: 'request-camera' })).resolves.toBeUndefined();
+		expect(review.snapshot()).toEqual({
+			phase: 'failure',
+			stage: 'camera',
+			message: 'Camera preview could not be started.'
+		});
+
+		await review.dispose();
+		expect(review.snapshot().phase).toBe('closed');
+		expect(recorder.dispose).toHaveBeenCalledOnce();
+	});
 });
