@@ -92,9 +92,11 @@ run or from automated browser tests.
 Android is the accepted current support floor for this slice: a Pixel 6a on
 stock Android 17 with Chrome 151 as an installed PWA. It is not an assertion of
 Safari or iPhone support. The screen-timeout diagnostic stall remains part of
-the evidence; production now makes a best-effort scoped Screen Wake Lock while
-recording, but a device run of that production behavior has not yet been
-collected.
+the evidence; production now makes a best-effort scoped Screen Wake Lock during
+recording and analysis, observes unexpected release and `visibilitychange`,
+reacquires only after returning visible, and releases on analysis,
+cancellation, or teardown. A device run of that full production behavior has
+not yet been collected.
 
 ## Remaining matrix
 
