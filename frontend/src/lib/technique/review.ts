@@ -26,7 +26,10 @@ function unsupportedReason(capabilities: RecorderCapabilities): string | null {
 }
 
 function errorName(error: unknown): string | null {
-	return typeof error === 'object' && error !== null && 'name' in error && typeof error.name === 'string'
+	return typeof error === 'object' &&
+		error !== null &&
+		'name' in error &&
+		typeof error.name === 'string'
 		? error.name
 		: null;
 }
@@ -98,7 +101,11 @@ export function createTechniqueReview(
 
 		switch (intent.type) {
 			case 'request-camera':
-				if (state.phase === 'checking' || state.phase === 'permission' || state.phase === 'failure') {
+				if (
+					state.phase === 'checking' ||
+					state.phase === 'permission' ||
+					state.phase === 'failure'
+				) {
 					await requestPreview(intent.video);
 				}
 				return;
@@ -106,7 +113,8 @@ export function createTechniqueReview(
 				if (state.phase === 'preview') publish({ phase: 'countdown', remaining: 3 });
 				return;
 			case 'countdown-tick':
-				if (state.phase === 'countdown') publish({ phase: 'countdown', remaining: intent.remaining });
+				if (state.phase === 'countdown')
+					publish({ phase: 'countdown', remaining: intent.remaining });
 				return;
 			case 'countdown-finished':
 				if (state.phase !== 'countdown') return;
