@@ -94,7 +94,9 @@ function timerHarness() {
 		void timeout;
 		return 27 as unknown as ReturnType<typeof globalThis.setTimeout>;
 	});
-	const clearTimeout = vi.fn((_handle: ReturnType<typeof globalThis.setTimeout>) => undefined);
+	const clearTimeout = vi.fn((handle: ReturnType<typeof globalThis.setTimeout>) => {
+		void handle;
+	});
 	return {
 		setTimeout,
 		clearTimeout,

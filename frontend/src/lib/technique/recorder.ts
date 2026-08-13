@@ -151,8 +151,7 @@ export function createBrowserRecorder(
 
 	const requestWakeLock = (generation: number): Promise<void> => {
 		if (!environment.wakeLock || wakeLockRequest) return wakeLockRequest ?? Promise.resolve();
-		let request!: Promise<void>;
-		request = (async () => {
+		const request = (async () => {
 			try {
 				const acquired = await environment.wakeLock?.request('screen');
 				if (!acquired) return;
@@ -178,7 +177,7 @@ export function createBrowserRecorder(
 			} catch {
 				// Camera recording remains usable when Wake Lock is absent or permission is denied.
 			} finally {
-				if (wakeLockRequest === request) wakeLockRequest = undefined;
+				wakeLockRequest = undefined;
 			}
 		})();
 		wakeLockRequest = request;
@@ -287,7 +286,7 @@ export function createBrowserRecorder(
 		chunks = [];
 		stopStarted = false;
 		stoppedAt = undefined;
-		const generation = ++recordingGeneration;
+		recordingGeneration += 1;
 		capturePromise = new Promise<CapturedClip>((resolve, reject) => {
 			resolveCapture = resolve;
 			rejectCapture = reject;
