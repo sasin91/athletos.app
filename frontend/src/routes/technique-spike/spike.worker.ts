@@ -1,4 +1,5 @@
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
+import type { LandmarkFrame } from './spike';
 
 type AnalyzeMessage = { type: 'analyze'; bitmap: ImageBitmap; mediaTimeMs: number };
 
@@ -22,10 +23,21 @@ self.onmessage = async ({ data }: MessageEvent<AnalyzeMessage>) => {
 	const started = performance.now();
 	try {
 		const result = (await getLandmarker()).detectForVideo(data.bitmap, data.mediaTimeMs);
+		const landmarks = result.landmarks.flat();
+		const visibility = landmarks
+			.map((landmark) => landmark.visibility)
+			.filter((value): value is number => typeof value === 'number');
+		const frame: LandmarkFrame = {
+			hasPose: result.landmarks.length > 0,
+			landmarkCount: landmarks.length,
+			visibility,
+			// This MediaPipe result type exposes visibility but no per-landmark presence confidence.
+			presence: []
+		};
 		self.postMessage({
 			type: 'result',
 			mediaTimeMs: data.mediaTimeMs,
-			hasPose: result.landmarks.length > 0,
+			frame,
 			elapsedMs: performance.now() - started
 		});
 	} catch (error) {
