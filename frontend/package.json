@@ -50,7 +50,6 @@
 		"vitest": "4.1.10"
 	},
 	"dependencies": {
-		"@mediapipe/tasks-vision": "1.0.1",
 		"openapi-fetch": "0.17.0"
 	}
 }
