@@ -20,7 +20,7 @@ concepts into the MVP.
 ### What the MVP does
 
 - Enters recording only from the current squat Set in the offline logger.
-- Captures the rear camera at an ideal 1280×720 resolution, without audio.
+- Requests the front/user-facing camera at an ideal 1280×720 resolution, without audio.
 - Shows a side-view framing guide and a three-second countdown.
 - Records until the athlete stops it, with a 45-second hard limit.
 - Detects body landmarks locally in the browser.
@@ -64,8 +64,8 @@ it will. Framing guidance is instruction, not a validation verdict.
 - No variable-rate, phase-weighted, or load-adaptive sampling in the MVP.
 - No calibrated measurements, technique verdicts, corrective cues, or medical
   claims.
-- No front or rear view, other exercise, multiple people, moving camera, or
-  multi-camera capture.
+- No camera switcher or alternate rear-camera view, other exercise, multiple people,
+  moving camera, or multi-camera capture.
 - No automatic barbell detection. One-tap calibration is required.
 - No automatic upload, background upload, sharing, coach account, comment,
   inbox, assignment, or review status.
@@ -119,7 +119,7 @@ Active squat Set
        |
 camera capability + permission
        |
-rear-camera preview + side-view framing guide
+front-camera preview + side-view framing guide
        |
 3-second countdown
        |
@@ -247,7 +247,7 @@ recorder requests:
 {
   audio: false,
   video: {
-    facingMode: { ideal: "environment" },
+    facingMode: { ideal: "user" },
     width: { ideal: 1280 },
     height: { ideal: 720 },
     frameRate: { ideal: 30 }
@@ -258,8 +258,9 @@ recorder requests:
 Every value is ideal rather than exact: a device that can provide a useful
 camera at another size or frame rate should work. After access, the app reads
 `MediaStreamTrack.getSettings()` and stores the actual dimensions and frame
-rate. If the selected device is front-facing, the preview warns the athlete and
-offers available video inputs after permission makes labels visible.
+rate. If the selected device is rear/environment-facing, the preview may warn the
+athlete; a later camera switcher can offer inputs after permission makes labels
+visible. Slice 1 does not include a camera switcher.
 
 Permission denial, no camera, camera already in use, insecure context, and an
 unsupported recorder have distinct messages and a single route back to the

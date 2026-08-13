@@ -98,7 +98,7 @@
 				class:opacity-35={snapshot.phase === 'checking' || snapshot.phase === 'permission'}
 				muted
 				playsinline
-				aria-label="Rear camera preview"
+				aria-label="Front camera preview"
 			></video>
 
 			<div class="pointer-events-none absolute inset-[8%] border border-dashed border-white/70">
@@ -168,8 +168,8 @@
 
 		{#if snapshot.phase === 'checking' || snapshot.phase === 'permission'}
 			<p class="text-sm opacity-75">
-				Allow the rear camera to frame one squat set. The clip stays on this device and is discarded
-				after review.
+				Allow the front camera to frame one squat set. The clip stays on this device and is
+				discarded after review.
 			</p>
 			<button
 				class="btn w-full btn-primary"

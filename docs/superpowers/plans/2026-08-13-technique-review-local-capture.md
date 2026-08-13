@@ -14,7 +14,7 @@
 
 - Do not begin until the feasibility result says `Proceed` without unapproved limit changes.
 - Entry exists only for the current Set when `exercise === "squat"`.
-- Request rear camera, no audio, ideal 1280×720 at 30 fps.
+- Request front/user-facing camera first, no audio, ideal 1280×720 at 30 fps.
 - Countdown is three seconds; recording hard-stops at 45 seconds using a monotonic clock.
 - Codec selection uses `MediaRecorder.isTypeSupported()` and stores `recorder.mimeType`.
 - Recording, denial, error, discard, and dispose never mutate `LocalSession`.
@@ -258,7 +258,7 @@ Request exactly:
 await mediaDevices.getUserMedia({
 	audio: false,
 	video: {
-		facingMode: { ideal: 'environment' },
+		facingMode: { ideal: 'user' },
 		width: { ideal: 1280 },
 		height: { ideal: 720 },
 		frameRate: { ideal: 30 }
@@ -333,7 +333,7 @@ Expected: FAIL because the button and view do not exist.
 `TechniqueReview.svelte` creates one review in `$effect`, subscribes state into `$state`, and disposes it in the effect cleanup. Render a full-viewport dialog-like layer with:
 
 - capability/permission explanation and **Allow camera**;
-- live rear-camera preview with a side silhouette/framing rectangle;
+- live front-camera preview with a side silhouette/framing rectangle;
 - three-second visible countdown;
 - elapsed recording time and **Stop**;
 - raw `<video controls playsinline>` review;

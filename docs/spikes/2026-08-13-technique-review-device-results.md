@@ -2,6 +2,8 @@
 
 Status: feasibility decision recorded. Android physical-device evidence is complete enough for the product owner to proceed; the uncollected iPhone/Safari and permission-denial rows remain explicit implementation-validation gaps.
 
+Production learning: the accepted physical-device run used `facingMode: "user"`; the front camera is now the initial production request.
+
 | Device          | OS                    | Browser          | Mode           |      Clip s | MIME                           | Actual capture                 | Blob MiB |         Decode samples |       Pose samples |                    Analysis s |   SHA-256 s | IDB round-trip          | Cleanup                   | Failure                                                             |
 | --------------- | --------------------- | ---------------- | -------------- | ----------: | ------------------------------ | ------------------------------ | -------: | ---------------------: | -----------------: | ----------------------------: | ----------: | ----------------------- | ------------------------- | ------------------------------------------------------------------- |
 | Google Pixel 6a | Android 17, stock ROM | Chrome 151.0.0.0 | browser        |      10.007 | `video/mp4;codecs=avc1.42001f` | 720×1280 @ 30 fps, user-facing |    2.904 |                100/100 |             81/100 |         6.250 inference total |       0.023 | 0.198 s; byte-identical | tracks ended; URL revoked | none                                                                |

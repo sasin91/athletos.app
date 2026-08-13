@@ -9,7 +9,7 @@ import {
 const constraints = {
 	audio: false,
 	video: {
-		facingMode: { ideal: 'environment' },
+		facingMode: { ideal: 'user' },
 		width: { ideal: 1280 },
 		height: { ideal: 720 },
 		frameRate: { ideal: 30 }
@@ -266,7 +266,7 @@ describe('createBrowserRecorder', () => {
 		});
 	});
 
-	it('requests the rear camera and exposes its actual preview settings', async () => {
+	it('requests the front camera and exposes its actual preview settings', async () => {
 		const harness = environment();
 		const preview = { play: vi.fn(async () => undefined), srcObject: null };
 		const recorder = createBrowserRecorder(harness.value);
