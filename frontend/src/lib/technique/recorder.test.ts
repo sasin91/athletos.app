@@ -281,7 +281,7 @@ describe('createBrowserRecorder', () => {
 		expect(preview.play).toHaveBeenCalledOnce();
 	});
 
-	it('stops every acquired track on dispose even when preview setup fails', async () => {
+	it('stops every acquired track immediately when the camera provides no video track', async () => {
 		const stop = vi.fn();
 		const getUserMedia = vi.fn(
 			async () =>
@@ -293,9 +293,36 @@ describe('createBrowserRecorder', () => {
 		await expect(
 			recorder.requestPreview({ play: async () => undefined } as HTMLVideoElement)
 		).rejects.toThrow();
-		await recorder.dispose();
 		expect(stop).toHaveBeenCalledOnce();
 	});
+
+	it.each(['play', 'settings'] as const)(
+		'stops every acquired track immediately when preview %s fails',
+		async (failure) => {
+			const source = fakeStream();
+			if (failure === 'settings') {
+				source.track.getSettings.mockImplementation(() => {
+					throw new Error('settings failed');
+				});
+			}
+			const getUserMedia = vi.fn(async () => source.stream);
+			const harness = environment({
+				mediaDevices: { getUserMedia } as unknown as MediaDevices
+			});
+			const preview = {
+				play: vi.fn(async () => {
+					if (failure === 'play') throw new Error('play failed');
+				}),
+				srcObject: null
+			} as unknown as HTMLVideoElement;
+			const recorder = createBrowserRecorder(harness.value);
+
+			await expect(recorder.requestPreview(preview)).rejects.toThrow(`${failure} failed`);
+
+			expect(source.track.stop).toHaveBeenCalledOnce();
+			expect(preview.srcObject).toBeNull();
+		}
+	);
 
 	it('stops the prior preview stream before requesting a replacement', async () => {
 		const first = fakeStream();
@@ -342,7 +369,45 @@ describe('createBrowserRecorder', () => {
 		expect(harness.metadata.revokeObjectURL).toHaveBeenCalledWith('blob:clip');
 	});
 
-	it('hard-stops after 45 seconds and resolves the same completed clip', async () => {
+	it.each(['construction', 'start'] as const)(
+		'stops preview tracks immediately when MediaRecorder %s fails',
+		async (failure) => {
+			class FailingMediaRecorder {
+				static isTypeSupported() {
+					return true;
+				}
+
+				state: RecordingState = 'inactive';
+				mimeType = 'video/webm';
+				ondataavailable: ((event: BlobEvent) => void) | null = null;
+				onerror: ((event: Event) => void) | null = null;
+				onstop: (() => void) | null = null;
+
+				constructor() {
+					if (failure === 'construction') throw new Error('construction failed');
+				}
+
+				start() {
+					throw new Error('start failed');
+				}
+
+				stop() {}
+			}
+			const harness = environment({
+				MediaRecorder: FailingMediaRecorder as unknown as typeof MediaRecorder
+			});
+			const preview = { play: vi.fn(async () => undefined), srcObject: null };
+			const recorder = createBrowserRecorder(harness.value);
+			await recorder.requestPreview(preview as unknown as HTMLVideoElement);
+
+			await expect(recorder.start()).rejects.toThrow(`${failure} failed`);
+
+			expect(harness.track.stop).toHaveBeenCalledOnce();
+			expect(preview.srcObject).toBeNull();
+		}
+	);
+
+	it('hard-stops after 45 seconds and exposes the completed clip without a later stop call', async () => {
 		const harness = environment();
 		const { recorder } = await previewAndStart(harness);
 		const instance = harness.instances[0];
@@ -350,7 +415,7 @@ describe('createBrowserRecorder', () => {
 
 		expect(harness.timers.setTimeout).toHaveBeenCalledWith(expect.any(Function), 45_000);
 		harness.timers.fire();
-		const clip = await recorder.stop();
+		const clip = await recorder.recordingResult();
 
 		expect(instance.stop).toHaveBeenCalledOnce();
 		expect(clip.durationMs).toBe(45_000);
@@ -369,9 +434,14 @@ describe('createBrowserRecorder', () => {
 			const { recorder } = await previewAndStart(harness);
 			harness.instances[0].emitData(new Blob(['reviewable-clip']));
 
-			if (termination === 'hard stop') harness.timers.fire();
-			if (termination === 'track end') videoTrack.dispatch('ended');
-			const clip = await recorder.stop();
+			let clipPromise: ReturnType<typeof recorder.stop>;
+			if (termination === 'manual stop') clipPromise = recorder.stop();
+			else {
+				clipPromise = recorder.recordingResult();
+				if (termination === 'hard stop') harness.timers.fire();
+				else videoTrack.dispatch('ended');
+			}
+			const clip = await clipPromise;
 
 			expect(videoTrack.stop).toHaveBeenCalledOnce();
 			expect(auxiliaryTrack.stop).toHaveBeenCalledOnce();
@@ -380,6 +450,58 @@ describe('createBrowserRecorder', () => {
 			expect(clip.height).toBe(1280);
 		}
 	);
+
+	it('exposes recorder errors without requiring a later stop call', async () => {
+		const harness = environment();
+		const { recorder } = await previewAndStart(harness);
+		const result = recorder.recordingResult();
+
+		harness.instances[0].emitError();
+
+		await expect(result).rejects.toThrow('MediaRecorder failed');
+		expect(harness.track.stop).toHaveBeenCalledOnce();
+	});
+
+	it('stops tracks when MediaRecorder throws while stopping', async () => {
+		const harness = environment();
+		const { recorder } = await previewAndStart(harness);
+		harness.instances[0].stop.mockImplementation(() => {
+			throw new Error('stop failed');
+		});
+
+		await expect(recorder.stop()).rejects.toThrow('stop failed');
+
+		expect(harness.track.stop).toHaveBeenCalledOnce();
+	});
+
+	it('revokes the metadata URL when recorded metadata decoding fails', async () => {
+		let onerror: (() => void) | null = null;
+		const revokeObjectURL = vi.fn();
+		const metadataVideo = {
+			preload: '',
+			onloadedmetadata: null as (() => void) | null,
+			get onerror() {
+				return onerror;
+			},
+			set onerror(listener: (() => void) | null) {
+				onerror = listener;
+			},
+			set src(_value: string) {
+				queueMicrotask(() => onerror?.());
+			}
+		} as unknown as HTMLVideoElement;
+		const harness = environment({
+			createMetadataVideo: () => metadataVideo,
+			createObjectURL: () => 'blob:metadata-error',
+			revokeObjectURL
+		});
+		const { recorder } = await previewAndStart(harness);
+
+		await expect(recorder.stop()).rejects.toThrow('Unable to decode the recorded clip metadata');
+
+		expect(revokeObjectURL).toHaveBeenCalledOnce();
+		expect(revokeObjectURL).toHaveBeenCalledWith('blob:metadata-error');
+	});
 
 	it('stops recording and releases the wake lock when the video track ends', async () => {
 		const wakeLock = wakeLockHarness();
@@ -488,7 +610,42 @@ describe('createBrowserRecorder', () => {
 		expect(wakeLocks.request).toHaveBeenCalledOnce();
 	});
 
-	it('waits for a pending wake lock request and releases it before dispose resolves', async () => {
+	it('releases a new recording wake lock while the prior release is still pending', async () => {
+		let finishFirstRelease: (() => void) | undefined;
+		const first: WakeLockSentinelPort = {
+			released: false,
+			release: vi.fn(
+				() =>
+					new Promise<void>((resolve) => {
+						finishFirstRelease = () => {
+							first.released = true;
+							resolve();
+						};
+					})
+			)
+		};
+		const second: WakeLockSentinelPort = {
+			released: false,
+			release: vi.fn(async () => {
+				second.released = true;
+			})
+		};
+		const request = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+		const harness = environment({ wakeLock: { request } });
+		const { recorder, preview } = await previewAndStart(harness);
+		await recorder.stop();
+
+		await recorder.requestPreview(preview);
+		await recorder.start();
+		await recorder.stop();
+
+		expect(request).toHaveBeenCalledTimes(2);
+		expect(first.release).toHaveBeenCalledOnce();
+		expect(second.release).toHaveBeenCalledOnce();
+		finishFirstRelease?.();
+	});
+
+	it('does not let a pending wake lock request block start or dispose and releases a late lock', async () => {
 		const wakeLock = wakeLockHarness();
 		let resolveRequest: ((sentinel: WakeLockSentinelPort) => void) | undefined;
 		const request = vi.fn(
@@ -502,21 +659,27 @@ describe('createBrowserRecorder', () => {
 		const recorder = createBrowserRecorder(harness.value);
 		await recorder.requestPreview(preview);
 		const startPromise = recorder.start();
+		let started = false;
+		void startPromise.then(() => (started = true));
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(started).toBe(true);
+
 		const disposePromise = recorder.dispose();
 		let disposed = false;
 		void disposePromise.then(() => (disposed = true));
-
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(disposed).toBe(false);
+		expect(disposed).toBe(true);
+		expect(harness.track.stop).toHaveBeenCalledOnce();
 
 		resolveRequest?.(wakeLock.sentinel);
 		await startPromise;
 		await disposePromise;
-		expect(wakeLock.sentinel.release).toHaveBeenCalledOnce();
+		await vi.waitFor(() => expect(wakeLock.sentinel.release).toHaveBeenCalledOnce());
 	});
 
-	it('shares pending cleanup across concurrent dispose callers', async () => {
+	it('settles concurrent dispose callers without waiting for a pending wake lock request', async () => {
 		const wakeLock = wakeLockHarness();
 		let resolveRequest: ((sentinel: WakeLockSentinelPort) => void) | undefined;
 		const request = vi.fn(
@@ -541,13 +704,13 @@ describe('createBrowserRecorder', () => {
 		expect(harness.track.stop).toHaveBeenCalledOnce();
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(firstSettled).toBe(false);
-		expect(secondSettled).toBe(false);
+		expect(firstSettled).toBe(true);
+		expect(secondSettled).toBe(true);
 
 		resolveRequest?.(wakeLock.sentinel);
 		await startPromise;
 		await Promise.all([firstDispose, secondDispose]);
-		expect(wakeLock.sentinel.release).toHaveBeenCalledOnce();
+		await vi.waitFor(() => expect(wakeLock.sentinel.release).toHaveBeenCalledOnce());
 	});
 
 	it('stops tracks, releases resources, and tolerates repeated dispose', async () => {

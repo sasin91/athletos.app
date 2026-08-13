@@ -1,4 +1,5 @@
 import type {
+	CapturedClip,
 	RecorderCapabilities,
 	RecorderPort,
 	TechniqueReviewIntent,
@@ -35,8 +36,27 @@ function errorName(error: unknown): string | null {
 }
 
 function cameraError(error: unknown): TechniqueReviewState {
-	if (errorName(error) === 'NotAllowedError') {
-		return { phase: 'permission', error: 'Camera permission was denied.' };
+	switch (errorName(error)) {
+		case 'NotAllowedError':
+			return { phase: 'permission', error: 'Camera permission was denied.' };
+		case 'NotFoundError':
+			return {
+				phase: 'failure',
+				stage: 'camera',
+				message: 'No camera is available on this device.'
+			};
+		case 'NotReadableError':
+			return {
+				phase: 'failure',
+				stage: 'camera',
+				message: 'The camera could not be read. It may already be in use.'
+			};
+		case 'SecurityError':
+			return {
+				phase: 'failure',
+				stage: 'camera',
+				message: 'Camera access is blocked by browser security settings.'
+			};
 	}
 
 	return { phase: 'failure', stage: 'camera', message: 'Camera preview could not be started.' };
@@ -52,6 +72,12 @@ export function createTechniqueReview(
 	let recorderDisposed = false;
 	let serial = Promise.resolve();
 	const subscribers = new Set<Subscriber>();
+	type ActiveRecording = {
+		result: Promise<CapturedClip>;
+		settled: boolean;
+		manualStopInProgress: boolean;
+	};
+	let activeRecording: ActiveRecording | null = null;
 
 	function publish(next: TechniqueReviewState): void {
 		state = next;
@@ -96,6 +122,43 @@ export function createTechniqueReview(
 		}
 	}
 
+	function completeRecording(
+		recording: ActiveRecording,
+		clip: Awaited<ActiveRecording['result']>
+	): void {
+		if (activeRecording !== recording || recording.settled || state.phase === 'closed') return;
+		recording.settled = true;
+		activeRecording = null;
+		try {
+			url = URL.createObjectURL(clip.blob);
+			publish({ phase: 'review', clip, url });
+		} catch {
+			publish({
+				phase: 'failure',
+				stage: 'review',
+				message: 'Recording could not be prepared for review.'
+			});
+		}
+	}
+
+	function failRecording(recording: ActiveRecording, message: string): void {
+		if (activeRecording !== recording || recording.settled || state.phase === 'closed') return;
+		recording.settled = true;
+		activeRecording = null;
+		publish({ phase: 'failure', stage: 'recording', message });
+	}
+
+	function observeRecording(recording: ActiveRecording): void {
+		void recording.result.then(
+			(clip) => completeRecording(recording, clip),
+			() => {
+				if (!recording.manualStopInProgress) {
+					failRecording(recording, 'Recording could not be completed.');
+				}
+			}
+		);
+	}
+
 	async function handle(intent: TechniqueReviewIntent): Promise<void> {
 		if (state.phase === 'closed') return;
 
@@ -120,7 +183,14 @@ export function createTechniqueReview(
 				if (state.phase !== 'countdown') return;
 				try {
 					await recorder.start();
+					const recording: ActiveRecording = {
+						result: recorder.recordingResult(),
+						settled: false,
+						manualStopInProgress: false
+					};
+					activeRecording = recording;
 					publish({ phase: 'recording', startedAt: clock.now() });
+					observeRecording(recording);
 				} catch {
 					publish({
 						phase: 'failure',
@@ -130,25 +200,16 @@ export function createTechniqueReview(
 				}
 				return;
 			case 'stop':
-				if (state.phase !== 'recording') return;
-				try {
-					const clip = await recorder.stop();
+				if (state.phase !== 'recording' || !activeRecording) return;
+				{
+					const recording = activeRecording;
+					recording.manualStopInProgress = true;
 					try {
-						url = URL.createObjectURL(clip.blob);
-						publish({ phase: 'review', clip, url });
+						const clip = await recorder.stop();
+						completeRecording(recording, clip);
 					} catch {
-						publish({
-							phase: 'failure',
-							stage: 'review',
-							message: 'Recording could not be prepared for review.'
-						});
+						failRecording(recording, 'Recording could not be stopped.');
 					}
-				} catch {
-					publish({
-						phase: 'failure',
-						stage: 'recording',
-						message: 'Recording could not be stopped.'
-					});
 				}
 				return;
 			case 'record-again':
@@ -158,6 +219,8 @@ export function createTechniqueReview(
 				await requestPreview(intent.video);
 				return;
 			case 'discard':
+				if (activeRecording) activeRecording.settled = true;
+				activeRecording = null;
 				revokeReviewUrl();
 				await disposeRecorder();
 				publish({ phase: 'closed' });

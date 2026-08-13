@@ -24,6 +24,7 @@ export type RecorderPort = {
 	capabilities(): RecorderCapabilities;
 	requestPreview(video: HTMLVideoElement): Promise<CaptureSettings>;
 	start(): Promise<void>;
+	recordingResult(): Promise<CapturedClip>;
 	stop(): Promise<CapturedClip>;
 	dispose(): Promise<void>;
 };

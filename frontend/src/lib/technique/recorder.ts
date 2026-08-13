@@ -99,7 +99,6 @@ export function createBrowserRecorder(
 	let stoppedAt: number | undefined;
 	let wakeLock: WakeLockSentinelPort | undefined;
 	let wakeLockRequest: Promise<void> | undefined;
-	let wakeLockRelease: Promise<void> | undefined;
 	let wakeLockReleaseListener: (() => void) | undefined;
 	let wakeLockNeedsReacquire = false;
 	let visibilityListening = false;
@@ -113,6 +112,8 @@ export function createBrowserRecorder(
 	let capturePromise: Promise<CapturedClip> | undefined;
 	let resolveCapture: ((clip: CapturedClip) => void) | undefined;
 	let rejectCapture: ((error: unknown) => void) | undefined;
+	let captureSettled = false;
+	let finalizationStarted = false;
 
 	const capabilities = (): RecorderCapabilities => {
 		const secure = environment.isSecureContext;
@@ -127,26 +128,21 @@ export function createBrowserRecorder(
 		timer = undefined;
 	};
 
-	const releaseWakeLock = (): Promise<void> => {
-		if (wakeLockRelease) return wakeLockRelease;
+	const releaseWakeLock = (): void => {
 		const heldWakeLock = wakeLock;
 		wakeLock = undefined;
 		if (heldWakeLock && wakeLockReleaseListener) {
 			heldWakeLock.removeEventListener?.('release', wakeLockReleaseListener);
 		}
 		wakeLockReleaseListener = undefined;
-		if (!heldWakeLock || heldWakeLock.released) return Promise.resolve();
-		const release = (async () => {
+		if (!heldWakeLock || heldWakeLock.released) return;
+		void (async () => {
 			try {
 				await heldWakeLock.release();
 			} catch {
 				// Wake Lock is best-effort; browser revocation and release failures are harmless.
-			} finally {
-				wakeLockRelease = undefined;
 			}
 		})();
-		wakeLockRelease = release;
-		return release;
 	};
 
 	const requestWakeLock = (generation: number): Promise<void> => {
@@ -195,45 +191,65 @@ export function createBrowserRecorder(
 		}
 	};
 
-	const beginWakeLockScope = () => {
+	const beginWakeLockScope = (): void => {
 		if (!visibilityListening && environment.visibility) {
 			environment.visibility.addEventListener('visibilitychange', handleVisibilityChange);
 			visibilityListening = true;
 		}
-		return requestWakeLock(recordingGeneration);
+		void requestWakeLock(recordingGeneration);
 	};
 
-	const endWakeLockScope = (): Promise<void> => {
+	const endWakeLockScope = (): void => {
 		wakeLockNeedsReacquire = false;
 		if (visibilityListening && environment.visibility) {
 			environment.visibility.removeEventListener('visibilitychange', handleVisibilityChange);
 			visibilityListening = false;
 		}
-		const pendingRequest = wakeLockRequest;
-		const immediateRelease = releaseWakeLock();
-		if (!pendingRequest) return immediateRelease;
-		return Promise.all([pendingRequest, immediateRelease]).then(() => releaseWakeLock());
+		releaseWakeLock();
 	};
 
 	const cleanupStream = () => {
 		if (streamCleaned) return;
 		streamCleaned = true;
-		if (videoTrack) videoTrack.removeEventListener('ended', handleTrackEnded);
-		for (const track of stream?.getTracks() ?? []) track.stop();
+		const currentStream = stream;
+		const currentTrack = videoTrack;
 		const currentPreview = preview;
-		if (currentPreview && currentPreview.srcObject === stream) currentPreview.srcObject = null;
+		stream = undefined;
+		videoTrack = undefined;
+		preview = undefined;
+		if (currentTrack) currentTrack.removeEventListener('ended', handleTrackEnded);
+		for (const track of currentStream?.getTracks() ?? []) track.stop();
+		if (currentPreview && currentPreview.srcObject === currentStream)
+			currentPreview.srcObject = null;
 	};
 
-	const beginStop = async () => {
-		if (stopStarted) return endWakeLockScope();
+	const rejectRecording = (error: unknown) => {
+		if (captureSettled) return;
+		captureSettled = true;
+		rejectCapture?.(error);
+	};
+
+	const resolveRecording = (clip: CapturedClip) => {
+		if (captureSettled) return;
+		captureSettled = true;
+		resolveCapture?.(clip);
+	};
+
+	const beginStop = (error?: unknown) => {
+		if (error !== undefined) rejectRecording(error);
+		if (stopStarted) return;
 		stopStarted = true;
 		recordingGeneration += 1;
 		stoppedAt = environment.performance.now();
 		clearHardStop();
-		const wakeLockCleanup = endWakeLockScope();
-		if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-		cleanupStream();
-		await wakeLockCleanup;
+		endWakeLockScope();
+		try {
+			if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+		} catch (stopError) {
+			rejectRecording(stopError);
+		} finally {
+			cleanupStream();
+		}
 	};
 
 	function handleTrackEnded() {
@@ -257,19 +273,24 @@ export function createBrowserRecorder(
 			}
 		});
 		streamCleaned = false;
-		preview = video;
-		video.srcObject = stream;
-		videoTrack = stream.getVideoTracks()[0];
-		if (!videoTrack) throw new Error('Camera did not provide a video track');
-		videoTrack.addEventListener('ended', handleTrackEnded);
-		await video.play();
-		const settings = videoTrack.getSettings();
-		frameRate = settings.frameRate ?? null;
-		return {
-			width: settings.width ?? 0,
-			height: settings.height ?? 0,
-			frameRate
-		};
+		try {
+			preview = video;
+			video.srcObject = stream;
+			videoTrack = stream.getVideoTracks()[0];
+			if (!videoTrack) throw new Error('Camera did not provide a video track');
+			videoTrack.addEventListener('ended', handleTrackEnded);
+			await video.play();
+			const settings = videoTrack.getSettings();
+			frameRate = settings.frameRate ?? null;
+			return {
+				width: settings.width ?? 0,
+				height: settings.height ?? 0,
+				frameRate
+			};
+		} catch (error) {
+			cleanupStream();
+			throw error;
+		}
 	};
 
 	const start = async () => {
@@ -279,65 +300,83 @@ export function createBrowserRecorder(
 		if (mediaRecorder?.state === 'recording') throw new Error('Recording has already started');
 		if (!environment.MediaRecorder) throw new Error('MediaRecorder is not supported');
 
-		const mimeType = chooseRecorderMimeType(environment.MediaRecorder);
-		mediaRecorder = mimeType
-			? new environment.MediaRecorder(stream, { mimeType })
-			: new environment.MediaRecorder(stream);
-		chunks = [];
-		stopStarted = false;
-		stoppedAt = undefined;
-		recordingGeneration += 1;
-		capturePromise = new Promise<CapturedClip>((resolve, reject) => {
-			resolveCapture = resolve;
-			rejectCapture = reject;
-		});
+		try {
+			const mimeType = chooseRecorderMimeType(environment.MediaRecorder);
+			mediaRecorder = mimeType
+				? new environment.MediaRecorder(stream, { mimeType })
+				: new environment.MediaRecorder(stream);
+			chunks = [];
+			stopStarted = false;
+			stoppedAt = undefined;
+			captureSettled = false;
+			finalizationStarted = false;
+			recordingGeneration += 1;
+			capturePromise = new Promise<CapturedClip>((resolve, reject) => {
+				resolveCapture = resolve;
+				rejectCapture = reject;
+			});
 
-		mediaRecorder.ondataavailable = (event) => {
-			if (event.data.size > 0) chunks.push(event.data);
-		};
-		mediaRecorder.onerror = (event) => {
+			mediaRecorder.ondataavailable = (event) => {
+				if (event.data.size > 0) chunks.push(event.data);
+			};
+			mediaRecorder.onerror = (event) => {
+				const recorderError = 'error' in event ? event.error : undefined;
+				beginStop(recorderError ?? new Error('MediaRecorder failed'));
+			};
+			mediaRecorder.onstop = () => {
+				clearHardStop();
+				endWakeLockScope();
+				if (captureSettled || finalizationStarted) return;
+				finalizationStarted = true;
+				const durationMs = Math.max(
+					0,
+					(stoppedAt ?? environment.performance.now()) -
+						(startedAt ?? environment.performance.now())
+				);
+				const actualMimeType = mediaRecorder?.mimeType ?? '';
+				const blob = new Blob(chunks, { type: actualMimeType });
+				void decodedDimensions(blob, environment).then(
+					({ width, height }) =>
+						resolveRecording({
+							blob,
+							mimeType: actualMimeType,
+							durationMs,
+							width,
+							height,
+							frameRate,
+							rotationDegrees: 0
+						}),
+					rejectRecording
+				);
+			};
+
+			startedAt = environment.performance.now();
+			mediaRecorder.start(1000);
+			timer = environment.setTimeout(() => beginStop(), MAX_RECORDING_MS);
+			beginWakeLockScope();
+		} catch (error) {
 			clearHardStop();
 			recordingGeneration += 1;
 			stopStarted = true;
-			void endWakeLockScope();
+			endWakeLockScope();
 			cleanupStream();
-			const recorderError = 'error' in event ? event.error : undefined;
-			rejectCapture?.(recorderError ?? new Error('MediaRecorder failed'));
-		};
-		mediaRecorder.onstop = () => {
-			clearHardStop();
-			void endWakeLockScope();
-			const durationMs = Math.max(
-				0,
-				(stoppedAt ?? environment.performance.now()) - (startedAt ?? environment.performance.now())
-			);
-			const actualMimeType = mediaRecorder?.mimeType ?? '';
-			const blob = new Blob(chunks, { type: actualMimeType });
-			void decodedDimensions(blob, environment).then(
-				({ width, height }) =>
-					resolveCapture?.({
-						blob,
-						mimeType: actualMimeType,
-						durationMs,
-						width,
-						height,
-						frameRate,
-						rotationDegrees: 0
-					}),
-				rejectCapture
-			);
-		};
+			mediaRecorder = undefined;
+			capturePromise = undefined;
+			resolveCapture = undefined;
+			rejectCapture = undefined;
+			throw error;
+		}
+	};
 
-		startedAt = environment.performance.now();
-		mediaRecorder.start(1000);
-		timer = environment.setTimeout(() => void beginStop(), MAX_RECORDING_MS);
-		await beginWakeLockScope();
+	const recordingResult = (): Promise<CapturedClip> => {
+		if (!capturePromise) throw new Error('Recording has not started');
+		return capturePromise;
 	};
 
 	const stop = async (): Promise<CapturedClip> => {
-		if (!capturePromise) throw new Error('Recording has not started');
-		await beginStop();
-		return capturePromise;
+		const result = recordingResult();
+		beginStop();
+		return result;
 	};
 
 	const dispose = (): Promise<void> => {
@@ -345,12 +384,12 @@ export function createBrowserRecorder(
 		disposed = true;
 		recordingGeneration += 1;
 		clearHardStop();
-		const wakeLockCleanup = endWakeLockScope();
-		if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+		beginStop();
+		endWakeLockScope();
 		cleanupStream();
-		disposePromise = wakeLockCleanup;
+		disposePromise = Promise.resolve();
 		return disposePromise;
 	};
 
-	return { capabilities, requestPreview, start, stop, dispose };
+	return { capabilities, requestPreview, start, recordingResult, stop, dispose };
 }
