@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	blobsHaveSameBytes,
 	canRunSpikeAction,
+	createRecordingLifecycle,
 	fixedSampleTargets,
 	newBlobMeasurements,
 	summariseSpike
@@ -49,5 +50,25 @@ describe('technique spike report', () => {
 		expect(canRunSpikeAction('record', 'analyze')).toBe(false);
 		expect(canRunSpikeAction('cleanup', 'download')).toBe(false);
 		expect(canRunSpikeAction('download', 'download')).toBe(true);
+	});
+
+	// Catches an unmounted component publishing a late recording URL after its owner has been torn down.
+	it('rejects a recording URL published after teardown and leaves no owned URL', () => {
+		const lifecycle = createRecordingLifecycle();
+		const attempt = lifecycle.begin();
+		const revoked: string[] = [];
+
+		const published = lifecycle.publish(
+			attempt,
+			() => {
+				lifecycle.dispose((url) => revoked.push(url));
+				return 'blob:late-recording';
+			},
+			(url) => revoked.push(url)
+		);
+
+		expect(published).toBeNull();
+		expect(lifecycle.snapshot()).toEqual({ disposed: true, ownedObjectUrl: null });
+		expect(revoked).toEqual(['blob:late-recording']);
 	});
 });

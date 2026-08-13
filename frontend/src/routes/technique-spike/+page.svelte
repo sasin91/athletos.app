@@ -3,6 +3,7 @@
 	import {
 		blobsHaveSameBytes,
 		canRunSpikeAction,
+		createRecordingLifecycle,
 		fixedSampleTargets,
 		newBlobMeasurements,
 		summariseLandmarks,
@@ -15,6 +16,7 @@
 	type WorkerReply =
 		| { type: 'result'; mediaTimeMs: number; frame: LandmarkFrame; elapsedMs: number }
 		| { type: 'error'; mediaTimeMs: number; name: string; message: string };
+	type ActiveRecording = { attempt: number; cancel: () => void };
 
 	const cameraConstraints: MediaStreamConstraints = {
 		audio: false,
@@ -55,6 +57,8 @@
 	let errors = $state<SpikeReport['errors']>([]);
 	let status = $state('Request camera to begin.');
 	let phase = $state<SpikePhase>('camera');
+	const recordingLifecycle = createRecordingLifecycle();
+	let activeRecording: ActiveRecording | null = null;
 
 	const capabilities = $derived({
 		mediaRecorder: typeof MediaRecorder !== 'undefined',
@@ -156,6 +160,8 @@
 		}
 
 		try {
+			const attempt = recordingLifecycle.begin();
+			if (attempt === null) return;
 			recordingNow = true;
 			phase = 'recording';
 			resetBlobDerivedMeasurements();
@@ -174,22 +180,44 @@
 				recorder.onerror = () => reject(new Error('MediaRecorder failed'));
 			});
 			recorder.start(1000);
-			await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
-			recorder.stop();
+			await new Promise<void>((resolve) => {
+				const timer = window.setTimeout(resolve, seconds * 1000);
+				activeRecording = {
+					attempt,
+					cancel: () => {
+						window.clearTimeout(timer);
+						resolve();
+						if (recorder.state !== 'inactive') recorder.stop();
+					}
+				};
+			});
+			if (!recordingLifecycle.isCurrent(attempt)) return;
+			if (recorder.state !== 'inactive') recorder.stop();
 			await stopped;
+			if (!recordingLifecycle.isCurrent(attempt)) return;
 
-			recording = new Blob(chunks, { type: recorder.mimeType });
+			const blob = new Blob(chunks, { type: recorder.mimeType });
+			const url = recordingLifecycle.publish(
+				attempt,
+				() => URL.createObjectURL(blob),
+				(url) => URL.revokeObjectURL(url)
+			);
+			if (!url) return;
+			recording = blob;
 			mediaType = recorder.mimeType;
 			durationMs = performance.now() - started;
-			recordingUrl = URL.createObjectURL(recording);
+			recordingUrl = url;
 			phase = 'analyze';
 			observeMemory('record-complete');
 			status = `Recorded ${seconds} seconds in ${recorder.mimeType}.`;
 		} catch (error) {
-			phase = 'record';
-			rememberError('record', error);
+			if (!recordingLifecycle.snapshot().disposed) {
+				phase = 'record';
+				rememberError('record', error);
+			}
 		} finally {
-			recordingNow = false;
+			if (!recordingLifecycle.snapshot().disposed) recordingNow = false;
+			activeRecording = null;
 		}
 	}
 
@@ -335,11 +363,12 @@
 	}
 
 	function releaseResources() {
+		activeRecording?.cancel();
+		activeRecording = null;
 		const tracks = stream?.getTracks() ?? [];
 		tracks.forEach((track) => track.stop());
 		const tracksEnded = tracks.length > 0 && tracks.every((track) => track.readyState === 'ended');
-		const hadRecordingUrl = recordingUrl !== null;
-		if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+		const hadRecordingUrl = recordingLifecycle.release((url) => URL.revokeObjectURL(url));
 		recordingUrl = null;
 		stream = null;
 		return { tracksEnded, objectUrlRevoked: hadRecordingUrl };
@@ -357,7 +386,7 @@
 		sha256 = fresh.sha256;
 		indexedDb = fresh.indexedDb;
 		memory = emptyMemoryObservations();
-		if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+		recordingLifecycle.release((url) => URL.revokeObjectURL(url));
 		recordingUrl = null;
 	}
 
@@ -385,6 +414,7 @@
 	}
 
 	onDestroy(() => {
+		recordingLifecycle.dispose((url) => URL.revokeObjectURL(url));
 		releaseResources();
 	});
 </script>

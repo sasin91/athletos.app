@@ -155,3 +155,56 @@ export function summariseLandmarks(frames: LandmarkFrame[]): LandmarkSummary {
 		presence: confidenceSummary(withPose.flatMap((frame) => frame.presence))
 	};
 }
+
+export type RecordingLifecycle = {
+	begin: () => number | null;
+	isCurrent: (attempt: number) => boolean;
+	publish: (
+		attempt: number | null,
+		createObjectUrl: () => string,
+		revokeObjectUrl: (url: string) => void
+	) => string | null;
+	release: (revokeObjectUrl: (url: string) => void) => boolean;
+	dispose: (revokeObjectUrl: (url: string) => void) => boolean;
+	snapshot: () => { disposed: boolean; ownedObjectUrl: string | null };
+};
+
+export function createRecordingLifecycle(): RecordingLifecycle {
+	let disposed = false;
+	let generation = 0;
+	let ownedObjectUrl: string | null = null;
+
+	const release = (revokeObjectUrl: (url: string) => void) => {
+		if (!ownedObjectUrl) return false;
+		revokeObjectUrl(ownedObjectUrl);
+		ownedObjectUrl = null;
+		return true;
+	};
+
+	return {
+		begin: () => {
+			if (disposed) return null;
+			generation += 1;
+			return generation;
+		},
+		isCurrent: (attempt) => !disposed && generation === attempt,
+		publish: (attempt, createObjectUrl, revokeObjectUrl) => {
+			if (attempt === null || disposed || generation !== attempt) return null;
+			const url = createObjectUrl();
+			if (disposed || generation !== attempt) {
+				revokeObjectUrl(url);
+				return null;
+			}
+			release(revokeObjectUrl);
+			ownedObjectUrl = url;
+			return url;
+		},
+		release,
+		dispose: (revokeObjectUrl) => {
+			disposed = true;
+			generation += 1;
+			return release(revokeObjectUrl);
+		},
+		snapshot: () => ({ disposed, ownedObjectUrl })
+	};
+}
