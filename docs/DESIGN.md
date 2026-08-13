@@ -901,6 +901,17 @@ The phone is the logging device and gyms have concrete walls.
 - Server: `INSERT ... ON CONFLICT (id) DO NOTHING`.
 - A failed POST stays in a local queue and retries on next launch.
 
+### Technique review, which cannot interrupt logging
+
+**Technique review is optional local media around the logger; camera or media
+failure never blocks logging; recordings are transient until a separate
+retention choice.** A denied permission, an unavailable camera, a recorder
+failure, or discarding the clip leaves the active Set exactly where it was:
+Log and Skip remain usable offline. The camera is evidence beside the workout,
+not a condition of recording it. Nothing in the raw-review slice is kept,
+uploaded, or made part of the Session without a later, explicit retention
+choice.
+
 ### Why idempotency is a correctness requirement
 
 Submitting a session runs `advance()` and mutates program state. A retried POST

@@ -2,7 +2,8 @@
 
 Status: feasibility decision recorded. Android physical-device evidence is complete enough for the product owner to proceed; the uncollected iPhone/Safari and permission-denial rows remain explicit implementation-validation gaps.
 
-Production learning: the accepted physical-device run used `facingMode: "user"`; the front camera is now the initial production request.
+Production learning: the final successful physical-device probe run used
+`facingMode: "user"`; the front camera is now the initial production request.
 
 | Device          | OS                    | Browser          | Mode           |      Clip s | MIME                           | Actual capture                 | Blob MiB |         Decode samples |       Pose samples |                    Analysis s |   SHA-256 s | IDB round-trip          | Cleanup                   | Failure                                                             |
 | --------------- | --------------------- | ---------------- | -------------- | ----------: | ------------------------------ | ------------------------------ | -------: | ---------------------: | -----------------: | ----------------------------: | ----------: | ----------------------- | ------------------------- | ------------------------------------------------------------------- |
@@ -77,6 +78,24 @@ Production learning: the accepted physical-device run used `facingMode: "user"`;
 - Product requirement: hold a scoped Screen Wake Lock during recording and analysis, observe unexpected release and `visibilitychange`, reacquire only after returning visible, and release immediately after analysis/cancellation/teardown.
 - Performance requirement remains open: the Android PWA completes the functional 45-second ceiling, but the current end-to-end pipeline misses the 30-second latency target despite adequate inference throughput. Sequential decoding remains the leading optimization before reducing the fixed sample rate.
 
+## Raw capture slice
+
+The following separates the disposable capability probe from the smaller final
+production smoke. A value marked unobserved was not inferred from a different
+run or from automated browser tests.
+
+| Device / browser | Installed-PWA production observation | MIME and actual capture | Manual stop / replay / record again | 45-second hard stop | Offline | Cleanup | Logger isolation |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Google Pixel 6a / stock Android 17 / Chrome 151 | Final refreshed-PWA smoke: front/user-facing camera selected first; permission led to an immediate live preview; tester reported it worked. | Capability probe: `video/mp4;codecs=avc1.42001f`, user-facing 720×1280 at 30 fps. | Not observed in the production smoke. | Capability probe: a 45.007-second capture completed with all 450 100 ms samples; production hard-stop control not separately observed. | Not rerun for this slice. | Capability probe: tracks ended and object URL revoked; production smoke did not expose cleanup instrumentation. | Not directly observed on the physical production smoke; automated logger coverage verifies the discard seam does not mutate the Set. |
+| iPhone / Safari | Not tested. | Not tested. | Not tested. | Not tested. | Not tested. | Not tested. | Not tested. |
+
+Android is the accepted current support floor for this slice: a Pixel 6a on
+stock Android 17 with Chrome 151 as an installed PWA. It is not an assertion of
+Safari or iPhone support. The screen-timeout diagnostic stall remains part of
+the evidence; production now makes a best-effort scoped Screen Wake Lock while
+recording, but a device run of that production behavior has not yet been
+collected.
+
 ## Remaining matrix
 
 - Android / Chrome / installed PWA / 10 seconds
@@ -90,6 +109,6 @@ Production learning: the accepted physical-device run used `facingMode: "user"`;
 
 **Proceed.** The product owner accepts the named Android physical-device evidence as sufficient to establish that an installed PWA can capture, replay, analyze, hash, persist, and clean up a full 45-second clip without a native-only capability gap. The earlier timeout is attributed to page/display suspension, and production must hold a scoped Screen Wake Lock during capture and analysis.
 
-This decision deliberately relaxes the plan's original requirement for completed iPhone/Safari and permission-denial rows before the gate. Those cases remain mandatory compatibility and error-path validation during implementation; they are no longer feasibility blockers.
+This decision deliberately relaxes the plan's original requirement for completed iPhone/Safari and permission-denial rows before the gate. Those cases remain mandatory compatibility and error-path validation during implementation; they are no longer feasibility blockers. The final refreshed-PWA production smoke also confirms the accepted Android front-camera-first behavior, but it does not fill the unobserved raw-flow, offline, denial, or iPhone rows above.
 
 The current random-seek harness is not a production latency design: it projects approximately 65.2 seconds end-to-end for a 30-second clip even though inference alone projects to 20.9 seconds. Production should optimize sequential decoding before reducing the fixed 10 Hz evidence rate. This constraint does not change the feasibility outcome because it is an implementation-performance issue rather than a missing PWA capability.
