@@ -37,11 +37,11 @@ function fakeTrack(settings = { width: 1280, height: 720, frameRate: 30 }) {
 	};
 }
 
-function fakeStream(track = fakeTrack()) {
+function fakeStream(track = fakeTrack(), otherTracks: ReturnType<typeof fakeTrack>[] = []) {
 	return {
 		track,
 		stream: {
-			getTracks: () => [track],
+			getTracks: () => [track, ...otherTracks],
 			getVideoTracks: () => [track]
 		} as unknown as MediaStream
 	};
@@ -174,15 +174,56 @@ async function previewAndStart(harness: ReturnType<typeof environment>) {
 }
 
 function wakeLockHarness() {
+	const listeners = new Set<Listener>();
 	const sentinel: WakeLockSentinelPort = {
 		released: false,
 		release: vi.fn(async () => {
 			sentinel.released = true;
+			for (const listener of listeners) listener();
 		}),
-		addEventListener: vi.fn(),
-		removeEventListener: vi.fn()
+		addEventListener: vi.fn((_type: 'release', listener: Listener) => listeners.add(listener)),
+		removeEventListener: vi.fn((_type: 'release', listener: Listener) => listeners.delete(listener))
 	};
-	return { sentinel, request: vi.fn(async () => sentinel) };
+	return {
+		sentinel,
+		request: vi.fn(async () => sentinel),
+		unexpectedRelease() {
+			sentinel.released = true;
+			for (const listener of listeners) listener();
+		}
+	};
+}
+
+function sequencedWakeLocks() {
+	const locks: ReturnType<typeof wakeLockHarness>[] = [];
+	const request = vi.fn(async () => {
+		const lock = wakeLockHarness();
+		locks.push(lock);
+		return lock.sentinel;
+	});
+	return { locks, request };
+}
+
+function visibilityHarness(initial: DocumentVisibilityState = 'visible') {
+	let visibilityState = initial;
+	const listeners = new Set<Listener>();
+	return {
+		value: {
+			get visibilityState() {
+				return visibilityState;
+			},
+			addEventListener: vi.fn((_type: 'visibilitychange', listener: Listener) =>
+				listeners.add(listener)
+			),
+			removeEventListener: vi.fn((_type: 'visibilitychange', listener: Listener) =>
+				listeners.delete(listener)
+			)
+		},
+		set(next: DocumentVisibilityState) {
+			visibilityState = next;
+			for (const listener of listeners) listener();
+		}
+	};
 }
 
 describe('chooseRecorderMimeType', () => {
@@ -313,6 +354,31 @@ describe('createBrowserRecorder', () => {
 		expect(clip.durationMs).toBe(45_000);
 	});
 
+	it.each(['manual stop', 'hard stop', 'track end'] as const)(
+		'stops every stream track after %s while preserving the recorded Blob',
+		async (termination) => {
+			const videoTrack = fakeTrack();
+			const auxiliaryTrack = fakeTrack();
+			const source = fakeStream(videoTrack, [auxiliaryTrack]);
+			const getUserMedia = vi.fn(async () => source.stream);
+			const harness = environment({
+				mediaDevices: { getUserMedia } as unknown as MediaDevices
+			});
+			const { recorder } = await previewAndStart(harness);
+			harness.instances[0].emitData(new Blob(['reviewable-clip']));
+
+			if (termination === 'hard stop') harness.timers.fire();
+			if (termination === 'track end') videoTrack.dispatch('ended');
+			const clip = await recorder.stop();
+
+			expect(videoTrack.stop).toHaveBeenCalledOnce();
+			expect(auxiliaryTrack.stop).toHaveBeenCalledOnce();
+			expect(await clip.blob.text()).toBe('reviewable-clip');
+			expect(clip.width).toBe(720);
+			expect(clip.height).toBe(1280);
+		}
+	);
+
 	it('stops recording and releases the wake lock when the video track ends', async () => {
 		const wakeLock = wakeLockHarness();
 		const harness = environment({ wakeLock: { request: wakeLock.request } });
@@ -363,6 +429,63 @@ describe('createBrowserRecorder', () => {
 		}
 	});
 
+	it('reacquires an unexpectedly released wake lock only after the page becomes visible', async () => {
+		const wakeLocks = sequencedWakeLocks();
+		const visibility = visibilityHarness();
+		const harness = environment({
+			wakeLock: { request: wakeLocks.request },
+			visibility: visibility.value
+		} as unknown as Partial<RecorderEnvironment>);
+		const { recorder } = await previewAndStart(harness);
+		visibility.set('hidden');
+		wakeLocks.locks[0].unexpectedRelease();
+
+		await Promise.resolve();
+		expect(wakeLocks.request).toHaveBeenCalledOnce();
+
+		visibility.set('visible');
+		await vi.waitFor(() => expect(wakeLocks.request).toHaveBeenCalledTimes(2));
+		await recorder.stop();
+	});
+
+	it.each(['stop', 'dispose'] as const)(
+		'never reacquires after an unexpected release followed by %s',
+		async (termination) => {
+			const wakeLocks = sequencedWakeLocks();
+			const visibility = visibilityHarness();
+			const harness = environment({
+				wakeLock: { request: wakeLocks.request },
+				visibility: visibility.value
+			} as unknown as Partial<RecorderEnvironment>);
+			const { recorder } = await previewAndStart(harness);
+			visibility.set('hidden');
+			wakeLocks.locks[0].unexpectedRelease();
+
+			if (termination === 'stop') await recorder.stop();
+			else await recorder.dispose();
+			visibility.set('visible');
+			await Promise.resolve();
+
+			expect(wakeLocks.request).toHaveBeenCalledOnce();
+		}
+	);
+
+	it('does not reacquire when intentional release dispatches a release event', async () => {
+		const wakeLocks = sequencedWakeLocks();
+		const visibility = visibilityHarness();
+		const harness = environment({
+			wakeLock: { request: wakeLocks.request },
+			visibility: visibility.value
+		} as unknown as Partial<RecorderEnvironment>);
+		const { recorder } = await previewAndStart(harness);
+
+		await recorder.stop();
+		await Promise.resolve();
+
+		expect(wakeLocks.locks[0].sentinel.release).toHaveBeenCalledOnce();
+		expect(wakeLocks.request).toHaveBeenCalledOnce();
+	});
+
 	it('waits for a pending wake lock request and releases it before dispose resolves', async () => {
 		const wakeLock = wakeLockHarness();
 		let resolveRequest: ((sentinel: WakeLockSentinelPort) => void) | undefined;
@@ -388,6 +511,40 @@ describe('createBrowserRecorder', () => {
 		resolveRequest?.(wakeLock.sentinel);
 		await startPromise;
 		await disposePromise;
+		expect(wakeLock.sentinel.release).toHaveBeenCalledOnce();
+	});
+
+	it('shares pending cleanup across concurrent dispose callers', async () => {
+		const wakeLock = wakeLockHarness();
+		let resolveRequest: ((sentinel: WakeLockSentinelPort) => void) | undefined;
+		const request = vi.fn(
+			() => new Promise<WakeLockSentinelPort>((resolve) => (resolveRequest = resolve))
+		);
+		const harness = environment({ wakeLock: { request } });
+		const preview = {
+			play: vi.fn(async () => undefined),
+			srcObject: null
+		} as unknown as HTMLVideoElement;
+		const recorder = createBrowserRecorder(harness.value);
+		await recorder.requestPreview(preview);
+		const startPromise = recorder.start();
+
+		const firstDispose = recorder.dispose();
+		const secondDispose = recorder.dispose();
+		let firstSettled = false;
+		let secondSettled = false;
+		void firstDispose.then(() => (firstSettled = true));
+		void secondDispose.then(() => (secondSettled = true));
+
+		expect(harness.track.stop).toHaveBeenCalledOnce();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(firstSettled).toBe(false);
+		expect(secondSettled).toBe(false);
+
+		resolveRequest?.(wakeLock.sentinel);
+		await startPromise;
+		await Promise.all([firstDispose, secondDispose]);
 		expect(wakeLock.sentinel.release).toHaveBeenCalledOnce();
 	});
 

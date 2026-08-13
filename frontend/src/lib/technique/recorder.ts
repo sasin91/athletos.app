@@ -18,6 +18,12 @@ export type WakeLockSentinelPort = {
 	removeEventListener?(type: 'release', listener: () => void): void;
 };
 
+export type RecorderVisibilityPort = {
+	readonly visibilityState: DocumentVisibilityState;
+	addEventListener(type: 'visibilitychange', listener: () => void): void;
+	removeEventListener(type: 'visibilitychange', listener: () => void): void;
+};
+
 export type RecorderEnvironment = {
 	isSecureContext: boolean;
 	mediaDevices: MediaDevices | undefined;
@@ -26,6 +32,7 @@ export type RecorderEnvironment = {
 	clearTimeout(handle: TimeoutHandle): void;
 	performance: Pick<Performance, 'now'>;
 	wakeLock?: { request(type: 'screen'): Promise<WakeLockSentinelPort> };
+	visibility?: RecorderVisibilityPort;
 	createMetadataVideo?: () => HTMLVideoElement;
 	createObjectURL?: (blob: Blob) => string;
 	revokeObjectURL?: (url: string) => void;
@@ -46,6 +53,7 @@ function browserEnvironment(): RecorderEnvironment {
 		performance: globalThis.performance,
 		wakeLock: browserNavigator?.wakeLock as
 			{ request(type: 'screen'): Promise<WakeLockSentinelPort> } | undefined,
+		visibility: typeof document === 'undefined' ? undefined : (document as RecorderVisibilityPort),
 		createMetadataVideo: () => document.createElement('video'),
 		createObjectURL: (blob) => URL.createObjectURL(blob),
 		revokeObjectURL: (url) => URL.revokeObjectURL(url)
@@ -92,8 +100,12 @@ export function createBrowserRecorder(
 	let wakeLock: WakeLockSentinelPort | undefined;
 	let wakeLockRequest: Promise<void> | undefined;
 	let wakeLockRelease: Promise<void> | undefined;
+	let wakeLockReleaseListener: (() => void) | undefined;
+	let wakeLockNeedsReacquire = false;
+	let visibilityListening = false;
 	let recordingGeneration = 0;
 	let disposed = false;
+	let disposePromise: Promise<void> | undefined;
 	let streamCleaned = false;
 	let stopStarted = false;
 	let chunks: Blob[] = [];
@@ -119,6 +131,10 @@ export function createBrowserRecorder(
 		if (wakeLockRelease) return wakeLockRelease;
 		const heldWakeLock = wakeLock;
 		wakeLock = undefined;
+		if (heldWakeLock && wakeLockReleaseListener) {
+			heldWakeLock.removeEventListener?.('release', wakeLockReleaseListener);
+		}
+		wakeLockReleaseListener = undefined;
 		if (!heldWakeLock || heldWakeLock.released) return Promise.resolve();
 		const release = (async () => {
 			try {
@@ -133,23 +149,71 @@ export function createBrowserRecorder(
 		return release;
 	};
 
-	const acquireWakeLock = async (generation: number) => {
-		if (!environment.wakeLock) return;
-		try {
-			const acquired = await environment.wakeLock.request('screen');
-			if (disposed || generation !== recordingGeneration || stopStarted) {
-				if (!acquired.released) await acquired.release().catch(() => undefined);
-				return;
+	const requestWakeLock = (generation: number): Promise<void> => {
+		if (!environment.wakeLock || wakeLockRequest) return wakeLockRequest ?? Promise.resolve();
+		let request!: Promise<void>;
+		request = (async () => {
+			try {
+				const acquired = await environment.wakeLock?.request('screen');
+				if (!acquired) return;
+				if (disposed || generation !== recordingGeneration || stopStarted) {
+					if (!acquired.released) await acquired.release().catch(() => undefined);
+					return;
+				}
+				const handleRelease = () => {
+					if (wakeLock !== acquired) return;
+					acquired.removeEventListener?.('release', handleRelease);
+					wakeLock = undefined;
+					wakeLockReleaseListener = undefined;
+					if (disposed || stopStarted || generation !== recordingGeneration) return;
+					wakeLockNeedsReacquire = true;
+					if (environment.visibility?.visibilityState === 'visible') {
+						void requestWakeLock(generation);
+					}
+				};
+				wakeLock = acquired;
+				wakeLockReleaseListener = handleRelease;
+				wakeLockNeedsReacquire = false;
+				acquired.addEventListener?.('release', handleRelease);
+			} catch {
+				// Camera recording remains usable when Wake Lock is absent or permission is denied.
+			} finally {
+				if (wakeLockRequest === request) wakeLockRequest = undefined;
 			}
-			wakeLock = acquired;
-		} catch {
-			// Camera recording remains usable when Wake Lock is absent or permission is denied.
+		})();
+		wakeLockRequest = request;
+		return request;
+	};
+
+	const handleVisibilityChange = () => {
+		if (
+			environment.visibility?.visibilityState === 'visible' &&
+			wakeLockNeedsReacquire &&
+			!disposed &&
+			!stopStarted
+		) {
+			void requestWakeLock(recordingGeneration);
 		}
 	};
 
-	const endWakeLockScope = async () => {
-		await wakeLockRequest;
-		await releaseWakeLock();
+	const beginWakeLockScope = () => {
+		if (!visibilityListening && environment.visibility) {
+			environment.visibility.addEventListener('visibilitychange', handleVisibilityChange);
+			visibilityListening = true;
+		}
+		return requestWakeLock(recordingGeneration);
+	};
+
+	const endWakeLockScope = (): Promise<void> => {
+		wakeLockNeedsReacquire = false;
+		if (visibilityListening && environment.visibility) {
+			environment.visibility.removeEventListener('visibilitychange', handleVisibilityChange);
+			visibilityListening = false;
+		}
+		const pendingRequest = wakeLockRequest;
+		const immediateRelease = releaseWakeLock();
+		if (!pendingRequest) return immediateRelease;
+		return Promise.all([pendingRequest, immediateRelease]).then(() => releaseWakeLock());
 	};
 
 	const cleanupStream = () => {
@@ -167,8 +231,10 @@ export function createBrowserRecorder(
 		recordingGeneration += 1;
 		stoppedAt = environment.performance.now();
 		clearHardStop();
+		const wakeLockCleanup = endWakeLockScope();
 		if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-		await endWakeLockScope();
+		cleanupStream();
+		await wakeLockCleanup;
 	};
 
 	function handleTrackEnded() {
@@ -266,13 +332,7 @@ export function createBrowserRecorder(
 		startedAt = environment.performance.now();
 		mediaRecorder.start(1000);
 		timer = environment.setTimeout(() => void beginStop(), MAX_RECORDING_MS);
-		const request = acquireWakeLock(generation);
-		wakeLockRequest = request;
-		try {
-			await request;
-		} finally {
-			if (wakeLockRequest === request) wakeLockRequest = undefined;
-		}
+		await beginWakeLockScope();
 	};
 
 	const stop = async (): Promise<CapturedClip> => {
@@ -281,14 +341,16 @@ export function createBrowserRecorder(
 		return capturePromise;
 	};
 
-	const dispose = async () => {
-		if (disposed) return;
+	const dispose = (): Promise<void> => {
+		if (disposePromise) return disposePromise;
 		disposed = true;
 		recordingGeneration += 1;
 		clearHardStop();
+		const wakeLockCleanup = endWakeLockScope();
 		if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-		await endWakeLockScope();
 		cleanupStream();
+		disposePromise = wakeLockCleanup;
+		return disposePromise;
 	};
 
 	return { capabilities, requestPreview, start, stop, dispose };
