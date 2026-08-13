@@ -66,11 +66,9 @@
 		void review.send({ type });
 	}
 
-	async function close() {
+	function close() {
 		if (!acceptingIntents) return;
 		acceptingIntents = false;
-		const active = review;
-		if (active) await active.send({ type: 'discard' });
 		onclose();
 	}
 </script>

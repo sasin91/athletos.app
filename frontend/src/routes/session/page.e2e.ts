@@ -564,6 +564,71 @@ test('only the current squat set offers technique recording', async ({ page }) =
 	await expect(page.getByRole('button', { name: 'Record technique' })).toHaveCount(0);
 });
 
+test('technique recording closes while camera permission is still pending', async ({ page }) => {
+	await page.addInitScript(() => {
+		let resolveCamera!: () => void;
+		let trackStopped = false;
+
+		const track = {
+			addEventListener: () => undefined,
+			removeEventListener: () => undefined,
+			getSettings: () => ({ width: 1280, height: 720, frameRate: 30 }),
+			stop: () => {
+				trackStopped = true;
+			}
+		};
+		const stream = {
+			getTracks: () => [track],
+			getVideoTracks: () => [track]
+		};
+		const pendingCamera = new Promise<typeof stream>((resolve) => {
+			resolveCamera = () => resolve(stream);
+		});
+
+		Object.defineProperty(window, '__resolveTechniqueCamera', { value: () => resolveCamera() });
+		Object.defineProperty(window, '__lateTechniqueTrackStopped', {
+			get: () => trackStopped
+		});
+		Object.defineProperty(navigator, 'mediaDevices', {
+			configurable: true,
+			value: { getUserMedia: () => pendingCamera }
+		});
+		Object.defineProperty(window, 'MediaRecorder', {
+			configurable: true,
+			value: class {
+				static isTypeSupported() {
+					return true;
+				}
+			}
+		});
+		Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+			configurable: true,
+			writable: true
+		});
+		HTMLMediaElement.prototype.play = async () => undefined;
+	});
+
+	await seedSession(page, session([set()]));
+	await page.goto('/session');
+
+	await page.getByRole('button', { name: 'Record technique' }).click();
+	await page.getByRole('button', { name: 'Allow camera' }).click();
+	await page.getByRole('button', { name: 'Close' }).click();
+
+	await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 500 });
+	await expect(page.getByRole('button', { name: 'Log', exact: true })).toBeEnabled();
+	await page.getByRole('button', { name: 'Add note' }).click();
+	await expect(page.getByLabel('Note for this set')).toBeVisible();
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+
+	await page.evaluate(() => Reflect.get(window, '__resolveTechniqueCamera')());
+	await expect
+		.poll(() => page.evaluate(() => Reflect.get(window, '__lateTechniqueTrackStopped')))
+		.toBe(true);
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+});
+
 test('technique recording stays transient from camera preview through discard', async ({
 	page
 }) => {
