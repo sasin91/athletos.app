@@ -549,3 +549,142 @@ test('a weight typed with a comma is recorded rather than dropped', async ({ pag
 
 	await expect(page.getByText('Logged 99.5 kg × 5', { exact: true })).toBeVisible();
 });
+
+test('only the current squat set offers technique recording', async ({ page }) => {
+	await seedSession(
+		page,
+		session([
+			set({ position: 0, exercise: 'squat', label: 'Squat' }),
+			set({ position: 1, exercise: 'bench-press', label: 'Bench press' })
+		])
+	);
+	await page.goto('/session');
+	await expect(page.getByRole('button', { name: 'Record technique' })).toHaveCount(1);
+	await page.getByRole('button', { name: 'Log' }).first().click();
+	await expect(page.getByRole('button', { name: 'Record technique' })).toHaveCount(0);
+});
+
+test('technique recording stays transient from camera preview through discard', async ({
+	page
+}) => {
+	await page.addInitScript(() => {
+		const stoppedTracks: boolean[] = [];
+		Object.defineProperty(window, '__techniqueTracksStopped', {
+			get: () => stoppedTracks.every(Boolean) && stoppedTracks.length > 0
+		});
+
+		const sourceObjects = new WeakMap<HTMLMediaElement, unknown>();
+		Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+			configurable: true,
+			get() {
+				return sourceObjects.get(this);
+			},
+			set(value) {
+				sourceObjects.set(this, value);
+			}
+		});
+		HTMLMediaElement.prototype.play = async () => undefined;
+
+		let objectUrl = 0;
+		URL.createObjectURL = () => `blob:technique-review-${++objectUrl}`;
+		URL.revokeObjectURL = () => undefined;
+		const nativeSource = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+		Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+			configurable: true,
+			get() {
+				return nativeSource?.get?.call(this) ?? '';
+			},
+			set(value: string) {
+				if (!value.startsWith('blob:technique-review-')) nativeSource?.set?.call(this, value);
+				else this.setAttribute('src', value);
+				queueMicrotask(() => this.dispatchEvent(new Event('loadedmetadata')));
+			}
+		});
+		Object.defineProperties(HTMLVideoElement.prototype, {
+			videoWidth: { configurable: true, get: () => 1280 },
+			videoHeight: { configurable: true, get: () => 720 }
+		});
+
+		const track = {
+			addEventListener: () => undefined,
+			removeEventListener: () => undefined,
+			getSettings: () => ({ width: 1280, height: 720, frameRate: 30 }),
+			stop: () => {
+				stoppedTracks[0] = true;
+			}
+		};
+		stoppedTracks.push(false);
+		const stream = {
+			getTracks: () => [track],
+			getVideoTracks: () => [track]
+		};
+		Object.defineProperty(navigator, 'mediaDevices', {
+			configurable: true,
+			value: { getUserMedia: async () => stream }
+		});
+
+		class FakeMediaRecorder {
+			static isTypeSupported() {
+				return true;
+			}
+
+			mimeType = 'video/webm';
+			state: RecordingState = 'inactive';
+			ondataavailable: ((event: BlobEvent) => void) | null = null;
+			onerror: ((event: Event) => void) | null = null;
+			onstop: ((event: Event) => void) | null = null;
+
+			start() {
+				this.state = 'recording';
+			}
+
+			stop() {
+				this.state = 'inactive';
+				this.ondataavailable?.(
+					new BlobEvent('dataavailable', { data: new Blob(['raw'], { type: this.mimeType }) })
+				);
+				this.onstop?.(new Event('stop'));
+			}
+		}
+		Object.defineProperty(window, 'MediaRecorder', {
+			configurable: true,
+			value: FakeMediaRecorder
+		});
+	});
+
+	await seedSession(page, session([set()]));
+	await page.clock.install();
+	await page.goto('/session');
+
+	await page.getByRole('button', { name: 'Record technique' }).click();
+	await page.getByRole('button', { name: 'Allow camera' }).click();
+	await expect(page.getByText('Camera ready', { exact: true })).toBeVisible();
+
+	await page.getByRole('button', { name: 'Start recording' }).click();
+	await expect(page.getByText('3', { exact: true })).toBeVisible();
+	await page.clock.fastForward(3000);
+	await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+
+	await page.getByRole('button', { name: 'Stop' }).click();
+	await expect(page.getByText('Raw review', { exact: true })).toBeVisible();
+	await expect(page.locator('video[controls]')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Discard' }).click();
+	await expect(page.getByRole('button', { name: 'Record technique' })).toBeVisible();
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+	expect(await page.evaluate(() => Reflect.get(window, '__techniqueTracksStopped'))).toBe(true);
+
+	// Closing owns the countdown timer too. Advancing fake time after teardown
+	// must not let a stale callback enqueue a late recording intent.
+	await page.getByRole('button', { name: 'Record technique' }).click();
+	await page.getByRole('button', { name: 'Allow camera' }).click();
+	await page.getByRole('button', { name: 'Start recording' }).click();
+	await expect(page.getByText('3', { exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Close' }).click();
+	await page.clock.fastForward(3000);
+
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Record technique' })).toBeVisible();
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+	expect(await page.evaluate(() => Reflect.get(window, '__techniqueTracksStopped'))).toBe(true);
+});

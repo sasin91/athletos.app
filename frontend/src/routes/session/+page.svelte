@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Plates from '$lib/Plates.svelte';
+	import TechniqueReview from '$lib/TechniqueReview.svelte';
 	import ThemeToggle from '$lib/ThemeToggle.svelte';
 	import { formatClock, formatElapsed } from '$lib/time';
 	import { projectedFinish } from '$lib/pace';
@@ -26,6 +27,7 @@
 		toSubmission
 	} from '$lib/session';
 	import type { CutReason, LocalSession, SessionSummary, WorkoutReceipt } from '$lib/session';
+	import type { TechniqueTarget } from '$lib/technique/types';
 	import { clearActiveSession, loadActiveSession, saveActiveSession } from '$lib/storage';
 	import { submitSession } from '$lib/submit';
 
@@ -43,6 +45,7 @@
 	let session = $state<LocalSession | null>(null);
 	let phase = $state<Phase>('loading');
 	let now = $state(Date.now());
+	let techniqueTarget = $state<TechniqueTarget | null>(null);
 
 	// Which set's note field is open. One at a time: the athlete is writing
 	// about the set in front of them, and a screen of open textareas is a
@@ -144,7 +147,10 @@
 
 <svelte:head><title>Session · AthletOS</title></svelte:head>
 
-<div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
+{#if techniqueTarget}
+	<TechniqueReview target={techniqueTarget} onclose={() => (techniqueTarget = null)} />
+{/if}
+<div class="mx-auto flex min-h-dvh max-w-2xl flex-col" inert={techniqueTarget !== null}>
 	{#if phase === 'loading'}
 		<p class="p-4">Loading…</p>
 	{:else if phase === 'empty'}
@@ -435,6 +441,23 @@
 											{/each}
 										</ul>
 									</details>
+								{/if}
+
+								{#if set.exercise === 'squat'}
+									<button
+										class="btn self-start btn-outline btn-sm"
+										type="button"
+										onclick={() => {
+											if (!session) return;
+											techniqueTarget = {
+												workoutId: session.id,
+												setPosition: set.position,
+												exercise: 'squat'
+											};
+										}}
+									>
+										Record technique
+									</button>
 								{/if}
 							{:else}
 								<div class="flex items-baseline justify-between">
