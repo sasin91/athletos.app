@@ -1,5 +1,10 @@
 # Side-view squat technique review
 
+> **Slice 2 amendment, 2026-08-14:** The next implementation is bar-only,
+> deterministic one-tap tracking. Pose guides and browser ML are deferred. See
+> `2026-08-14-bar-path-evidence-design.md`, which is authoritative where its
+> narrower scope differs from this original design.
+
 Design, 2026-08-13. AthletOS will push the installed SvelteKit PWA to its
 practical limit before considering native iOS or Android applications. The
 first Technique review is deliberately narrow: while an active Session is on a
