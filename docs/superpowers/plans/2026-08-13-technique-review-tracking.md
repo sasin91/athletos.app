@@ -1,5 +1,9 @@
 # Technique Review Tracking Implementation Plan
 
+> **Superseded for the next slice, 2026-08-14:** Do not execute this combined
+> pose-and-bar plan. The approved next slice is the narrower bar-only plan at
+> `2026-08-14-technique-review-bar-path.md`; pose and browser ML are deferred.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Analyze transient squat clips locally at timestamped 10 Hz, seed the bar with one tap, and render confidence-aware body, nose, bar, knee, and foot evidence during synchronized review.

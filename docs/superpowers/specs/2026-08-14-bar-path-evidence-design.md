@@ -152,16 +152,16 @@ BarTrackingResult {
     calibration: { mediaTimeMs, x, y, patchSize },
     samples: Array<{
         mediaTimeMs,
-        x,
-        y,
-        confidence
-    } | null>
+        point: { x, y, confidence } | null
+    }>
 }
 ```
 
-Coordinates are normalized against the decoded source, never canvas pixels.
-No image patch, frame, grayscale crop, or interpolated point enters the result.
-The transient result is versioned now so later retention can persist it without
+Coordinates are normalized against the decoded source, never canvas pixels. A
+rejected decoded sample keeps its actual timestamp with `point: null`; samples
+that were never decoded after a direction became lost are not fabricated. No
+image patch, frame, grayscale crop, or interpolated point enters the result. The
+transient result is versioned now so later retention can persist it without
 inventing provenance.
 
 The canvas renderer owns rotation, `object-fit: contain` letterboxing, device
