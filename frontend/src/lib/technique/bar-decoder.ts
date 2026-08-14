@@ -63,6 +63,23 @@ function throwIfAborted(signal: AbortSignal) {
 	if (signal.aborted) throw new Error(abortMessage);
 }
 
+function abortable<T>(work: Promise<T>, signal: AbortSignal) {
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = () => finish(new Error(abortMessage));
+		const finish = (error?: Error, value?: T) => {
+			signal.removeEventListener('abort', onAbort);
+			if (error) reject(error);
+			else resolve(value as T);
+		};
+		work.then(
+			(value) => finish(undefined, value),
+			(error: unknown) => finish(error instanceof Error ? error : new Error('Bar matcher failed.'))
+		);
+		signal.addEventListener('abort', onAbort, { once: true });
+		if (signal.aborted) onAbort();
+	});
+}
+
 function sampleTargets(durationMs: number) {
 	const targets = fixedBarSampleTargets(durationMs);
 	if (targets.length === 0) throw new Error('Cannot track bar without a positive clip duration.');
@@ -116,6 +133,7 @@ export async function trackDecodedBar(
 	const decodeOne = async (target: number, request: DecodeRequest) => {
 		throwIfAborted(signal);
 		const crop = await decode(target, request);
+		throwIfAborted(signal);
 		completed += 1;
 		onProgress({ completed, total: targets.length, mediaTimeMs: crop.mediaTimeMs });
 		return withSourceDimensions(crop, request);
@@ -129,7 +147,8 @@ export async function trackDecodedBar(
 			sourceHeight: input.height
 		});
 		try {
-			await matcher.calibrate(calibrationCrop);
+			throwIfAborted(signal);
+			await abortable(matcher.calibrate(calibrationCrop), signal);
 		} finally {
 			releaseCrop(calibrationCrop);
 		}
@@ -150,7 +169,8 @@ export async function trackDecodedBar(
 						sourceWidth: input.width,
 						sourceHeight: input.height
 					});
-					const sample = await matcher.step({ ...crop, direction });
+					throwIfAborted(signal);
+					const sample = await abortable(matcher.step({ ...crop, direction }), signal);
 					samples.push(sample);
 					if (!sample.point) return;
 					previous = sample.point;
@@ -291,8 +311,10 @@ type WorkerResponse =
 function createWorkerMatcher(worker: Worker): BarMatcher {
 	let requestId = 0;
 	let disposed = false;
+	let started = false;
 	let readyResolve: (() => void) | undefined;
 	let readyReject: ((error: Error) => void) | undefined;
+	let calibration: { resolve: () => void; reject: (error: Error) => void } | undefined;
 	const pending = new Map<
 		number,
 		{ resolve: (sample: BarSample) => void; reject: (error: Error) => void }
@@ -303,12 +325,22 @@ function createWorkerMatcher(worker: Worker): BarMatcher {
 	});
 	worker.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
 		if (data.type === 'ready') {
-			readyResolve?.();
+			if (calibration) {
+				calibration.resolve();
+				calibration = undefined;
+			} else if (!started) {
+				started = true;
+				readyResolve?.();
+			}
 			return;
 		}
 		if (data.type === 'error') {
-			if (data.requestId === null) readyReject?.(new Error(data.message));
-			else pending.get(data.requestId)?.reject(new Error(data.message));
+			if (data.requestId === null) {
+				if (calibration) {
+					calibration.reject(new Error(data.message));
+					calibration = undefined;
+				} else readyReject?.(new Error(data.message));
+			} else pending.get(data.requestId)?.reject(new Error(data.message));
 			pending.delete(data.requestId ?? -1);
 			return;
 		}
@@ -328,6 +360,8 @@ function createWorkerMatcher(worker: Worker): BarMatcher {
 		async calibrate(crop) {
 			await ready;
 			if (disposed) throw new Error('Bar matcher worker is disposed.');
+			if (calibration) throw new Error('Bar matcher calibration is already pending.');
+			const settled = new Promise<void>((resolve, reject) => (calibration = { resolve, reject }));
 			const message: WorkerRequest = {
 				type: 'calibrate',
 				gray: crop.gray,
@@ -336,10 +370,12 @@ function createWorkerMatcher(worker: Worker): BarMatcher {
 				config: BAR_TRACKER_V1
 			};
 			worker.postMessage(message, [crop.gray.buffer]);
+			return settled;
 		},
 		async step(crop) {
 			await ready;
 			if (disposed) throw new Error('Bar matcher worker is disposed.');
+			if (calibration) throw new Error('Bar matcher calibration is pending.');
 			const id = requestId++;
 			const response = new Promise<BarSample>((resolve, reject) =>
 				pending.set(id, { resolve, reject })
@@ -364,6 +400,8 @@ function createWorkerMatcher(worker: Worker): BarMatcher {
 			if (disposed) return;
 			disposed = true;
 			readyReject?.(new Error('Bar matcher worker is disposed.'));
+			calibration?.reject(new Error('Bar matcher worker is disposed.'));
+			calibration = undefined;
 			try {
 				worker.postMessage({ type: 'close' } satisfies WorkerRequest);
 			} finally {
@@ -474,6 +512,7 @@ export function createBrowserBarTracker(
 						);
 					}
 					await browser.yield();
+					throwIfAborted(signal);
 					return {
 						mediaTimeMs,
 						width: bounds.size,

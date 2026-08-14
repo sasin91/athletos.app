@@ -8,7 +8,10 @@ import {
 	trackBarFrames
 } from './bar-path';
 
-function frame(mediaTimeMs: number, dotX: number | null): {
+function frame(
+	mediaTimeMs: number,
+	dotX: number | null
+): {
 	mediaTimeMs: number;
 	width: number;
 	height: number;
@@ -58,10 +61,17 @@ function patternedFrame(mediaTimeMs: number, centers: number[]) {
 	return result;
 }
 
-function crop(source: ReturnType<typeof frame>, originX: number, originY: number, width: number, height: number) {
+function crop(
+	source: ReturnType<typeof frame>,
+	originX: number,
+	originY: number,
+	width: number,
+	height: number
+) {
 	const gray = new Uint8Array(width * height);
 	for (let y = 0; y < height; y += 1) {
-		for (let x = 0; x < width; x += 1) gray[y * width + x] = source.gray[(originY + y) * source.width + originX + x];
+		for (let x = 0; x < width; x += 1)
+			gray[y * width + x] = source.gray[(originY + y) * source.width + originX + x];
 	}
 	return {
 		mediaTimeMs: source.mediaTimeMs,
@@ -121,14 +131,34 @@ it('selects the closest actual timestamp and resolves equal distance toward the 
 });
 
 it('rejects calibration too close to any source edge', () => {
-	const source = frame(100, 4);
+	const source = frame(100, 3);
 	expect(() =>
 		createBarTemplate(
 			{ ...source, originX: 0, originY: 0, sourceWidth: source.width, sourceHeight: source.height },
-			{ mediaTimeMs: 100, x: 4 / 96, y: 24 / 48 },
+			{ mediaTimeMs: 100, x: 3 / 96, y: 24 / 48 },
 			trackerConfig
 		)
 	).toThrow('Choose a clearer frame with the bar away from the edge.');
+});
+
+it('accepts a calibration patch that fits exactly at every crop edge', () => {
+	const gray = new Uint8Array(8 * 8).fill(80);
+	expect(() =>
+		createBarTemplate(
+			{
+				mediaTimeMs: 0,
+				width: 8,
+				height: 8,
+				gray,
+				originX: 0,
+				originY: 0,
+				sourceWidth: 8,
+				sourceHeight: 8
+			},
+			{ mediaTimeMs: 0, x: 0.5, y: 0.5 },
+			{ ...trackerConfig, patchSize: 8 }
+		)
+	).not.toThrow();
 });
 
 it('rejects equally plausible non-overlapping candidates instead of selecting one', () => {
@@ -193,7 +223,11 @@ it('rejects off-grid ambiguous candidates after pixel refinement', () => {
 
 it('matches in a bounded crop using normalized source coordinates and rejects a crop-edge template', () => {
 	const calibration = patternedFrame(0, [36]);
-	const template = createBarTemplate(crop(calibration, 20, 10, 40, 28), { mediaTimeMs: 0, x: 36 / 96, y: 24 / 48 }, trackerConfig);
+	const template = createBarTemplate(
+		crop(calibration, 20, 10, 40, 28),
+		{ mediaTimeMs: 0, x: 36 / 96, y: 24 / 48 },
+		trackerConfig
+	);
 	const sample = matchBarCrop(
 		template,
 		crop(patternedFrame(100, [40]), 20, 10, 40, 28),
@@ -203,7 +237,11 @@ it('matches in a bounded crop using normalized source coordinates and rejects a 
 	expect(sample.point?.x).toBeCloseTo(40 / 96, 5);
 	expect(sample.point?.y).toBeCloseTo(24 / 48, 5);
 	expect(() =>
-		createBarTemplate(crop(calibration, 20, 10, 40, 28), { mediaTimeMs: 0, x: 23 / 96, y: 24 / 48 }, trackerConfig)
+		createBarTemplate(
+			crop(calibration, 20, 10, 40, 28),
+			{ mediaTimeMs: 0, x: 23 / 96, y: 24 / 48 },
+			trackerConfig
+		)
 	).toThrow('Choose a clearer frame with the bar away from the edge.');
 });
 

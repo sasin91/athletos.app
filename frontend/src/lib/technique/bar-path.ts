@@ -73,7 +73,12 @@ function containsPatch(crop: GrayCrop, centerX: number, centerY: number, half: n
 	return left >= 0 && top >= 0 && left + half * 2 <= crop.width && top + half * 2 <= crop.height;
 }
 
-function withinSearchRadius(centerX: number, centerY: number, prior: { x: number; y: number }, searchRadius: number) {
+function withinSearchRadius(
+	centerX: number,
+	centerY: number,
+	prior: { x: number; y: number },
+	searchRadius: number
+) {
 	return Math.abs(centerX - prior.x) <= searchRadius && Math.abs(centerY - prior.y) <= searchRadius;
 }
 
@@ -112,10 +117,10 @@ export function createBarTemplate(
 	const { half, width, height } = patchGeometry(settings.patchSize);
 	const center = sourceCenter(calibration, crop);
 	if (
-		center.x <= half ||
-		center.y <= half ||
-		center.x >= crop.sourceWidth - half ||
-		center.y >= crop.sourceHeight - half ||
+		center.x < half ||
+		center.y < half ||
+		center.x > crop.sourceWidth - half ||
+		center.y > crop.sourceHeight - half ||
 		!containsPatch(crop, center.x, center.y, half)
 	) {
 		throw new Error(edgeMessage);
@@ -162,7 +167,14 @@ function integralImages(crop: GrayCrop) {
 	return { sums, squaredSums, stride };
 }
 
-function rectangleSum(integral: Float64Array, stride: number, left: number, top: number, width: number, height: number) {
+function rectangleSum(
+	integral: Float64Array,
+	stride: number,
+	left: number,
+	top: number,
+	width: number,
+	height: number
+) {
 	const right = left + width;
 	const bottom = top + height;
 	return (
@@ -185,7 +197,14 @@ function candidateScore(
 	const left = centerX - halfWidth - crop.originX;
 	const top = centerY - halfHeight - crop.originY;
 	const count = template.width * template.height;
-	const sum = rectangleSum(integral.sums, integral.stride, left, top, template.width, template.height);
+	const sum = rectangleSum(
+		integral.sums,
+		integral.stride,
+		left,
+		top,
+		template.width,
+		template.height
+	);
 	const squaredSum = rectangleSum(
 		integral.squaredSums,
 		integral.stride,
@@ -207,7 +226,8 @@ function candidateScore(
 	for (let y = 0; y < template.height; y += 1) {
 		const row = (top + y) * crop.width + left;
 		const templateRow = y * template.width;
-		for (let x = 0; x < template.width; x += 1) dot += template.centered[templateRow + x] * crop.gray[row + x];
+		for (let x = 0; x < template.width; x += 1)
+			dot += template.centered[templateRow + x] * crop.gray[row + x];
 	}
 	return dot / (template.centeredNorm * candidateNorm);
 }
@@ -228,10 +248,15 @@ function bestCandidate(candidates: readonly Candidate[]) {
 	return best;
 }
 
-function bestNonOverlappingCandidate(candidates: readonly Candidate[], best: Candidate, patchSize: number) {
+function bestNonOverlappingCandidate(
+	candidates: readonly Candidate[],
+	best: Candidate,
+	patchSize: number
+) {
 	let second: Candidate | undefined;
 	for (const candidate of candidates) {
-		if (nonOverlapping(candidate, best, patchSize) && (!second || candidate.score > second.score)) second = candidate;
+		if (nonOverlapping(candidate, best, patchSize) && (!second || candidate.score > second.score))
+			second = candidate;
 	}
 	return second;
 }
@@ -280,8 +305,16 @@ export function matchBarCrop(
 	const prior = sourceCenter(previous, crop);
 	const integral = integralImages(crop);
 	const coarseCandidates: Candidate[] = [];
-	for (let offsetY = -settings.searchRadius; offsetY <= settings.searchRadius; offsetY += settings.coarseStep) {
-		for (let offsetX = -settings.searchRadius; offsetX <= settings.searchRadius; offsetX += settings.coarseStep) {
+	for (
+		let offsetY = -settings.searchRadius;
+		offsetY <= settings.searchRadius;
+		offsetY += settings.coarseStep
+	) {
+		for (
+			let offsetX = -settings.searchRadius;
+			offsetX <= settings.searchRadius;
+			offsetX += settings.coarseStep
+		) {
 			const centerX = prior.x + offsetX;
 			const centerY = prior.y + offsetY;
 			if (!containsPatch(crop, centerX, centerY, half)) continue;
@@ -295,10 +328,24 @@ export function matchBarCrop(
 
 	const coarseBest = bestCandidate(coarseCandidates);
 	if (!coarseBest) return { mediaTimeMs: crop.mediaTimeMs, point: null };
-	const coarseSecond = bestNonOverlappingCandidate(coarseCandidates, coarseBest, settings.patchSize);
-	const refinedCandidates = refineCandidate(coarseBest, template, crop, integral, prior, settings, half);
+	const coarseSecond = bestNonOverlappingCandidate(
+		coarseCandidates,
+		coarseBest,
+		settings.patchSize
+	);
+	const refinedCandidates = refineCandidate(
+		coarseBest,
+		template,
+		crop,
+		integral,
+		prior,
+		settings,
+		half
+	);
 	if (coarseSecond) {
-		refinedCandidates.push(...refineCandidate(coarseSecond, template, crop, integral, prior, settings, half));
+		refinedCandidates.push(
+			...refineCandidate(coarseSecond, template, crop, integral, prior, settings, half)
+		);
 	}
 
 	const best = bestCandidate(refinedCandidates);
@@ -332,11 +379,16 @@ function asFullCrop(frame: GrayFrame): GrayCrop {
 
 function sortedDistinctFrames(frames: readonly GrayFrame[]) {
 	const ordered = [...frames].sort((left, right) => left.mediaTimeMs - right.mediaTimeMs);
-	return ordered.filter((frame, index) => index === 0 || frame.mediaTimeMs !== ordered[index - 1].mediaTimeMs);
+	return ordered.filter(
+		(frame, index) => index === 0 || frame.mediaTimeMs !== ordered[index - 1].mediaTimeMs
+	);
 }
 
 function nearestFrame(frames: readonly GrayFrame[], mediaTimeMs: number) {
-	const samples: BarSample[] = frames.map((frame) => ({ mediaTimeMs: frame.mediaTimeMs, point: null }));
+	const samples: BarSample[] = frames.map((frame) => ({
+		mediaTimeMs: frame.mediaTimeMs,
+		point: null
+	}));
 	const nearest = nearestBarSample(samples, mediaTimeMs);
 	return nearest ? frames.find((frame) => frame.mediaTimeMs === nearest.mediaTimeMs) : undefined;
 }
@@ -348,7 +400,8 @@ export function trackBarFrames(
 ): BarTrackingResult {
 	const settings = resolvedConfig(config);
 	const orderedFrames = sortedDistinctFrames(frames);
-	if (orderedFrames.length === 0) throw new Error('Cannot track bar frames without decoded frames.');
+	if (orderedFrames.length === 0)
+		throw new Error('Cannot track bar frames without decoded frames.');
 	const calibrationFrame = nearestFrame(orderedFrames, calibration.mediaTimeMs);
 	if (!calibrationFrame) throw new Error('Cannot find a calibration frame.');
 	const calibrationIndex = orderedFrames.indexOf(calibrationFrame);
@@ -371,7 +424,12 @@ export function trackBarFrames(
 
 	let backwardPoint: BarPoint = { x: calibration.x, y: calibration.y, confidence: 1 };
 	for (let index = calibrationIndex - 1; index >= 0; index -= 1) {
-		const sample = matchBarCrop(template, asFullCrop(orderedFrames[index]), backwardPoint, settings);
+		const sample = matchBarCrop(
+			template,
+			asFullCrop(orderedFrames[index]),
+			backwardPoint,
+			settings
+		);
 		samples.push(sample);
 		if (!sample.point) break;
 		backwardPoint = sample.point;

@@ -86,6 +86,7 @@ self.onmessage = ({ data }: MessageEvent<MatcherRequest>) => {
 			);
 			delete previousByDirection.backward;
 			delete previousByDirection.forward;
+			post({ type: 'ready' });
 			return;
 		}
 		if (!template) throw new Error('Bar matcher has not been calibrated.');

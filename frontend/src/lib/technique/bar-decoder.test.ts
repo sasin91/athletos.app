@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { trackDecodedBar } from './bar-decoder';
+import { createBrowserBarTracker, trackDecodedBar } from './bar-decoder';
 import type { BarMatcher } from './bar-decoder';
 
 function crop(mediaTimeMs: number) {
@@ -151,4 +151,206 @@ it('releases each crop before decoding the next one', async () => {
 	);
 
 	expect(live).toBe(0);
+});
+
+it('does not dispatch calibration after an abort during async decode work', async () => {
+	const controller = new AbortController();
+	let resolveDecode: (() => void) | undefined;
+	const decode = vi.fn(async (target: number) => {
+		await new Promise<void>((resolve) => (resolveDecode = resolve));
+		return crop(target);
+	});
+	const trackingMatcher = matcher();
+	const tracking = trackDecodedBar(
+		input,
+		calibration,
+		decode,
+		trackingMatcher,
+		() => {},
+		controller.signal
+	);
+	await Promise.resolve();
+	controller.abort();
+	resolveDecode?.();
+
+	await expect(tracking).rejects.toThrow('Bar tracking aborted.');
+	expect(trackingMatcher.calibrate).not.toHaveBeenCalled();
+});
+
+class FakeVideo extends EventTarget {
+	muted = false;
+	playsInline = false;
+	preload = '';
+	videoWidth = 128;
+	videoHeight = 128;
+	currentTime = 0;
+	pause = vi.fn();
+	removeAttribute = vi.fn();
+	load = vi.fn();
+	requestVideoFrameCallback(callback: () => void) {
+		queueMicrotask(callback);
+		return 0;
+	}
+}
+
+class FakeWorker {
+	onmessage: ((event: MessageEvent) => void) | null = null;
+	onerror: (() => void) | null = null;
+	posts: Array<{ type: string; [key: string]: unknown }> = [];
+	terminated = 0;
+	respondToCalibration: 'ready' | 'error' = 'ready';
+	respondToSteps = true;
+	postMessage(message: { type: string; [key: string]: unknown }) {
+		this.posts.push(message);
+		if (message.type === 'calibrate') {
+			if (this.respondToCalibration === 'ready') this.emit({ type: 'ready' });
+			else this.emit({ type: 'error', requestId: null, message: 'calibration failed' });
+		}
+		if (message.type === 'step' && this.respondToSteps) {
+			this.emit({
+				type: 'result',
+				requestId: message.requestId,
+				sample: { mediaTimeMs: message.mediaTimeMs, point: { x: 0.5, y: 0.5, confidence: 0.9 } }
+			});
+		}
+	}
+	terminate() {
+		this.terminated += 1;
+	}
+	emit(data: unknown) {
+		this.onmessage?.({ data } as MessageEvent);
+	}
+}
+
+function browserHarness(yieldWork: () => Promise<void> = () => Promise.resolve()) {
+	const video = new FakeVideo();
+	const worker = new FakeWorker();
+	const canvas = {
+		width: 0,
+		height: 0,
+		getContext: () => ({
+			drawImage: () => {},
+			getImageData: () => ({ data: new Uint8ClampedArray(canvas.width * canvas.height * 4) })
+		})
+	};
+	return {
+		video,
+		worker,
+		tracker: createBrowserBarTracker({
+			createVideo: () => video as never,
+			createCanvas: () => canvas as never,
+			createWorker: () => worker as never,
+			createObjectURL: () => 'blob:bar',
+			revokeObjectURL: () => {},
+			yield: yieldWork
+		})
+	};
+}
+
+function clip() {
+	return {
+		blob: new Blob(['bar']),
+		mimeType: 'video/webm',
+		durationMs: 210,
+		width: 128,
+		height: 128,
+		frameRate: 30,
+		rotationDegrees: 0 as const
+	};
+}
+
+it('hands a 32 by 32 calibration crop to the worker and waits for its ready acknowledgement', async () => {
+	const harness = browserHarness();
+	const tracking = harness.tracker.track(
+		clip(),
+		{ mediaTimeMs: 100, x: 0.5, y: 0.5 },
+		() => {},
+		new AbortController().signal
+	);
+	harness.worker.emit({ type: 'ready' });
+	harness.video.dispatchEvent(new Event('loadedmetadata'));
+	await tracking;
+	const calibrationMessage = harness.worker.posts.find((message) => message.type === 'calibrate');
+	expect(calibrationMessage).toMatchObject({ type: 'calibrate', width: 32, height: 32 });
+	expect((calibrationMessage?.gray as Uint8Array).byteLength).toBe(1024);
+});
+
+it('propagates a worker calibration error instead of dispatching steps', async () => {
+	const harness = browserHarness();
+	harness.worker.respondToCalibration = 'error';
+	const tracking = harness.tracker.track(
+		clip(),
+		{ mediaTimeMs: 100, x: 0.5, y: 0.5 },
+		() => {},
+		new AbortController().signal
+	);
+	harness.worker.emit({ type: 'ready' });
+	harness.video.dispatchEvent(new Event('loadedmetadata'));
+	await expect(tracking).rejects.toThrow('calibration failed');
+	expect(harness.worker.posts.some((message) => message.type === 'step')).toBe(false);
+});
+
+it('rejects a source-edge calibration before handing pixels to the worker', async () => {
+	const harness = browserHarness();
+	const tracking = harness.tracker.track(
+		clip(),
+		{ mediaTimeMs: 100, x: 0, y: 0.5 },
+		() => {},
+		new AbortController().signal
+	);
+	harness.worker.emit({ type: 'ready' });
+	harness.video.dispatchEvent(new Event('loadedmetadata'));
+	await expect(tracking).rejects.toThrow('Choose a clearer frame with the bar away from the edge.');
+	expect(harness.worker.posts.some((message) => message.type === 'calibrate')).toBe(false);
+});
+
+it('does not send a crop to the worker after an abort during the browser yield', async () => {
+	let releaseYield: (() => void) | undefined;
+	const harness = browserHarness(() => new Promise((resolve) => (releaseYield = resolve)));
+	const controller = new AbortController();
+	const tracking = harness.tracker.track(
+		clip(),
+		{ mediaTimeMs: 100, x: 0.5, y: 0.5 },
+		() => {},
+		controller.signal
+	);
+	harness.worker.emit({ type: 'ready' });
+	harness.video.dispatchEvent(new Event('loadedmetadata'));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	controller.abort();
+	releaseYield?.();
+	await expect(tracking).rejects.toThrow('Bar tracking aborted.');
+	expect(harness.worker.posts.some((message) => message.type === 'calibrate')).toBe(false);
+});
+
+it('rejects promptly and terminates the worker when aborting pending matcher work', async () => {
+	let resolveStep:
+		| ((sample: {
+				mediaTimeMs: number;
+				point: { x: number; y: number; confidence: number };
+		  }) => void)
+		| undefined;
+	const controller = new AbortController();
+	const trackingMatcher = matcher(() => new Promise((resolve) => (resolveStep = resolve)));
+	const tracking = trackDecodedBar(
+		input,
+		calibration,
+		async (target) => crop(target),
+		trackingMatcher,
+		() => {},
+		controller.signal
+	);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	controller.abort();
+	await expect(
+		Promise.race([
+			tracking.then(
+				() => 'settled',
+				() => 'settled'
+			),
+			new Promise((resolve) => setTimeout(() => resolve('timeout'), 25))
+		])
+	).resolves.toBe('settled');
+	resolveStep?.({ mediaTimeMs: 100, point: { x: 0.5, y: 0.5, confidence: 0.9 } });
+	expect(trackingMatcher.dispose).toHaveBeenCalledTimes(1);
 });
