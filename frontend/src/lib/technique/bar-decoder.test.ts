@@ -200,9 +200,14 @@ class FakeWorker {
 	terminated = 0;
 	respondToCalibration: 'ready' | 'error' = 'ready';
 	respondToSteps = true;
+	crashOnCalibration = false;
 	postMessage(message: { type: string; [key: string]: unknown }) {
 		this.posts.push(message);
 		if (message.type === 'calibrate') {
+			if (this.crashOnCalibration) {
+				this.onerror?.();
+				return;
+			}
 			if (this.respondToCalibration === 'ready') this.emit({ type: 'ready' });
 			else this.emit({ type: 'error', requestId: null, message: 'calibration failed' });
 		}
@@ -288,6 +293,20 @@ it('propagates a worker calibration error instead of dispatching steps', async (
 	harness.video.dispatchEvent(new Event('loadedmetadata'));
 	await expect(tracking).rejects.toThrow('calibration failed');
 	expect(harness.worker.posts.some((message) => message.type === 'step')).toBe(false);
+});
+
+it('rejects an in-flight calibration when the worker crashes after startup', async () => {
+	const harness = browserHarness();
+	harness.worker.crashOnCalibration = true;
+	const tracking = harness.tracker.track(
+		clip(),
+		{ mediaTimeMs: 100, x: 0.5, y: 0.5 },
+		() => {},
+		new AbortController().signal
+	);
+	harness.worker.emit({ type: 'ready' });
+	harness.video.dispatchEvent(new Event('loadedmetadata'));
+	await expect(tracking).rejects.toThrow('Bar matcher worker failed.');
 });
 
 it('rejects a source-edge calibration before handing pixels to the worker', async () => {

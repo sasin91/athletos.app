@@ -312,6 +312,7 @@ function createWorkerMatcher(worker: Worker): BarMatcher {
 	let requestId = 0;
 	let disposed = false;
 	let started = false;
+	let failure: Error | undefined;
 	let readyResolve: (() => void) | undefined;
 	let readyReject: ((error: Error) => void) | undefined;
 	let calibration: { resolve: () => void; reject: (error: Error) => void } | undefined;
@@ -351,14 +352,19 @@ function createWorkerMatcher(worker: Worker): BarMatcher {
 	};
 	worker.onerror = () => {
 		const error = new Error('Bar matcher worker failed.');
+		failure = error;
 		readyReject?.(error);
+		calibration?.reject(error);
+		calibration = undefined;
 		for (const request of pending.values()) request.reject(error);
 		pending.clear();
 	};
 
 	return {
 		async calibrate(crop) {
+			if (failure) throw failure;
 			await ready;
+			if (failure) throw failure;
 			if (disposed) throw new Error('Bar matcher worker is disposed.');
 			if (calibration) throw new Error('Bar matcher calibration is already pending.');
 			const settled = new Promise<void>((resolve, reject) => (calibration = { resolve, reject }));
@@ -373,7 +379,9 @@ function createWorkerMatcher(worker: Worker): BarMatcher {
 			return settled;
 		},
 		async step(crop) {
+			if (failure) throw failure;
 			await ready;
+			if (failure) throw failure;
 			if (disposed) throw new Error('Bar matcher worker is disposed.');
 			if (calibration) throw new Error('Bar matcher calibration is pending.');
 			const id = requestId++;

@@ -117,10 +117,10 @@ export function createBarTemplate(
 	const { half, width, height } = patchGeometry(settings.patchSize);
 	const center = sourceCenter(calibration, crop);
 	if (
-		center.x < half ||
-		center.y < half ||
-		center.x > crop.sourceWidth - half ||
-		center.y > crop.sourceHeight - half ||
+		center.x <= half ||
+		center.y <= half ||
+		center.x >= crop.sourceWidth - half ||
+		center.y >= crop.sourceHeight - half ||
 		!containsPatch(crop, center.x, center.y, half)
 	) {
 		throw new Error(edgeMessage);

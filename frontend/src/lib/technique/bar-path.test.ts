@@ -131,34 +131,14 @@ it('selects the closest actual timestamp and resolves equal distance toward the 
 });
 
 it('rejects calibration too close to any source edge', () => {
-	const source = frame(100, 3);
+	const source = frame(100, 4);
 	expect(() =>
 		createBarTemplate(
 			{ ...source, originX: 0, originY: 0, sourceWidth: source.width, sourceHeight: source.height },
-			{ mediaTimeMs: 100, x: 3 / 96, y: 24 / 48 },
+			{ mediaTimeMs: 100, x: 4 / 96, y: 24 / 48 },
 			trackerConfig
 		)
 	).toThrow('Choose a clearer frame with the bar away from the edge.');
-});
-
-it('accepts a calibration patch that fits exactly at every crop edge', () => {
-	const gray = new Uint8Array(8 * 8).fill(80);
-	expect(() =>
-		createBarTemplate(
-			{
-				mediaTimeMs: 0,
-				width: 8,
-				height: 8,
-				gray,
-				originX: 0,
-				originY: 0,
-				sourceWidth: 8,
-				sourceHeight: 8
-			},
-			{ mediaTimeMs: 0, x: 0.5, y: 0.5 },
-			{ ...trackerConfig, patchSize: 8 }
-		)
-	).not.toThrow();
 });
 
 it('rejects equally plausible non-overlapping candidates instead of selecting one', () => {

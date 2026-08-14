@@ -49,10 +49,10 @@ function calibrationCrop(request: Extract<MatcherRequest, { type: 'calibrate' }>
 		width: request.width,
 		height: request.height,
 		gray: request.gray,
-		originX: 0,
-		originY: 0,
-		sourceWidth: request.width,
-		sourceHeight: request.height
+		originX: 1,
+		originY: 1,
+		sourceWidth: request.width + 2,
+		sourceHeight: request.height + 2
 	};
 }
 
