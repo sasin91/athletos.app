@@ -100,6 +100,63 @@ also needs a scoped analysis Wake Lock lifecycle; that analysis behavior is not
 implemented in production yet. A device run of the current production capture
 behavior has not yet been collected.
 
+## Bar-path slice
+
+Transient, one-tap bar tracking with a synchronized overlay
+(`docs/superpowers/specs/2026-08-14-bar-path-evidence-design.md`). The
+acceptance gate for this slice is that a 30-second clip completes 10 Hz tracking
+within 30 seconds on the Pixel 6a without freezing playback controls.
+
+**No physical run has been collected for this slice.** The row below is the
+recording scaffold, not a result. The automated suite is green — 233 unit tests,
+24 Playwright tests including one-tap tracking, tracking failure, and
+discard-during-tracking; svelte-check 0 errors / 0 warnings — and per the plan
+none of that is evidence of device support.
+
+| Device / browser | Mode | Clip s | Samples | Tracking wall s | 30 s within 30 s | Loss and recalibration | Playback responsiveness | Cleanup | Offline |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Google Pixel 6a / stock Android 17 / Chrome 151 | not observed | not observed | not observed | not observed | not observed | not observed | not observed | not observed | not observed |
+
+### Bar-path run notes
+
+Each numbered step below is `not observed` until the physical run is collected.
+Record the outcome against the step rather than replacing it.
+
+1. Raw review appears immediately after recording — not observed.
+2. **Track bar** → seek/pause at a clear top position → one tap on the visible
+   sleeve or plate center — not observed.
+3. Determinate `Tracking bar: {completed}/{total}` progress advances while the
+   raw video and its controls stay responsive — not observed.
+4. Play, pause, and scrub keep the progressive path and current marker
+   synchronized to media time — not observed.
+5. The dashed vertical reference stays fixed at the calibration X — not
+   observed.
+6. An occlusion or loss produces a visible gap plus `Tracking lost —
+   recalibrate bar.`, not a guessed continuation — not observed.
+7. **Recalibrate bar** replaces the previous calibration and its whole path
+   without re-recording — not observed.
+8. Discard removes the transient clip and overlay and revokes its media — not
+   observed.
+9. Ordinary Log and Skip remain usable throughout — not observed.
+10. The same flow repeats offline after the app shell has loaded once — not
+    observed.
+
+Values still to record: clip duration, requested and completed sample counts,
+tracking wall time, whether the 30-second-within-30-second gate passed, observed
+loss and recalibration behaviour, playback responsiveness during tracking,
+cleanup, offline result, and browser versus installed-PWA mode.
+
+Two carry-overs from the pose spike apply to this slice and are also unmeasured
+here. Android page/display suspension previously presented as a decode stall, so
+the run needs the screen kept awake and any `visibilitychange` noted; the plan
+does not add an analysis Wake Lock, and the spike's judgement that the analysis
+slice needs one still stands. `performance.memory` returned identical rounded
+values on this browser and cannot establish memory cleanup, so step 8 is an
+observation of behaviour rather than of bytes.
+
+Missing the latency gate records evidence and triggers algorithm or profiling
+work. It does not reduce the sampling density and does not introduce a model.
+
 ## Remaining matrix
 
 - Android / Chrome / installed PWA / 10 seconds

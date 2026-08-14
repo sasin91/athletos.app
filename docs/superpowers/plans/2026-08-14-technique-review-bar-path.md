@@ -37,7 +37,7 @@
 - Consumes: normalized calibration coordinates and small grayscale frames supplied by Task 2.
 - Produces: `BAR_TRACKER_V1`, `BarCalibration`, `BarPoint`, `BarSample`, `BarTrackingResult`, `GrayFrame`, `GrayCrop`, `BarTemplate`, `fixedBarSampleTargets(durationMs)`, `nearestBarSample(samples, mediaTimeMs)`, `createBarTemplate(crop, calibration, config?)`, `matchBarCrop(template, crop, previous, config?)`, and `trackBarFrames(frames, calibration, config?)`.
 
-- [ ] **Step 1: Write failing timestamp, forward/backward, ambiguity, and loss tests**
+- [x] **Step 1: Write failing timestamp, forward/backward, ambiguity, and loss tests**
 
 Create `bar-path.test.ts` with synthetic frames only:
 
@@ -97,13 +97,13 @@ Also add tests that:
 - two candidates within `ambiguityMargin` reject the sample instead of picking one arbitrarily; and
 - input frames and output samples remain sorted by actual media time.
 
-- [ ] **Step 2: Run the focused test and verify red**
+- [x] **Step 2: Run the focused test and verify red**
 
 Run: `cd frontend; npm run test:unit -- src/lib/technique/bar-path.test.ts`
 
 Expected: FAIL because `bar-path.ts` does not exist.
 
-- [ ] **Step 3: Add exact types, constants, and timestamp helpers**
+- [x] **Step 3: Add exact types, constants, and timestamp helpers**
 
 Define:
 
@@ -154,7 +154,7 @@ export type BarTrackingResult = {
 
 `fixedBarSampleTargets` uses `1000 / 10`, emits values from zero while `< durationMs`, and never rounds stored decoded times. `nearestBarSample` uses binary search and resolves equal distance toward the later sample.
 
-- [ ] **Step 4: Implement coarse-to-fine normalized cross-correlation**
+- [x] **Step 4: Implement coarse-to-fine normalized cross-correlation**
 
 Extract one fixed template at the calibration frame. Precompute its mean and centered norm. For each adjacent frame in a direction:
 
@@ -174,7 +174,7 @@ previous normalized source point, then returns one timestamped `BarSample`.
 full frames (`originX = originY = 0`); production worker code in Task 2 must not
 contain a second matching implementation.
 
-- [ ] **Step 5: Run focused tests, type-check, and commit**
+- [x] **Step 5: Run focused tests, type-check, and commit**
 
 Run:
 
@@ -207,7 +207,7 @@ git commit -m "feat: model deterministic bar tracking"
 - Consumes: `CapturedClip`, `BarCalibration`, `BAR_TRACKER_V1`, and Task 1 result types.
 - Produces: `BarTrackerPort`, `BarTrackingProgress`, `trackDecodedBar(input, decode, matcher, signal)`, and `createBrowserBarTracker(environment?): BarTrackerPort`.
 
-- [ ] **Step 1: Write failing decode-order, timestamp, loss, abort, and cleanup tests**
+- [x] **Step 1: Write failing decode-order, timestamp, loss, abort, and cleanup tests**
 
 Define injected seams in the test:
 
@@ -253,13 +253,13 @@ Add tests proving:
 - progress is monotonic and reports completed/total plus the actual media time; and
 - only one crop buffer is live at a time—the prior transferred/released buffer is not retained before the next decode.
 
-- [ ] **Step 2: Run the focused test and verify red**
+- [x] **Step 2: Run the focused test and verify red**
 
 Run: `cd frontend; npm run test:unit -- src/lib/technique/bar-decoder.test.ts`
 
 Expected: FAIL because the decoder does not exist.
 
-- [ ] **Step 3: Define the browser adapter contract and pure orchestration**
+- [x] **Step 3: Define the browser adapter contract and pure orchestration**
 
 ```ts
 export type BarTrackingProgress = { completed: number; total: number; mediaTimeMs: number };
@@ -277,7 +277,7 @@ export type BarTrackerPort = {
 
 `trackDecodedBar` generates 10 Hz targets, chooses the nearest calibration target, decodes the calibration frame once, walks earlier targets in descending order and later targets in ascending order, records actual decoder times, and returns sorted/deduplicated samples. It stops only the lost direction.
 
-- [ ] **Step 4: Implement bounded video crop decoding**
+- [x] **Step 4: Implement bounded video crop decoding**
 
 `createBrowserBarTracker`:
 
@@ -293,7 +293,7 @@ export type BarTrackerPort = {
 
 If a crop crosses a source edge, return the calibration edge message during calibration or a timestamped lost sample during tracking.
 
-- [ ] **Step 5: Implement the worker protocol and matcher**
+- [x] **Step 5: Implement the worker protocol and matcher**
 
 Use exact messages:
 
@@ -313,7 +313,7 @@ The worker owns the `BarTemplate` and independent direction state, calls Task 1
 `createBarTemplate`/`matchBarCrop`, transfers no pixels back, and drops direction
 state after loss. Stable errors contain no frame data or stack.
 
-- [ ] **Step 6: Verify adapter behavior and commit**
+- [x] **Step 6: Verify adapter behavior and commit**
 
 Run:
 
@@ -351,7 +351,7 @@ git commit -m "feat: decode bar tracking samples off thread"
 - Consumes: `BarTrackerPort`, `BarTrackingResult`, raw review video time, source dimensions, viewport, and captured rotation.
 - Produces: calibration/tracking review phases and intents; `fitContainedVideo`, `viewportToSource`, `barEvidenceAt`, and `drawBarOverlay`.
 
-- [ ] **Step 1: Write failing transform, interpolation, and gap tests**
+- [x] **Step 1: Write failing transform, interpolation, and gap tests**
 
 Create `bar-overlay.test.ts`:
 
@@ -394,7 +394,7 @@ it('does not bridge a rejected sample', () => {
 
 Add DPR, mirror=false, progressive-path, current-marker interpolation, calibration-reference X, and >110 ms gap tests.
 
-- [ ] **Step 2: Write failing review lifecycle tests**
+- [x] **Step 2: Write failing review lifecycle tests**
 
 Extend `review.test.ts` with a fake `BarTrackerPort` and prove:
 
@@ -407,7 +407,7 @@ Extend `review.test.ts` with a fake `BarTrackerPort` and prove:
 - a late result after cancellation cannot recreate review state or a Blob URL; and
 - none of the new intents receive or mutate `LocalSession`.
 
-- [ ] **Step 3: Run focused tests and verify red**
+- [x] **Step 3: Run focused tests and verify red**
 
 Run:
 
@@ -418,7 +418,7 @@ npm run test:unit -- src/lib/technique/bar-overlay.test.ts src/lib/technique/rev
 
 Expected: FAIL on missing overlay functions, states, and intents.
 
-- [ ] **Step 4: Extend review types and orchestration**
+- [x] **Step 4: Extend review types and orchestration**
 
 Add:
 
@@ -450,7 +450,7 @@ Add intents:
 
 Change `createTechniqueReview` to accept `barTracker: BarTrackerPort` before the clock. Own one `AbortController` per tracking attempt. Publish progress only for the current attempt, retain the raw clip/url through every bar phase, and map calibration edge rejection to its exact user message. Tracking failure is non-terminal raw review, not `phase: 'failure'`.
 
-- [ ] **Step 5: Implement pure coordinate and drawing functions**
+- [x] **Step 5: Implement pure coordinate and drawing functions**
 
 `fitContainedVideo` and `viewportToSource` share the same tested rotation/contain transform. `barEvidenceAt(samples, mediaTimeMs)` returns:
 
@@ -470,7 +470,7 @@ The path contains accepted samples at or before current playback time and stops 
 
 Return `{ bar: 'visible' | 'needs-calibration' | 'tracking-lost' }` so Svelte can render adjacent text. Canvas CSS dimensions remain layout pixels while backing dimensions multiply by device pixel ratio.
 
-- [ ] **Step 6: Add the calibration and playback UI**
+- [x] **Step 6: Add the calibration and playback UI**
 
 In `TechniqueReview.svelte`:
 
@@ -486,7 +486,7 @@ In `TechniqueReview.svelte`:
 
 Drive redraw with `requestVideoFrameCallback` when available and `requestAnimationFrame` otherwise. Cancel the callback on phase change/dispose. Pointer handling exists only in calibration; the overlay is otherwise pointer-transparent.
 
-- [ ] **Step 7: Extend browser coverage**
+- [x] **Step 7: Extend browser coverage**
 
 In `page.e2e.ts`, extend the existing fake media environment with a deterministic fake `Worker`, metadata/video-frame behavior, and canvas image data sufficient to exercise calibration. Add tests that:
 
@@ -497,7 +497,7 @@ In `page.e2e.ts`, extend the existing fake media environment with a deterministi
 - tracking failure leaves raw playback, Record again, and Discard usable; and
 - immediate Discard during tracking aborts the worker and stops/revokes media resources.
 
-- [ ] **Step 8: Run full frontend verification and commit**
+- [x] **Step 8: Run full frontend verification and commit**
 
 Run:
 
