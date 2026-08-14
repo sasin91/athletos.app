@@ -114,6 +114,24 @@ A sentence the athlete attached to one Set. Optional, and never asked for.
 Distinct from the session-level notes field, which nothing writes to.
 _Avoid_: Comment, log entry, remark
 
+**Technique review**:
+Watching a recording made from one active Set with synchronized visual guides. It
+shows evidence and makes no judgment about whether the technique was good or
+bad.
+_Avoid_: Form check, assessment, coaching, analysis
+
+**Technique clip**:
+A recording the athlete deliberately kept from a Technique review. It belongs
+to one Set, stays on that device unless the athlete explicitly uploads it, and
+is private to that athlete.
+_Avoid_: Video (too broad), attachment, submission
+
+**Tracking result**:
+Timestamped visual evidence derived from a Technique clip: body landmarks and
+the athlete-calibrated bar position, each with its confidence. It is not a
+measurement or a verdict.
+_Avoid_: Score, diagnosis, feedback
+
 **Plate change**:
 What comes off the bar and what goes on, per side, to get from the arrangement
 currently loaded to the next prescribed weight. Retains a prefix of what is on

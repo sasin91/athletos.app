@@ -625,3 +625,518 @@ test('a weight typed with a comma is recorded rather than dropped', async ({ pag
 
 	await expect(page.getByText('Logged 99.5 kg × 5', { exact: true })).toBeVisible();
 });
+
+test('only the current squat set offers technique recording', async ({ page }) => {
+	await seedSession(
+		page,
+		session([
+			set({ position: 0, exercise: 'squat', label: 'Squat' }),
+			set({ position: 1, exercise: 'bench-press', label: 'Bench press' })
+		])
+	);
+	await page.goto('/session');
+	await expect(page.getByRole('button', { name: 'Record technique' })).toHaveCount(1);
+	await page.getByRole('button', { name: 'Log' }).first().click();
+	await expect(page.getByRole('button', { name: 'Record technique' })).toHaveCount(0);
+});
+
+async function installTechniqueBarMedia(
+	page: Page,
+	options: { workerFailure?: boolean; holdTracking?: boolean } = {}
+) {
+	await page.addInitScript(({ workerFailure, holdTracking }) => {
+		const stoppedTracks: boolean[] = [];
+		const revokedUrls: string[] = [];
+		let terminatedWorkers = 0;
+		let releaseTracking = () => undefined;
+		Object.defineProperties(window, {
+			__techniqueTracksStopped: {
+				get: () => stoppedTracks.every(Boolean) && stoppedTracks.length > 0
+			},
+			__techniqueRevokedUrls: { get: () => [...revokedUrls] },
+			__techniqueTerminatedWorkers: { get: () => terminatedWorkers },
+			__releaseTechniqueTracking: { value: () => releaseTracking() }
+		});
+
+		const sourceObjects = new WeakMap<HTMLMediaElement, unknown>();
+		Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+			configurable: true,
+			get() {
+				return sourceObjects.get(this);
+			},
+			set(value) {
+				sourceObjects.set(this, value);
+			}
+		});
+		HTMLMediaElement.prototype.play = async () => undefined;
+		HTMLMediaElement.prototype.pause = () => undefined;
+		HTMLMediaElement.prototype.load = () => undefined;
+
+		let objectUrl = 0;
+		URL.createObjectURL = () => `blob:technique-review-${++objectUrl}`;
+		URL.revokeObjectURL = (url) => revokedUrls.push(url);
+		const nativeSource = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+		Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+			configurable: true,
+			get() {
+				return nativeSource?.get?.call(this) ?? '';
+			},
+			set(value: string) {
+				if (!value.startsWith('blob:technique-review-')) nativeSource?.set?.call(this, value);
+				else this.setAttribute('src', value);
+				queueMicrotask(() => this.dispatchEvent(new Event('loadedmetadata')));
+			}
+		});
+		Object.defineProperties(HTMLVideoElement.prototype, {
+			videoWidth: { configurable: true, get: () => 1280 },
+			videoHeight: { configurable: true, get: () => 720 }
+		});
+
+		const currentTimes = new WeakMap<HTMLMediaElement, number>();
+		const frameVersions = new WeakMap<HTMLVideoElement, number>();
+		const deliveredVersions = new WeakMap<HTMLVideoElement, number>();
+		const pendingFrames = new WeakMap<HTMLVideoElement, Map<number, () => void>>();
+		let frameCallbackId = 0;
+		function deliverFrame(video: HTMLVideoElement) {
+			const version = frameVersions.get(video) ?? 0;
+			if (version <= (deliveredVersions.get(video) ?? -1)) return;
+			const pending = pendingFrames.get(video);
+			const callback = pending?.entries().next().value as [number, () => void] | undefined;
+			if (!callback) return;
+			pending?.delete(callback[0]);
+			deliveredVersions.set(video, version);
+			queueMicrotask(callback[1]);
+		}
+		Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
+			configurable: true,
+			get() {
+				return currentTimes.get(this) ?? 0;
+			},
+			set(value: number) {
+				currentTimes.set(this, value);
+				if (this instanceof HTMLVideoElement) {
+					frameVersions.set(this, (frameVersions.get(this) ?? 0) + 1);
+					deliverFrame(this);
+				}
+			}
+		});
+		Object.defineProperties(HTMLVideoElement.prototype, {
+			requestVideoFrameCallback: {
+				configurable: true,
+				value(callback: () => void) {
+					const id = ++frameCallbackId;
+					let pending = pendingFrames.get(this);
+					if (!pending) {
+						pending = new Map();
+						pendingFrames.set(this, pending);
+					}
+					pending.set(id, callback);
+					if (!frameVersions.has(this)) frameVersions.set(this, 0);
+					deliverFrame(this);
+					return id;
+				}
+			},
+			cancelVideoFrameCallback: {
+				configurable: true,
+				value(id: number) {
+					pendingFrames.get(this)?.delete(id);
+				}
+			}
+		});
+
+		HTMLCanvasElement.prototype.getContext = (() => ({
+			drawImage: () => undefined,
+			getImageData: (_x: number, _y: number, width: number, height: number) => ({
+				data: new Uint8ClampedArray(width * height * 4).fill(120)
+			}),
+			setTransform: () => undefined,
+			clearRect: () => undefined,
+			setLineDash: () => undefined,
+			beginPath: () => undefined,
+			moveTo: () => undefined,
+			lineTo: () => undefined,
+			stroke: () => undefined,
+			arc: () => undefined,
+			fill: () => undefined
+		})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+
+		const track = {
+			addEventListener: () => undefined,
+			removeEventListener: () => undefined,
+			getSettings: () => ({ width: 1280, height: 720, frameRate: 30 }),
+			stop: () => {
+				stoppedTracks[0] = true;
+			}
+		};
+		stoppedTracks.push(false);
+		const stream = {
+			getTracks: () => [track],
+			getVideoTracks: () => [track]
+		};
+		Object.defineProperty(navigator, 'mediaDevices', {
+			configurable: true,
+			value: { getUserMedia: async () => stream }
+		});
+
+		class FakeMediaRecorder {
+			static isTypeSupported() {
+				return true;
+			}
+
+			mimeType = 'video/webm';
+			state: RecordingState = 'inactive';
+			ondataavailable: ((event: BlobEvent) => void) | null = null;
+			onerror: ((event: Event) => void) | null = null;
+			onstop: ((event: Event) => void) | null = null;
+
+			start() {
+				this.state = 'recording';
+			}
+
+			stop() {
+				this.state = 'inactive';
+				this.ondataavailable?.(
+					new BlobEvent('dataavailable', { data: new Blob(['raw'], { type: this.mimeType }) })
+				);
+				this.onstop?.(new Event('stop'));
+			}
+		}
+		Object.defineProperty(window, 'MediaRecorder', {
+			configurable: true,
+			value: FakeMediaRecorder
+		});
+
+		type FakeStep = {
+			type: 'step';
+			requestId?: number;
+			mediaTimeMs?: number;
+		};
+		const pendingSteps: Array<{ worker: FakeWorker; message: FakeStep }> = [];
+		let trackingHeld = holdTracking ?? false;
+		function respondToStep(worker: FakeWorker, message: FakeStep) {
+			queueMicrotask(() =>
+				worker.onmessage?.({
+					data: {
+						type: 'result',
+						requestId: message.requestId,
+						sample: {
+							mediaTimeMs: message.mediaTimeMs,
+							point: { x: 0.5, y: 0.5, confidence: 0.95 }
+						}
+					}
+				} as MessageEvent)
+			);
+		}
+
+		class FakeWorker {
+			onmessage: ((event: MessageEvent) => void) | null = null;
+			onerror: (() => void) | null = null;
+
+			constructor() {
+				queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } } as MessageEvent));
+			}
+
+			postMessage(message: {
+				type: 'calibrate' | 'step' | 'close';
+				requestId?: number;
+				mediaTimeMs?: number;
+			}) {
+				if (message.type === 'calibrate') {
+					queueMicrotask(() =>
+						this.onmessage?.({
+							data: workerFailure
+								? { type: 'error', requestId: null, message: 'fake worker failed' }
+								: { type: 'ready' }
+						} as MessageEvent)
+					);
+				} else if (message.type === 'step') {
+					if (trackingHeld) pendingSteps.push({ worker: this, message: message as FakeStep });
+					else respondToStep(this, message as FakeStep);
+				}
+			}
+
+			terminate() {
+				terminatedWorkers += 1;
+			}
+		}
+		releaseTracking = () => {
+			trackingHeld = false;
+			for (const pending of pendingSteps.splice(0)) respondToStep(pending.worker, pending.message);
+		};
+		Object.defineProperty(window, 'Worker', { configurable: true, value: FakeWorker });
+	}, options);
+}
+
+async function recordTechniqueToRawReview(page: Page) {
+	await page.getByRole('button', { name: 'Record technique' }).click();
+	await page.getByRole('button', { name: 'Allow camera' }).click();
+	await page.getByRole('button', { name: 'Start recording' }).click();
+	await page.clock.fastForward(3000);
+	await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+	await page.clock.fastForward(200);
+	await page.getByRole('button', { name: 'Stop' }).click();
+	await expect(page.getByText('Raw review', { exact: true })).toBeVisible();
+}
+
+test('one tap tracks the bar and toggles only its synchronized overlay', async ({ page }) => {
+	await installTechniqueBarMedia(page, { holdTracking: true });
+	await seedSession(page, session([set()]));
+	await page.clock.install();
+	await page.goto('/session');
+	await recordTechniqueToRawReview(page);
+
+	await expect(page.getByRole('button', { name: 'Track bar' })).toBeVisible();
+	await page.getByRole('button', { name: 'Track bar' }).click();
+	await expect(
+		page.getByText('Pause at the top, then tap the visible sleeve or plate center.', {
+			exact: true
+		})
+	).toBeVisible();
+	await page.getByTestId('bar-calibration-surface').click({ position: { x: 320, y: 180 } });
+	await expect(page.getByText(/Tracking bar: \d+\/\d+/)).toBeVisible();
+	await page.evaluate(() => Reflect.get(window, '__releaseTechniqueTracking')());
+	await page.clock.fastForward(100);
+
+	const toggle = page.getByRole('button', { name: 'Bar path' });
+	await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByRole('button', { name: 'Recalibrate bar' })).toBeVisible();
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+	await toggle.click();
+	await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+});
+
+test('bar tracking failure leaves raw playback and discard-by-default controls usable', async ({
+	page
+}) => {
+	await installTechniqueBarMedia(page, { workerFailure: true });
+	await seedSession(page, session([set()]));
+	await page.clock.install();
+	await page.goto('/session');
+	await recordTechniqueToRawReview(page);
+	await page.getByRole('button', { name: 'Track bar' }).click();
+	await page.getByTestId('bar-calibration-surface').click({ position: { x: 320, y: 180 } });
+	await page.clock.fastForward(100);
+
+	await expect(
+		page.getByText('Bar tracking failed. Try recalibrating.', { exact: true })
+	).toBeVisible();
+	await expect(page.locator('video[controls]')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Record again' })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Discard' })).toBeEnabled();
+});
+
+test('discard during bar tracking aborts the worker and revokes transient media', async ({
+	page
+}) => {
+	await installTechniqueBarMedia(page, { holdTracking: true });
+	await seedSession(page, session([set()]));
+	await page.clock.install();
+	await page.goto('/session');
+	await recordTechniqueToRawReview(page);
+	await page.getByRole('button', { name: 'Track bar' }).click();
+	await page.getByTestId('bar-calibration-surface').click({ position: { x: 320, y: 180 } });
+	await expect(page.getByText(/Tracking bar: \d+\/\d+/)).toBeVisible();
+
+	await page.getByRole('button', { name: 'Discard' }).click();
+
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect
+		.poll(() => page.evaluate(() => Reflect.get(window, '__techniqueTerminatedWorkers')))
+		.toBe(1);
+	await expect
+		.poll(() => page.evaluate(() => Reflect.get(window, '__techniqueRevokedUrls').length))
+		.toBeGreaterThanOrEqual(2);
+	expect(await page.evaluate(() => Reflect.get(window, '__techniqueTracksStopped'))).toBe(true);
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+});
+
+test('technique recording closes while camera permission is still pending', async ({ page }) => {
+	await page.addInitScript(() => {
+		let resolveCamera!: () => void;
+		let trackStopped = false;
+
+		const track = {
+			addEventListener: () => undefined,
+			removeEventListener: () => undefined,
+			getSettings: () => ({ width: 1280, height: 720, frameRate: 30 }),
+			stop: () => {
+				trackStopped = true;
+			}
+		};
+		const stream = {
+			getTracks: () => [track],
+			getVideoTracks: () => [track]
+		};
+		const pendingCamera = new Promise<typeof stream>((resolve) => {
+			resolveCamera = () => resolve(stream);
+		});
+
+		Object.defineProperty(window, '__resolveTechniqueCamera', { value: () => resolveCamera() });
+		Object.defineProperty(window, '__lateTechniqueTrackStopped', {
+			get: () => trackStopped
+		});
+		Object.defineProperty(navigator, 'mediaDevices', {
+			configurable: true,
+			value: { getUserMedia: () => pendingCamera }
+		});
+		Object.defineProperty(window, 'MediaRecorder', {
+			configurable: true,
+			value: class {
+				static isTypeSupported() {
+					return true;
+				}
+			}
+		});
+		Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+			configurable: true,
+			writable: true
+		});
+		HTMLMediaElement.prototype.play = async () => undefined;
+	});
+
+	await seedSession(page, session([set()]));
+	await page.goto('/session');
+
+	await page.getByRole('button', { name: 'Record technique' }).click();
+	await page.getByRole('button', { name: 'Allow camera' }).click();
+	await page.getByRole('button', { name: 'Close' }).click();
+
+	await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 500 });
+	await expect(page.getByRole('button', { name: 'Log', exact: true })).toBeEnabled();
+	await page.getByRole('button', { name: 'Add note' }).click();
+	await expect(page.getByLabel('Note for this set')).toBeVisible();
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+
+	await page.evaluate(() => Reflect.get(window, '__resolveTechniqueCamera')());
+	await expect
+		.poll(() => page.evaluate(() => Reflect.get(window, '__lateTechniqueTrackStopped')))
+		.toBe(true);
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+});
+
+test('technique recording stays transient from camera preview through discard', async ({
+	page
+}) => {
+	await page.addInitScript(() => {
+		const stoppedTracks: boolean[] = [];
+		Object.defineProperty(window, '__techniqueTracksStopped', {
+			get: () => stoppedTracks.every(Boolean) && stoppedTracks.length > 0
+		});
+
+		const sourceObjects = new WeakMap<HTMLMediaElement, unknown>();
+		Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+			configurable: true,
+			get() {
+				return sourceObjects.get(this);
+			},
+			set(value) {
+				sourceObjects.set(this, value);
+			}
+		});
+		HTMLMediaElement.prototype.play = async () => undefined;
+
+		let objectUrl = 0;
+		URL.createObjectURL = () => `blob:technique-review-${++objectUrl}`;
+		URL.revokeObjectURL = () => undefined;
+		const nativeSource = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+		Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+			configurable: true,
+			get() {
+				return nativeSource?.get?.call(this) ?? '';
+			},
+			set(value: string) {
+				if (!value.startsWith('blob:technique-review-')) nativeSource?.set?.call(this, value);
+				else this.setAttribute('src', value);
+				queueMicrotask(() => this.dispatchEvent(new Event('loadedmetadata')));
+			}
+		});
+		Object.defineProperties(HTMLVideoElement.prototype, {
+			videoWidth: { configurable: true, get: () => 1280 },
+			videoHeight: { configurable: true, get: () => 720 }
+		});
+
+		const track = {
+			addEventListener: () => undefined,
+			removeEventListener: () => undefined,
+			getSettings: () => ({ width: 1280, height: 720, frameRate: 30 }),
+			stop: () => {
+				stoppedTracks[0] = true;
+			}
+		};
+		stoppedTracks.push(false);
+		const stream = {
+			getTracks: () => [track],
+			getVideoTracks: () => [track]
+		};
+		Object.defineProperty(navigator, 'mediaDevices', {
+			configurable: true,
+			value: { getUserMedia: async () => stream }
+		});
+
+		class FakeMediaRecorder {
+			static isTypeSupported() {
+				return true;
+			}
+
+			mimeType = 'video/webm';
+			state: RecordingState = 'inactive';
+			ondataavailable: ((event: BlobEvent) => void) | null = null;
+			onerror: ((event: Event) => void) | null = null;
+			onstop: ((event: Event) => void) | null = null;
+
+			start() {
+				this.state = 'recording';
+			}
+
+			stop() {
+				this.state = 'inactive';
+				this.ondataavailable?.(
+					new BlobEvent('dataavailable', { data: new Blob(['raw'], { type: this.mimeType }) })
+				);
+				this.onstop?.(new Event('stop'));
+			}
+		}
+		Object.defineProperty(window, 'MediaRecorder', {
+			configurable: true,
+			value: FakeMediaRecorder
+		});
+	});
+
+	await seedSession(page, session([set()]));
+	await page.clock.install();
+	await page.goto('/session');
+
+	await page.getByRole('button', { name: 'Record technique' }).click();
+	await page.getByRole('button', { name: 'Allow camera' }).click();
+	await expect(page.getByText('Camera ready', { exact: true })).toBeVisible();
+
+	await page.getByRole('button', { name: 'Start recording' }).click();
+	await expect(page.getByText('3', { exact: true })).toBeVisible();
+	await page.clock.fastForward(3000);
+	await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+
+	await page.getByRole('button', { name: 'Stop' }).click();
+	await expect(page.getByText('Raw review', { exact: true })).toBeVisible();
+	await expect(page.locator('video[controls]')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Discard' }).click();
+	await expect(page.getByRole('button', { name: 'Record technique' })).toBeVisible();
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+	expect(await page.evaluate(() => Reflect.get(window, '__techniqueTracksStopped'))).toBe(true);
+
+	// Closing owns the countdown timer too. Advancing fake time after teardown
+	// must not let a stale callback enqueue a late recording intent.
+	await page.getByRole('button', { name: 'Record technique' }).click();
+	await page.getByRole('button', { name: 'Allow camera' }).click();
+	await page.getByRole('button', { name: 'Start recording' }).click();
+	await expect(page.getByText('3', { exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Close' }).click();
+	await page.clock.fastForward(3000);
+
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Record technique' })).toBeVisible();
+	await expect(page.getByText('Week 1, day 1 · 0/1 done', { exact: true })).toBeVisible();
+	expect(await page.evaluate(() => Reflect.get(window, '__techniqueTracksStopped'))).toBe(true);
+});

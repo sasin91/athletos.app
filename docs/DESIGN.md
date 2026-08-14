@@ -901,6 +901,34 @@ The phone is the logging device and gyms have concrete walls.
 - Server: `INSERT ... ON CONFLICT (id) DO NOTHING`.
 - A failed POST stays in a local queue and retries on next launch.
 
+### Technique review, which cannot interrupt logging
+
+**Technique review is optional local media around the logger; camera or media
+failure never blocks logging; recordings are transient until a separate
+retention choice.** A denied permission, an unavailable camera, a recorder
+failure, or discarding the clip leaves the active Set exactly where it was:
+Log and Skip remain usable offline. The camera is evidence beside the workout,
+not a condition of recording it. Nothing in the raw-review slice is kept,
+uploaded, or made part of the Session without a later, explicit retention
+choice.
+
+**Bar-path overlays are transient, local screen-space evidence derived from one
+athlete calibration. Missing confidence creates a visible gap; no path line is a
+measurement, verdict, or cue.** One tap on a paused frame names the thing to
+follow, and the line that appears is where that patch went in the *image* — not
+displacement, not velocity, not verticality against gravity, and never a
+judgement about the lift. The athlete reads the picture; the app does not read it
+for them.
+
+The gap is the load-bearing part. A tracker that has lost the bar stops drawing
+and says so, because the alternative is a plausible line through frames nothing
+was found in — evidence that looks exactly like evidence and is not. The same
+reasoning refuses interpolation across a rejected sample and refuses any
+automatic re-acquisition: recalibration is an athlete action, so a path on screen
+always traces back to a point an athlete chose. Losing the bar is therefore
+ordinary output rather than a failure, and playback, Log, and Skip carry on
+regardless.
+
 ### Why idempotency is a correctness requirement
 
 Submitting a session runs `advance()` and mutates program state. A retried POST
