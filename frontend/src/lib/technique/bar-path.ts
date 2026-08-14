@@ -73,6 +73,10 @@ function containsPatch(crop: GrayCrop, centerX: number, centerY: number, half: n
 	return left >= 0 && top >= 0 && left + half * 2 <= crop.width && top + half * 2 <= crop.height;
 }
 
+function withinSearchRadius(centerX: number, centerY: number, prior: { x: number; y: number }, searchRadius: number) {
+	return Math.abs(centerX - prior.x) <= searchRadius && Math.abs(centerY - prior.y) <= searchRadius;
+}
+
 export function fixedBarSampleTargets(durationMs: number) {
 	const targets: number[] = [];
 	for (let mediaTimeMs = 0; mediaTimeMs < durationMs; mediaTimeMs += 1000 / 10) {
@@ -232,6 +236,36 @@ function bestNonOverlappingCandidate(candidates: readonly Candidate[], best: Can
 	return second;
 }
 
+function refineCandidate(
+	coarse: Candidate,
+	template: BarTemplate,
+	crop: GrayCrop,
+	integral: ReturnType<typeof integralImages>,
+	prior: { x: number; y: number },
+	settings: BarTrackerConfig,
+	half: number
+) {
+	const candidates: Candidate[] = [];
+	for (let offsetY = -settings.refineRadius; offsetY <= settings.refineRadius; offsetY += 1) {
+		for (let offsetX = -settings.refineRadius; offsetX <= settings.refineRadius; offsetX += 1) {
+			const centerX = coarse.centerX + offsetX;
+			const centerY = coarse.centerY + offsetY;
+			if (
+				!withinSearchRadius(centerX, centerY, prior, settings.searchRadius) ||
+				!containsPatch(crop, centerX, centerY, half)
+			) {
+				continue;
+			}
+			candidates.push({
+				centerX,
+				centerY,
+				score: candidateScore(template, crop, integral, centerX, centerY)
+			});
+		}
+	}
+	return candidates;
+}
+
 export function matchBarCrop(
 	template: BarTemplate,
 	crop: GrayCrop,
@@ -261,24 +295,15 @@ export function matchBarCrop(
 
 	const coarseBest = bestCandidate(coarseCandidates);
 	if (!coarseBest) return { mediaTimeMs: crop.mediaTimeMs, point: null };
-
-	const refinedCandidates: Candidate[] = [];
-	for (let offsetY = -settings.refineRadius; offsetY <= settings.refineRadius; offsetY += 1) {
-		for (let offsetX = -settings.refineRadius; offsetX <= settings.refineRadius; offsetX += 1) {
-			const centerX = coarseBest.centerX + offsetX;
-			const centerY = coarseBest.centerY + offsetY;
-			if (!containsPatch(crop, centerX, centerY, half)) continue;
-			refinedCandidates.push({
-				centerX,
-				centerY,
-				score: candidateScore(template, crop, integral, centerX, centerY)
-			});
-		}
+	const coarseSecond = bestNonOverlappingCandidate(coarseCandidates, coarseBest, settings.patchSize);
+	const refinedCandidates = refineCandidate(coarseBest, template, crop, integral, prior, settings, half);
+	if (coarseSecond) {
+		refinedCandidates.push(...refineCandidate(coarseSecond, template, crop, integral, prior, settings, half));
 	}
 
 	const best = bestCandidate(refinedCandidates);
 	if (!best) return { mediaTimeMs: crop.mediaTimeMs, point: null };
-	const second = bestNonOverlappingCandidate(coarseCandidates, best, settings.patchSize);
+	const second = bestNonOverlappingCandidate(refinedCandidates, best, settings.patchSize);
 	if (
 		best.score < settings.confidenceThreshold ||
 		(second !== undefined && best.score - second.score < settings.ambiguityMargin)
