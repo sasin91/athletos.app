@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { createBrowserBarTracker } from '$lib/technique/bar-decoder';
+	import { drawBarOverlay, viewportToSource } from '$lib/technique/bar-overlay';
 	import { createBrowserRecorder } from '$lib/technique/recorder';
 	import { createTechniqueReview, type TechniqueReview } from '$lib/technique/review';
 	import type { TechniqueReviewSnapshot, TechniqueTarget } from '$lib/technique/types';
@@ -8,12 +10,28 @@
 	let review = $state<TechniqueReview | null>(null);
 	let snapshot = $state<TechniqueReviewSnapshot>({ phase: 'checking' });
 	let previewVideo = $state<HTMLVideoElement>();
+	let reviewVideo = $state<HTMLVideoElement>();
+	let overlayCanvas = $state<HTMLCanvasElement>();
+	let reviewViewport = $state<HTMLDivElement>();
 	let recordingNow = $state(0);
+	let barPathVisible = $state(true);
+	let barOverlayState = $state<'visible' | 'needs-calibration' | 'tracking-lost'>(
+		'needs-calibration'
+	);
+	let calibrationTapPending = false;
 	let acceptingIntents = true;
+	const showingReview = $derived(
+		snapshot.phase === 'review' || snapshot.phase === 'calibrating' || snapshot.phase === 'tracking'
+	);
 
 	$effect(() => {
 		acceptingIntents = true;
-		const active = createTechniqueReview(target, createBrowserRecorder(), performance);
+		const active = createTechniqueReview(
+			target,
+			createBrowserRecorder(),
+			createBrowserBarTracker(),
+			performance
+		);
 		review = active;
 		const unsubscribe = active.subscribe((next) => (snapshot = next));
 
@@ -50,6 +68,71 @@
 		return () => clearInterval(interval);
 	});
 
+	$effect(() => {
+		if (snapshot.phase !== 'calibrating') return;
+		calibrationTapPending = false;
+		reviewVideo?.pause();
+	});
+
+	$effect(() => {
+		const video = reviewVideo;
+		const canvas = overlayCanvas;
+		const viewport = reviewViewport;
+		const result =
+			snapshot.phase === 'review' && snapshot.bar.kind === 'ready' ? snapshot.bar.result : null;
+		const visible = barPathVisible;
+		if (!video || !canvas || !viewport || !result || !visible) {
+			if (canvas) {
+				canvas.width = 0;
+				canvas.height = 0;
+			}
+			barOverlayState = result ? 'visible' : 'needs-calibration';
+			return;
+		}
+
+		let cancelled = false;
+		let callbackId: number | undefined;
+		let callbackKind: 'video' | 'animation' | undefined;
+		type FrameVideo = HTMLVideoElement & {
+			requestVideoFrameCallback?: (callback: () => void) => number;
+			cancelVideoFrameCallback?: (id: number) => void;
+		};
+		const frameVideo = video as FrameVideo;
+		const schedule = () => {
+			if (cancelled) return;
+			if (frameVideo.requestVideoFrameCallback) {
+				callbackKind = 'video';
+				callbackId = frameVideo.requestVideoFrameCallback(redraw);
+			} else {
+				callbackKind = 'animation';
+				callbackId = requestAnimationFrame(redraw);
+			}
+		};
+		const redraw = () => {
+			if (cancelled) return;
+			const width = viewport.clientWidth;
+			const height = viewport.clientHeight;
+			if (width > 0 && height > 0) {
+				barOverlayState = drawBarOverlay(
+					canvas,
+					result,
+					video.currentTime * 1000,
+					{ width, height },
+					{ devicePixelRatio: window.devicePixelRatio, mirrored: false }
+				).bar;
+			}
+			schedule();
+		};
+		redraw();
+
+		return () => {
+			cancelled = true;
+			if (callbackId === undefined) return;
+			if (callbackKind === 'video') frameVideo.cancelVideoFrameCallback?.(callbackId);
+			else cancelAnimationFrame(callbackId);
+		};
+	});
+
 	const elapsedSeconds = $derived(
 		snapshot.phase === 'recording'
 			? Math.max(0, Math.floor((recordingNow - snapshot.startedAt) / 1000))
@@ -64,6 +147,45 @@
 	function send(type: 'start-countdown' | 'stop') {
 		if (!acceptingIntents || !review) return;
 		void review.send({ type });
+	}
+
+	function sendBarIntent(
+		type: 'start-bar-calibration' | 'cancel-bar-calibration' | 'recalibrate-bar'
+	) {
+		if (!acceptingIntents || !review) return;
+		if (type === 'start-bar-calibration' || type === 'recalibrate-bar') reviewVideo?.pause();
+		void review.send({ type });
+	}
+
+	function calibrateBar(event: PointerEvent) {
+		if (
+			calibrationTapPending ||
+			!acceptingIntents ||
+			!review ||
+			!reviewVideo ||
+			!reviewViewport ||
+			snapshot.phase !== 'calibrating'
+		)
+			return;
+		const bounds = reviewViewport.getBoundingClientRect();
+		const point = viewportToSource(
+			{ x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+			{
+				width: reviewVideo.videoWidth || snapshot.clip.width,
+				height: reviewVideo.videoHeight || snapshot.clip.height,
+				rotationDegrees: snapshot.clip.rotationDegrees,
+				mirrored: false
+			},
+			{ width: bounds.width, height: bounds.height }
+		);
+		if (!point) return;
+		calibrationTapPending = true;
+		void review
+			.send({
+				type: 'calibrate-bar',
+				calibration: { mediaTimeMs: reviewVideo.currentTime * 1000, ...point }
+			})
+			.finally(() => (calibrationTapPending = false));
 	}
 
 	function close() {
@@ -88,10 +210,7 @@
 	</header>
 
 	<main class="relative flex min-h-0 grow flex-col">
-		<section
-			class="relative min-h-0 grow overflow-hidden bg-black"
-			class:hidden={snapshot.phase === 'review'}
-		>
+		<section class="relative min-h-0 grow overflow-hidden bg-black" class:hidden={showingReview}>
 			<video
 				bind:this={previewVideo}
 				class="absolute inset-0 size-full object-cover"
@@ -139,20 +258,46 @@
 			{/if}
 		</section>
 
-		{#if snapshot.phase === 'review'}
+		{#if snapshot.phase === 'review' || snapshot.phase === 'calibrating' || snapshot.phase === 'tracking'}
 			<section class="flex min-h-0 grow flex-col gap-3 bg-black p-4">
 				<div>
 					<p class="text-xs font-semibold tracking-[0.18em] uppercase opacity-60">Raw review</p>
 					<p class="text-sm opacity-75">Nothing is saved. Review the clip, then discard it.</p>
 				</div>
-				<video
-					class="min-h-0 grow bg-black object-contain"
-					src={snapshot.url}
-					controls
-					muted
-					playsinline
-					aria-label="Recorded technique clip"
-				></video>
+				<div bind:this={reviewViewport} class="relative min-h-0 grow overflow-hidden bg-black">
+					<video
+						bind:this={reviewVideo}
+						class="absolute inset-0 size-full object-contain"
+						src={snapshot.url}
+						controls
+						muted
+						playsinline
+						aria-label="Recorded technique clip"
+					></video>
+					<canvas
+						bind:this={overlayCanvas}
+						class="pointer-events-none absolute inset-0 size-full"
+						aria-hidden="true"
+					></canvas>
+					{#if snapshot.phase === 'calibrating'}
+						<button
+							class="absolute inset-x-0 top-0 bottom-12 cursor-crosshair bg-transparent"
+							type="button"
+							aria-label="Calibrate bar position"
+							data-testid="bar-calibration-surface"
+							onpointerdown={calibrateBar}
+						></button>
+					{/if}
+				</div>
+				{#if snapshot.phase === 'calibrating'}
+					<p class="text-sm font-medium" role="status">
+						Pause at the top, then tap the visible sleeve or plate center.
+					</p>
+				{:else if snapshot.phase === 'review' && snapshot.bar.kind === 'ready' && barPathVisible && barOverlayState === 'tracking-lost'}
+					<p class="text-sm font-medium text-warning" role="status">
+						Tracking lost — recalibrate bar.
+					</p>
+				{/if}
 			</section>
 		{/if}
 	</main>
@@ -164,6 +309,8 @@
 			<p class="alert alert-error" role="alert">{snapshot.error}</p>
 		{:else if snapshot.phase === 'failure'}
 			<p class="alert alert-error" role="alert">{snapshot.message}</p>
+		{:else if snapshot.phase === 'review' && snapshot.bar.kind === 'failure'}
+			<p class="alert alert-error" role="alert">{snapshot.bar.message}</p>
 		{/if}
 
 		{#if snapshot.phase === 'checking' || snapshot.phase === 'permission'}
@@ -195,7 +342,53 @@
 			</p>
 		{:else if snapshot.phase === 'recording'}
 			<button class="btn w-full btn-error" type="button" onclick={() => send('stop')}>Stop</button>
-		{:else if snapshot.phase === 'review'}
+		{:else if snapshot.phase === 'review' || snapshot.phase === 'calibrating' || snapshot.phase === 'tracking'}
+			{#if snapshot.phase === 'review' && snapshot.bar.kind !== 'ready'}
+				<button
+					class="btn mb-3 w-full btn-secondary"
+					type="button"
+					onclick={() => sendBarIntent('start-bar-calibration')}
+				>
+					Track bar
+				</button>
+			{:else if snapshot.phase === 'review' && snapshot.bar.kind === 'ready'}
+				<div class="mb-3 grid grid-cols-2 gap-3">
+					<button
+						class="btn btn-secondary"
+						type="button"
+						aria-pressed={barPathVisible}
+						onclick={() => (barPathVisible = !barPathVisible)}
+					>
+						Bar path
+					</button>
+					<button
+						class="btn btn-outline text-current"
+						type="button"
+						onclick={() => sendBarIntent('recalibrate-bar')}
+					>
+						Recalibrate bar
+					</button>
+				</div>
+			{:else if snapshot.phase === 'calibrating'}
+				<button
+					class="btn mb-3 w-full btn-outline text-current"
+					type="button"
+					onclick={() => sendBarIntent('cancel-bar-calibration')}
+				>
+					Cancel calibration
+				</button>
+			{:else if snapshot.phase === 'tracking'}
+				<div class="mb-3 space-y-2" aria-live="polite">
+					<p class="text-sm font-medium">
+						Tracking bar: {snapshot.progress.completed}/{snapshot.progress.total}
+					</p>
+					<progress
+						class="progress w-full progress-secondary"
+						value={snapshot.progress.completed}
+						max={snapshot.progress.total}
+					></progress>
+				</div>
+			{/if}
 			<div class="grid grid-cols-2 gap-3">
 				<button
 					class="btn btn-outline text-current"
