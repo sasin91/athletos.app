@@ -107,55 +107,64 @@ Transient, one-tap bar tracking with a synchronized overlay
 acceptance gate for this slice is that a 30-second clip completes 10 Hz tracking
 within 30 seconds on the Pixel 6a without freezing playback controls.
 
-**No physical run has been collected for this slice.** The row below is the
-recording scaffold, not a result. The automated suite is green — 233 unit tests,
-24 Playwright tests including one-tap tracking, tracking failure, and
-discard-during-tracking; svelte-check 0 errors / 0 warnings — and per the plan
-none of that is evidence of device support.
+**This slice is tester-reported, not instrumented.** The bar-path build carries
+no probe page and no downloadable report, so nothing here is a measured figure.
+The tester ran the flow on the Pixel 6a in both the installed PWA and a Chrome
+browser tab and reported all ten checklist steps behaving as designed, including
+the latency gate. Clip duration, requested and completed sample counts, and
+tracking wall time were not captured. The report was not differentiated by mode,
+so the row below deliberately does not claim per-mode detail.
 
 | Device / browser | Mode | Clip s | Samples | Tracking wall s | 30 s within 30 s | Loss and recalibration | Playback responsiveness | Cleanup | Offline |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Google Pixel 6a / stock Android 17 / Chrome 151 | not observed | not observed | not observed | not observed | not observed | not observed | not observed | not observed | not observed |
+| Google Pixel 6a / stock Android 17 / Chrome 151 | installed PWA and browser tab | not measured | not measured | not measured | reported passed; untimed | gap observed; recalibration replaced the path | no freeze reported | discard cleared clip and overlay | flow repeated offline |
 
 ### Bar-path run notes
 
-Each numbered step below is `not observed` until the physical run is collected.
-Record the outcome against the step rather than replacing it.
+Every line below is a tester observation. None is a measurement, and none is
+inferred from the automated suite.
 
-1. Raw review appears immediately after recording — not observed.
+1. Raw review appeared immediately after recording — reported.
 2. **Track bar** → seek/pause at a clear top position → one tap on the visible
-   sleeve or plate center — not observed.
-3. Determinate `Tracking bar: {completed}/{total}` progress advances while the
-   raw video and its controls stay responsive — not observed.
-4. Play, pause, and scrub keep the progressive path and current marker
-   synchronized to media time — not observed.
-5. The dashed vertical reference stays fixed at the calibration X — not
-   observed.
-6. An occlusion or loss produces a visible gap plus `Tracking lost —
-   recalibrate bar.`, not a guessed continuation — not observed.
-7. **Recalibrate bar** replaces the previous calibration and its whole path
-   without re-recording — not observed.
-8. Discard removes the transient clip and overlay and revokes its media — not
-   observed.
-9. Ordinary Log and Skip remain usable throughout — not observed.
-10. The same flow repeats offline after the app shell has loaded once — not
-    observed.
+   sleeve or plate center — reported.
+3. Determinate `Tracking bar: {completed}/{total}` progress advanced while the
+   raw video and its controls stayed responsive — reported.
+4. Play, pause, and scrub kept the progressive path and current marker
+   synchronized to media time — reported.
+5. The dashed vertical reference stayed fixed at the calibration X — reported.
+6. A loss produced a visible gap rather than a guessed continuation — reported.
+7. **Recalibrate bar** replaced the previous calibration and its whole path
+   without re-recording — reported.
+8. Discard removed the transient clip and overlay — reported.
+9. Ordinary Log and Skip remained usable throughout — reported.
+10. The same flow repeated offline after the app shell had loaded once —
+    reported.
 
-Values still to record: clip duration, requested and completed sample counts,
-tracking wall time, whether the 30-second-within-30-second gate passed, observed
-loss and recalibration behaviour, playback responsiveness during tracking,
-cleanup, offline result, and browser versus installed-PWA mode.
+The 30-second-within-30-second gate is **reported passed and not timed**. The
+tester observed tracking completing without a freeze; no wall clock was read, so
+the margin against the 30-second budget is unknown. That distinction matters
+because the pose slice missed the same target while inference throughput alone
+was comfortably inside it — an untimed pass cannot rule out a thin margin. The
+gate is therefore satisfied for the purpose of proceeding, and reopens the moment
+sampling density, clip length, or the tracker's search policy changes.
 
-Two carry-overs from the pose spike apply to this slice and are also unmeasured
-here. Android page/display suspension previously presented as a decode stall, so
-the run needs the screen kept awake and any `visibilitychange` noted; the plan
-does not add an analysis Wake Lock, and the spike's judgement that the analysis
-slice needs one still stands. `performance.memory` returned identical rounded
-values on this browser and cannot establish memory cleanup, so step 8 is an
-observation of behaviour rather than of bytes.
+Three carry-overs remain unmeasured here:
 
-Missing the latency gate records evidence and triggers algorithm or profiling
-work. It does not reduce the sampling density and does not introduce a model.
+- **Cleanup is behavioural, not byte-verified.** `performance.memory` returned
+  identical rounded values on this browser during the pose spike and cannot
+  establish that memory was released, so step 8 records what the athlete saw.
+- **Display suspension was not controlled for.** It previously presented as a
+  decode stall at 28.9 seconds. This run did not stall, but whether the screen
+  stayed awake by setting or by the tester touching the device is unrecorded, and
+  the bar-path slice adds no analysis Wake Lock. The pose spike's judgement that
+  the analysis lifecycle needs one is untouched by this result.
+- **The verified build is assumed to be the current one.** No code has changed
+  since `c14e37e`; if the run predated it, particularly the three matcher and
+  calibration fixes beneath it, this row needs collecting again.
+
+Instrumented figures for this slice — sample counts and tracking wall time —
+remain worth collecting before the sampling policy or tracker version changes,
+because there is currently no baseline to regress against.
 
 ## Remaining matrix
 

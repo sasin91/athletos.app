@@ -533,11 +533,11 @@ git commit -m "feat: review a calibrated bar path"
 - Consumes: production capture-through-discard bar-path flow from Tasks 1–3.
 - Produces: an observed support entry and a durable D-09 amendment that bar-path lines are local screen-space evidence, not measurements or judgments.
 
-- [ ] **Step 1: Deploy the production build to the existing HTTPS device-test route**
+- [x] **Step 1: Deploy the production build to the existing HTTPS device-test route**
 
 Use the same adapter-node/ngrok method proven by the capture slice. Do not commit generated `frontend/build`, a seed page, tunnel configuration, or device media.
 
-- [ ] **Step 2: Run the accepted physical flow**
+- [x] **Step 2: Run the accepted physical flow**
 
 On the Pixel 6a installed PWA, record a consented 10–30 second side-view squat clip and test:
 
@@ -554,7 +554,7 @@ On the Pixel 6a installed PWA, record a consented 10–30 second side-view squat
 
 Record clip duration, sample count, wall time, tracking loss/recovery observation, UI responsiveness, cleanup, offline result, browser/PWA mode, and whether the 30-second-within-30-second gate passed.
 
-- [ ] **Step 3: Document only observed behavior**
+- [x] **Step 3: Document only observed behavior**
 
 Append a `Bar-path slice` table to the device-results document. Mark any unrun step `not observed`; do not infer support from unit/browser tests.
 
@@ -562,7 +562,7 @@ Amend D-09 in established prose style with:
 
 > Bar-path overlays are transient, local screen-space evidence derived from one athlete calibration. Missing confidence creates a visible gap; no path line is a measurement, verdict, or cue.
 
-- [ ] **Step 4: Run repository checks and commit documentation**
+- [x] **Step 4: Run repository checks and commit documentation**
 
 Run:
 
