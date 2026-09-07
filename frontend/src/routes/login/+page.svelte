@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import type { ActionData } from './$types';
+	import type { ActionData, PageData } from './$types';
 
-	let { form }: { form: ActionData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
 <svelte:head><title>Sign in · AthletOS</title></svelte:head>
@@ -42,6 +42,11 @@
 	</form>
 
 	<p class="text-sm">
-		No account? <a class="link" href={resolve('/register')}>Register</a>
+		No account? <a
+			class="link"
+			href={data.from
+				? resolve(`/register?from=${encodeURIComponent(data.from)}`)
+				: resolve('/register')}>Register</a
+		>
 	</p>
 </main>

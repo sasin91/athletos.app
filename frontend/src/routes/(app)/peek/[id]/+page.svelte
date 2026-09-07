@@ -2,8 +2,8 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 
-	import { commitSession } from '$lib/session';
-	import { loadActiveSession, saveActiveSession } from '$lib/storage';
+	import { commitEditableSession, type EditableSession } from '$lib/session';
+	import { loadActiveSession, saveActiveSession, setActiveAthlete } from '$lib/storage';
 	import { formatMinutes } from '$lib/time';
 	import { uuidv7 } from '$lib/uuid';
 	import type { PageData } from './$types';
@@ -12,11 +12,15 @@
 
 	let committing = $state(false);
 	let alreadyCommitted = $state(false);
+	let preparationError = $state<string | null>(null);
+	let draftId = $state(uuidv7());
 
 	$effect(() => {
-		void loadActiveSession().then((session) => {
-			alreadyCommitted = session !== null;
-		});
+		void setActiveAthlete(data.athleteId, data.enrollmentIds)
+			.then(() => loadActiveSession())
+			.then((session) => {
+				alreadyCommitted = session !== null;
+			});
 	});
 
 	/**
@@ -28,15 +32,28 @@
 	 * happen — is idempotent. Nothing is sent. From here the athlete can lose
 	 * signal entirely and still log the whole session.
 	 */
-	async function commit() {
+	async function commit(edit = false) {
 		if (!data.session || committing) return;
 		committing = true;
 
 		try {
+			preparationError = null;
+			await setActiveAthlete(data.athleteId, data.enrollmentIds);
+			if (await loadActiveSession()) {
+				alreadyCommitted = true;
+				return;
+			}
+			const response = await fetch(resolve('/api/session-drafts'), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ id: draftId, enrollment_id: data.session.enrollment_id })
+			});
+			const prepared = await response.json();
+			if (!response.ok) throw new Error(prepared.detail ?? 'Could not prepare this session.');
 			await saveActiveSession(
-				commitSession(data.session, {
+				commitEditableSession(prepared as EditableSession, {
 					id: uuidv7(),
-					startedAt: new Date().toISOString(),
+					startedAt: edit ? '' : new Date().toISOString(),
 					// Cached with the session, because the logger runs with no
 					// network and cannot ask again (D-09).
 					secondsPerSet: data.session.pace.median_seconds_per_set ?? null
@@ -44,6 +61,9 @@
 			);
 
 			await goto(resolve('/session'));
+		} catch (error) {
+			preparationError =
+				error instanceof Error ? error.message : 'Could not save this session on your device.';
 		} finally {
 			committing = false;
 		}
@@ -90,11 +110,15 @@
 		<button
 			class="btn mb-4 w-full btn-lg btn-primary"
 			type="button"
-			onclick={commit}
+			onclick={() => commit()}
 			disabled={committing}
 		>
 			Commit and start
 		</button>
+		<button class="btn mb-4 w-full" type="button" onclick={() => commit(true)} disabled={committing}
+			>Edit this session</button
+		>
+		{#if preparationError}<p class="alert alert-error" role="alert">{preparationError}</p>{/if}
 	{/if}
 
 	<!--

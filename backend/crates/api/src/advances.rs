@@ -18,6 +18,14 @@ use athletos_training::{CutReason, LoggedSession, LoggedSet, Program, SetStatus,
 
 use crate::audit::RecordedAdvance;
 
+/// New-format workouts explicitly record whether an advance was due. Legacy
+/// history predating the audit table cannot make this stronger assertion.
+pub async fn missing_advances(db: &PgPool, enrollment_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar("select w.id from workouts w left join enrollment_advances a on a.workout_id=w.id
+        where w.enrollment_id=$1 and w.schema_version=2 and w.progression='applied' and a.workout_id is null order by w.started_at,w.id")
+        .bind(enrollment_id).fetch_all(db).await
+}
+
 /// Every recorded advance for one enrolment, in fold order, each refolded by
 /// today's engine.
 pub async fn load_advances(
@@ -79,6 +87,51 @@ async fn logged_session(
     db: &PgPool,
     workout_id: Uuid,
 ) -> Result<Option<LoggedSession>, sqlx::Error> {
+    let version: Option<i16> = sqlx::query_scalar(
+        "select projection_version from enrollment_advances where workout_id=$1",
+    )
+    .bind(workout_id)
+    .fetch_optional(db)
+    .await?;
+    if version == Some(2) {
+        use crate::routes::editable_workouts::{
+            project, valid_program_baseline, validate, EditableSession, EditableSubmittedSet,
+            V2WorkoutSubmission,
+        };
+        let Some((Some(baseline), Some(submission))): Option<(Option<Value>, Option<Value>)> =
+            sqlx::query_as("select baseline,submission from workouts where id=$1")
+                .bind(workout_id)
+                .fetch_optional(db)
+                .await?
+        else {
+            return Ok(None);
+        };
+        let (Ok(baseline), Ok(mut submission)) = (
+            serde_json::from_value::<EditableSession>(baseline),
+            serde_json::from_value::<V2WorkoutSubmission>(submission),
+        ) else {
+            return Ok(None);
+        };
+        if !valid_program_baseline(&baseline) {
+            return Ok(None);
+        }
+        // Reconstruct actual facts from the same append-only rows used by
+        // reports, not a second copy of their values inside the wire document.
+        let rows: Vec<Value> = sqlx::query_scalar("select to_jsonb(s) || jsonb_build_object('id',s.stable_id) from workout_sets s where workout_id=$1 order by position")
+            .bind(workout_id).fetch_all(db).await?;
+        let Ok(sets) = rows
+            .into_iter()
+            .map(serde_json::from_value::<EditableSubmittedSet>)
+            .collect::<Result<Vec<_>, _>>()
+        else {
+            return Ok(None);
+        };
+        submission.sets = sets;
+        if validate(&submission, &baseline.sets).is_err() {
+            return Ok(None);
+        }
+        return Ok(Some(project(&baseline, &submission)));
+    }
     let Some((week, day, cut_reason)): Option<(i16, i16, Option<String>)> =
         sqlx::query_as("select week, day, cut_reason from workouts where id = $1")
             .bind(workout_id)

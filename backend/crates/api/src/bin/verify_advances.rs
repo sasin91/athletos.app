@@ -76,6 +76,10 @@ async fn run() -> Result<i32, Box<dyn std::error::Error>> {
         };
 
         let advances = load_advances(&db, enrollment_id, program).await?;
+        for workout_id in athletos_api::advances::missing_advances(&db, enrollment_id).await? {
+            println!("enrollment {enrollment_id}: workout {workout_id} should have an advance but has none");
+            findings += 1;
+        }
         let result = audit(enrollment_id, &current_state, &advances);
 
         if result.advances == 0 {

@@ -600,14 +600,17 @@ async fn sets(
 ) -> ApiResult<HashMap<Uuid, Vec<SetRow>>> {
     let rows: Vec<SetRow> = sqlx::query_as(&format!(
         "select s.workout_id, s.\"position\", s.exercise,
-                s.prescribed_weight::float8, s.prescribed_reps,
+                case when w.schema_version=2 then (original.value->>'prescribed_weight')::float8 else s.prescribed_weight::float8 end as prescribed_weight,
+                case when w.schema_version=2 then (original.value->>'prescribed_reps')::int2 else s.prescribed_reps end as prescribed_reps,
                 s.actual_weight::float8, s.actual_reps, s.status,
                 s.logged_at, s.drift_reason
          from workout_sets s
          join workouts w on w.id = s.workout_id
          join enrollments e on e.id = w.enrollment_id
+         left join lateral jsonb_array_elements(coalesce(w.baseline->'sets','[]'::jsonb)) original(value) on original.value->>'id'=s.origin_id::text
          where e.athlete_id = $1 and w.started_at >= now() - interval '{WINDOW_MONTHS} months'
-         order by s.workout_id, s.\"position\""
+           and (w.schema_version=1 or s.origin_id is not null)
+         order by s.workout_id, coalesce(s.logged_order,s.\"position\"), s.\"position\""
     ))
     .bind(athlete_id)
     .fetch_all(&mut **tx)
@@ -738,9 +741,8 @@ async fn bests(
                 coalesce(s.logged_at, w.started_at) as at, w.id as workout_id
          from workout_sets s
          join workouts w on w.id = s.workout_id
-         join enrollments e on e.id = w.enrollment_id
          cross join unnest($2::int[]) as b(reps)
-         where e.athlete_id = $1
+         where w.athlete_id = $1
            and s.status = 'done'
            and s.actual_weight > 0
            and s.actual_reps >= b.reps

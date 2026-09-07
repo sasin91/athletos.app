@@ -79,11 +79,67 @@ pub fn app(state: AppState) -> Router {
         .route("/v1/workouts/{id}", get(routes::workouts::show))
         // Read-only, and derived: no table stands behind this (D-13, amended).
         .route("/v1/progress", get(routes::progress::show))
+        .route(
+            "/v1/workout-definitions",
+            get(routes::workout_definitions::list).post(routes::workout_definitions::create),
+        )
+        .route(
+            "/v1/workout-definitions/{id}",
+            get(routes::workout_definitions::get)
+                .patch(routes::workout_definitions::update)
+                .delete(routes::workout_definitions::archive),
+        )
+        .route(
+            "/v1/workout-definitions/{id}/copies",
+            post(routes::workout_definitions::copy),
+        )
+        .route(
+            "/v1/workout-definitions/{id}/shares",
+            get(routes::workout_definitions::list_shares)
+                .post(routes::workout_definitions::create_share),
+        )
+        .route(
+            "/v1/workout-definitions/{id}/shares/{share_id}",
+            axum::routing::delete(routes::workout_definitions::revoke_share),
+        )
+        .route(
+            "/v1/shared-workouts/{token}",
+            get(routes::workout_definitions::preview_share),
+        )
+        .route(
+            "/v1/shared-workouts/{token}/copies",
+            post(routes::workout_definitions::copy_share),
+        )
+        .route(
+            "/v1/workout-definitions/{id}/revisions/{revision}/session",
+            get(routes::editable_workouts::materialize_saved),
+        )
+        .route(
+            "/v2/session-drafts",
+            post(routes::editable_workouts::prepare),
+        )
+        .route("/v2/blank-session", get(routes::editable_workouts::blank))
+        .route(
+            "/v2/workouts",
+            post(routes::editable_workouts::submit).get(routes::editable_workouts::history),
+        )
+        .route("/v2/workouts/{id}", get(routes::editable_workouts::show))
+        .route("/v2/progress", get(routes::editable_workouts::progress))
         // Served at the RFC 8615 well-known location so any future verifier can
         // discover it without configuration. Deliberately *not* under `/v1`:
         // the path is fixed by the RFC, not by us.
         .route("/.well-known/jwks.json", get(routes::auth::jwks))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
-        .layer(TraceLayer::new_for_http())
+        // Matched route patterns omit private share-link tokens from trace spans.
+        .layer(TraceLayer::new_for_http().make_span_with(
+            |request: &axum::http::Request<axum::body::Body>| {
+                let route = request
+                    .extensions()
+                    .get::<axum::extract::MatchedPath>()
+                    .map(|p| p.as_str())
+                    .unwrap_or("unmatched");
+                tracing::info_span!("request", method = %request.method(), route)
+            },
+        ))
         .with_state(state)
 }

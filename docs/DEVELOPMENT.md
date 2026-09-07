@@ -82,6 +82,21 @@ npm run test:e2e             # playwright — builds, previews, downloads a brow
 npm run test                 # both
 ```
 
+The default browser suite uses API fixtures. The workout-library flows also
+have an opt-in mode against a **dedicated test API and database**; these flows
+create accounts, definitions, shares, and recorded workouts. With that API
+running, run from `frontend/`:
+
+```sh
+ATHLETOS_LIVE_E2E=1 API_BASE_URL=http://127.0.0.1:58081 \
+  npx playwright test 'workouts.e2e.ts'
+```
+
+Install Chromium with `npx playwright install chromium`, or set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to an installed Chromium executable.
+The browser preview uses `localhost` so secure authentication cookies work in
+the local production build. Do not point these tests at production.
+
 The frontend reads one variable:
 
 | Variable | Required | Default |
@@ -95,14 +110,11 @@ stored.
 
 ## CI
 
-`.github/workflows/ci.yml`. Three jobs, and the first one matters more than
-CI usually does: **it is the first place the database tests actually run.**
-Everything written against Postgres so far compiles and has never executed,
-because this machine has neither Postgres nor Docker. GitHub Actions gives the
-backend job a `postgres:17` service container, so the moment this is pushed,
-every `#[sqlx::test]` runs for real.
-
-Expect failures on that first run. They are the point of it.
+`.github/workflows/ci.yml` has three jobs. The backend job uses a `postgres:17`
+service container to execute every `#[sqlx::test]`. These tests can also run
+locally with `DATABASE_URL` pointing at an isolated PostgreSQL instance whose
+user can create test databases; the editable-workout implementation has been
+verified that way as well as with live browser flows.
 
 - **backend** — `fmt --check`, `clippy -D warnings`, the pure engine tests on
   their own, then the full suite against a real database.

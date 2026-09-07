@@ -36,6 +36,14 @@ export type DriftReason = Schemas['DriftReason'];
  * actually shown.
  */
 export type LocalSet = {
+	/** Stable wire identity; position remains a legacy clip handle, never display order. */
+	id?: string;
+	blockId?: string;
+	originId?: string | null;
+	committedWeight?: number;
+	committedReps?: number;
+	removed?: boolean;
+	loggedOrder?: number | null;
 	position: number;
 	exercise: string;
 	label: string;
@@ -88,6 +96,14 @@ export type LocalSet = {
 
 /** A committed session, and everything the logger needs to run offline. */
 export type LocalSession = {
+	schemaVersion?: 1 | 2;
+	athleteId?: string;
+	title?: string;
+	source?: 'program' | 'saved_workout' | 'ad_hoc';
+	definitionId?: string | null;
+	revision?: number | null;
+	draftId?: string | null;
+	exercises?: import('./editable-session').CatalogueExercise[];
 	/** The client-minted UUIDv7. The idempotency key for the whole submit. */
 	id: string;
 	enrollmentId: string;
@@ -268,6 +284,7 @@ function prescriptionRunEnd(sets: LocalSet[], targetIndex: number): number {
 	while (
 		end < sets.length &&
 		sets[end].exercise === target.exercise &&
+		sets[end].blockId === target.blockId &&
 		sets[end].prescribedWeight === target.prescribedWeight
 	) {
 		end += 1;
@@ -316,7 +333,6 @@ export function editSet(
 	const targetIndex = session.sets.findIndex((set) => set.position === position);
 	if (targetIndex === -1) return session;
 	const target = session.sets[targetIndex];
-
 	const edited = replace(session, position, (set) => {
 		const actualWeight = values.weight ?? set.actualWeight;
 		return {
@@ -438,13 +454,30 @@ export function noteSet(session: LocalSession, position: number, note: string): 
  */
 export function logSet(session: LocalSession, position: number, at: string): LocalSession {
 	return replace(session, position, (set) => {
-		const actualWeight = snap(set.actualWeight);
+		if (session.schemaVersion === 2) {
+			if (!Number.isFinite(set.actualWeight) || set.actualWeight < 0 || set.actualWeight > 1000)
+				throw new Error('Weight must be between 0 and 1000 kg.');
+			if (Math.abs(set.actualWeight * 100 - Math.round(set.actualWeight * 100)) > 0.000001)
+				throw new Error('Weight can have at most two decimal places.');
+			if (!Number.isInteger(set.actualReps) || set.actualReps < 0 || set.actualReps > 1000)
+				throw new Error('Reps must be a whole number between 0 and 1000.');
+			if (
+				set.actualWeight !== 0 &&
+				session.exercises?.find((exercise) => exercise.key === set.exercise)?.loading ===
+					'bodyweight'
+			)
+				throw new Error('Bodyweight exercises use 0 kg.');
+		}
+		const actualWeight = session.schemaVersion === 2 ? set.actualWeight : snap(set.actualWeight);
 		return {
 			...set,
 			actualWeight,
 			weightInherited: actualWeight === set.prescribedWeight ? false : set.weightInherited,
 			driftReason: actualWeight === set.prescribedWeight ? null : set.driftReason,
 			status: 'done',
+			...(session.schemaVersion === 2
+				? { loggedOrder: Math.max(-1, ...session.sets.map((row) => row.loggedOrder ?? -1)) + 1 }
+				: {}),
 			loggedAt: at
 		};
 	});
@@ -462,6 +495,9 @@ export function skipSet(session: LocalSession, position: number, at: string): Lo
 	return replace(session, position, (set) => ({
 		...set,
 		status: 'skipped',
+		...(session.schemaVersion === 2
+			? { loggedOrder: Math.max(-1, ...session.sets.map((row) => row.loggedOrder ?? -1)) + 1 }
+			: {}),
 		loggedAt: at,
 		driftReason: null
 	}));
@@ -483,13 +519,14 @@ export function resetSet(session: LocalSession, position: number): LocalSession 
 		// Cleared with the status. A stamp surviving an undo would report an
 		// interval for a set the athlete decided they had not done.
 		loggedAt: null,
+		...(session.schemaVersion === 2 ? { loggedOrder: null } : {}),
 		driftReason: null
 	}));
 }
 
 /** Sets still to lift. A skipped set is not remaining; it has been answered. */
 export function setsRemaining(session: LocalSession): number {
-	return session.sets.filter((set) => set.status === 'pending').length;
+	return session.sets.filter((set) => !set.removed && set.status === 'pending').length;
 }
 
 export function setsDone(session: LocalSession): number {
@@ -501,12 +538,12 @@ export function setsDone(session: LocalSession): number {
  * answered, whether it was logged or skipped.
  */
 export function isComplete(session: LocalSession): boolean {
-	return session.sets.every((set) => set.status !== 'pending');
+	return session.sets.every((set) => set.removed || set.status !== 'pending');
 }
 
 /** The first set not yet answered — where the logger should be looking. */
 export function nextSetPosition(session: LocalSession): number | null {
-	return session.sets.find((set) => set.status === 'pending')?.position ?? null;
+	return session.sets.find((set) => !set.removed && set.status === 'pending')?.position ?? null;
 }
 
 /** How a session ended, and why if it ended early. */
@@ -566,8 +603,17 @@ export function intervalBefore(session: LocalSession, position: number): number 
 	if (!set?.loggedAt) return null;
 
 	const previous = session.sets
-		.filter((candidate) => candidate.position < position && candidate.loggedAt !== null)
-		.sort((a, b) => a.position - b.position)
+		.filter(
+			(candidate) =>
+				(session.schemaVersion === 2
+					? (candidate.loggedOrder ?? Infinity) < (set.loggedOrder ?? -1)
+					: candidate.position < position) && candidate.loggedAt !== null
+		)
+		.sort((a, b) =>
+			session.schemaVersion === 2
+				? (a.loggedOrder ?? 0) - (b.loggedOrder ?? 0)
+				: a.position - b.position
+		)
 		.at(-1);
 
 	return intervalBetween(previous?.loggedAt ?? session.startedAt, set.loggedAt);
@@ -669,6 +715,7 @@ export function barUnchangedFrom(session: LocalSession, position: number): boole
  * this count.
  */
 export type SessionSummary = {
+	removed?: number;
 	durationSeconds: number;
 	done: number;
 	skipped: number;
@@ -678,7 +725,8 @@ export type SessionSummary = {
 };
 
 export function summarise(session: LocalSession, ending: Ending): SessionSummary {
-	const count = (status: SetStatus) => session.sets.filter((set) => set.status === status).length;
+	const count = (status: SetStatus) =>
+		session.sets.filter((set) => !set.removed && set.status === status).length;
 
 	return {
 		durationSeconds: Math.max(
@@ -688,7 +736,8 @@ export function summarise(session: LocalSession, ending: Ending): SessionSummary
 		done: count('done'),
 		skipped: count('skipped'),
 		pending: count('pending'),
-		total: session.sets.length,
+		total: session.sets.filter((set) => !set.removed).length,
+		removed: session.sets.filter((set) => set.removed).length,
 		cutReason: ending.cutReason
 	};
 }
@@ -714,6 +763,9 @@ export const DRIFT_REASON_LABELS: Record<DriftReason, string> = {
 	already_loaded: 'bar was loaded',
 	felt_off: 'felt off'
 };
+
+export { commitEditableSession } from './editable-session';
+export type { EditableSession } from './editable-session';
 
 /** The four answers, in the order they are offered. "too easy" leads. */
 export const DRIFT_REASONS: { value: DriftReason; label: string }[] = (

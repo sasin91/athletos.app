@@ -4,8 +4,9 @@
 	import ThemeToggle from '$lib/ThemeToggle.svelte';
 	import { page } from '$app/state';
 	import { flushPending, queueSummary } from '$lib/submit';
+	import { setActiveAthlete } from '$lib/storage';
 
-	let { children } = $props();
+	let { children, data } = $props();
 
 	let queued = $state(0);
 	let rejected = $state(0);
@@ -23,6 +24,7 @@
 		flushing = true;
 
 		try {
+			await setActiveAthlete(data.athleteId, data.enrollmentIds);
 			await flushPending();
 			({ queued, rejected } = await queueSummary());
 		} finally {
@@ -39,6 +41,7 @@
 
 	const nav = [
 		{ href: '/', label: 'Train', icon: 'train' },
+		{ href: '/workouts', label: 'Workouts', icon: 'workouts' },
 		{ href: '/programs', label: 'Programs', icon: 'programs' },
 		{ href: '/maxes', label: 'Maxes', icon: 'maxes' },
 		{ href: '/history', label: 'History', icon: 'history' }
@@ -86,10 +89,12 @@
 		same athlete is holding the same phone).
 	-->
 	<nav
-		class="sticky bottom-0 z-20 grid grid-cols-4 border-t border-base-300 bg-base-100 safe-bottom"
+		class="sticky bottom-0 z-20 grid grid-cols-5 border-t border-base-300 bg-base-100 safe-bottom"
 	>
 		{#each nav as item (item.href)}
-			{@const active = page.url.pathname === item.href}
+			{@const active =
+				page.url.pathname === item.href ||
+				(item.href !== '/' && page.url.pathname.startsWith(`${item.href}/`))}
 			<a
 				href={resolve(item.href)}
 				aria-current={active ? 'page' : undefined}

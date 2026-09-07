@@ -134,7 +134,7 @@ pub struct WorkoutSubmission {
 /// Deliberately missing the schema's third value, `auto_closed`. That one
 /// belongs to the sweep that closes a session left open past three hours (D-08),
 /// and a client must not be able to claim it.
-#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkoutOutcome {
     Completed,
@@ -866,7 +866,7 @@ pub async fn history(
         "select count(*)
          from workouts w
          join enrollments e on e.id = w.enrollment_id
-         where e.athlete_id = $1 and ($2::uuid is null or w.enrollment_id = $2)",
+         where e.athlete_id = $1 and w.schema_version=1 and ($2::uuid is null or w.enrollment_id = $2)",
     )
     .bind(athlete.athlete_id)
     .bind(filter.enrollment_id)
@@ -878,7 +878,7 @@ pub async fn history(
                 w.started_at, w.ended_at, w.outcome, w.cut_reason
          from workouts w
          join enrollments e on e.id = w.enrollment_id
-         where e.athlete_id = $1 and ($2::uuid is null or w.enrollment_id = $2)
+         where e.athlete_id = $1 and w.schema_version=1 and ($2::uuid is null or w.enrollment_id = $2)
          order by w.started_at desc, w.id desc
          limit $3 offset $4",
     )
@@ -938,7 +938,7 @@ pub async fn show(
                 w.started_at, w.ended_at, w.outcome, w.cut_reason, w.notes
          from workouts w
          join enrollments e on e.id = w.enrollment_id
-         where w.id = $1 and e.athlete_id = $2",
+         where w.id = $1 and e.athlete_id = $2 and w.schema_version=1",
     )
     .bind(id)
     .bind(athlete.athlete_id)
@@ -1100,14 +1100,16 @@ async fn already_recorded(
     workout_id: Uuid,
     enrollment_id: Uuid,
 ) -> ApiResult<Option<(i16, i16)>> {
-    let row: Option<(Uuid, i16, i16)> =
-        sqlx::query_as("select enrollment_id, week, day from workouts where id = $1")
+    let row: Option<(Option<Uuid>, Option<i16>, Option<i16>)> =
+        sqlx::query_as("select case when schema_version=1 then enrollment_id end, week, day from workouts where id = $1")
             .bind(workout_id)
             .fetch_optional(&mut **tx)
             .await?;
 
     match row {
-        Some((owner, week, day)) if owner == enrollment_id => Ok(Some((week, day))),
+        Some((Some(owner), Some(week), Some(day))) if owner == enrollment_id => {
+            Ok(Some((week, day)))
+        }
         Some(_) => Err(ApiError::Conflict(
             "that workout id is already in use".to_owned(),
         )),
@@ -1131,7 +1133,7 @@ async fn already_recorded(
 /// and while it is legal as a column alias, this is the one statement in the
 /// codebase with no test that can prove it before the next session has a
 /// database. The target column stays `"position"`, quoted, as the schema has it.
-async fn insert_sets(
+pub(crate) async fn insert_sets(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     workout_id: Uuid,
     sets: &[SubmittedSet],
@@ -1224,7 +1226,7 @@ async fn insert_sets(
 /// point of doing them here: a constraint violation surfaces as a 500 with
 /// "an internal error occurred", which tells a client with a queued offline
 /// workout nothing at all about why it will never be accepted.
-fn validate_syntax(body: &WorkoutSubmission) -> ApiResult<()> {
+pub(crate) fn validate_syntax(body: &WorkoutSubmission) -> ApiResult<()> {
     if body.ended_at < body.started_at {
         return Err(ApiError::Validation(
             "a session cannot end before it started".to_owned(),

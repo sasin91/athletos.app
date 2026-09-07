@@ -11,10 +11,9 @@
  * reason and therefore lands in `prerendered` below. The committed session
  * itself is in IndexedDB and is not this file's business.
  *
- * What this must **not** do is cache API responses. There is no API traffic
- * from the browser to cache — every call goes through SvelteKit server-side —
- * and the one request the browser does make, `POST /api/workouts`, is not a GET
- * and is skipped. A cached prescription would be a stale prescription.
+ * Only the static shell is cached. Account identity, shared links, and server
+ * rendered private pages must always reach the network. Session content and its
+ * offline exercise catalogue are stored explicitly in athlete-scoped IndexedDB.
  */
 
 import { base, build, files, prerendered, version } from '$service-worker';
@@ -58,6 +57,10 @@ worker.addEventListener('fetch', (event) => {
 
 	const url = new URL(request.url);
 	if (url.origin !== location.origin) return;
+	// An allowlist is required here: caching every successful GET ignores
+	// no-store headers in CacheStorage and can leak a previous account or keep a
+	// revoked shared revision accessible from the worker's fallback.
+	if (!SHELL.includes(url.pathname) && !SHELL.includes(url.pathname.replace(base, ''))) return;
 
 	event.respondWith(respond(request, url));
 });

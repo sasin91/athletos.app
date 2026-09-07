@@ -13,20 +13,23 @@
  */
 
 import { classifyStatus, enqueued, flushQueue } from './queue';
-import type { FlushReport, SendOutcome } from './queue';
-import { queueStore } from './storage';
-import type { WorkoutReceipt, WorkoutSubmission } from './session';
+import type { FlushReport, SendOutcome, AnySubmission, AnyReceipt, QueuedWorkout } from './queue';
+import { queueStore, enqueueAndClearActive, getActiveAthlete, setActiveAthlete } from './storage';
 
 export type { FlushReport };
 
 /** One attempt, translated into an outcome the queue understands. */
-export async function send(submission: WorkoutSubmission): Promise<SendOutcome> {
+export async function send(submission: AnySubmission, item?: QueuedWorkout): Promise<SendOutcome> {
 	let response: Response;
 
 	try {
-		response = await fetch('/api/workouts', {
+		const athleteId = item?.athleteId ?? (await getActiveAthlete());
+		response = await fetch('source' in submission ? '/api/v2/workouts' : '/api/workouts', {
 			method: 'POST',
-			headers: { 'content-type': 'application/json' },
+			headers: {
+				'content-type': 'application/json',
+				...(athleteId ? { 'x-athlete-id': athleteId } : {})
+			},
 			body: JSON.stringify(submission)
 		});
 	} catch {
@@ -35,7 +38,7 @@ export async function send(submission: WorkoutSubmission): Promise<SendOutcome> 
 	}
 
 	let detail: string | null = null;
-	let receipt: WorkoutReceipt | null = null;
+	let receipt: AnyReceipt | null = null;
 
 	try {
 		const body: unknown = await response.json();
@@ -47,7 +50,7 @@ export async function send(submission: WorkoutSubmission): Promise<SendOutcome> 
 			// Trusted as far as the generated type goes and no further: this is
 			// our own API through our own BFF, and a body that is not the shape
 			// it claims is a bug we want loud rather than silently swallowed.
-			if ('summary' in body) receipt = body as WorkoutReceipt;
+			if ('summary' in body) receipt = body as AnyReceipt;
 		}
 	} catch {
 		// A body that is not JSON tells us nothing the status has not already.
@@ -63,14 +66,39 @@ export async function send(submission: WorkoutSubmission): Promise<SendOutcome> 
  * closed while the request is in flight, which on a phone that has just been
  * put back in a pocket is not a remote possibility.
  */
-export async function submitSession(submission: WorkoutSubmission): Promise<FlushReport> {
-	await queueStore.put(enqueued(submission, new Date().toISOString()));
-	return flushQueue(queueStore, send);
+export async function submitSession(
+	submission: AnySubmission,
+	athleteId?: string
+): Promise<FlushReport> {
+	await enqueueAndClearActive(
+		enqueued(
+			submission,
+			new Date().toISOString(),
+			athleteId ?? (await getActiveAthlete()) ?? undefined
+		)
+	);
+	return flushPending();
 }
 
 /** Retries everything outstanding. Run on launch and when the phone reconnects. */
-export function flushPending(): Promise<FlushReport> {
-	return flushQueue(queueStore, send);
+export async function flushPending(): Promise<FlushReport> {
+	try {
+		const response = await fetch('/api/athlete', { cache: 'no-store' });
+		if (!response.ok) throw new Error('Sign in to send your saved workouts.');
+		const athlete = (await response.json()) as { id: string; enrollment_ids?: string[] };
+		await setActiveAthlete(athlete.id, athlete.enrollment_ids);
+		return flushQueue(queueStore, send);
+	} catch {
+		return {
+			accepted: [],
+			duplicate: [],
+			rejected: [],
+			retrying: (await queueStore.all())
+				.filter((item) => item.state === 'queued')
+				.map((item) => item.id),
+			receipts: {}
+		};
+	}
 }
 
 /** How many submissions are still waiting, and how many will never be taken. */

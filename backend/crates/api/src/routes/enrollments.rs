@@ -338,7 +338,7 @@ pub struct LiftView {
 /// Mirrored from [`athletos_training::PlateChange`] because the training crate
 /// depends on `serde`, `serde_json` and `thiserror` and nothing else (D-15),
 /// so it cannot carry a `ToSchema` of its own.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct PlateChangeView {
     /// Per side, outermost first — the order they actually come off.
     #[schema(example = json!([1.25, 2.5]))]
@@ -670,7 +670,7 @@ fn blocks_of(session: &Session) -> Vec<BlockView> {
 /// Blocks in order, lifts in order, one entry per set, positions from zero. The
 /// ordering is the contract: it is what `workout_sets.position` means, and it is
 /// the same walk the engine's own test fixtures make.
-fn prescribed_sets_of(session: &Session) -> Vec<PrescribedSet> {
+pub(crate) fn prescribed_sets_of(session: &Session) -> Vec<PrescribedSet> {
     let mut sets = Vec::new();
     let mut position = 0u16;
 

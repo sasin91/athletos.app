@@ -26,6 +26,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const body = (await request.json()) as Schemas['WorkoutSubmission'];
+	const expectedAthlete = request.headers.get('x-athlete-id');
+	if (expectedAthlete) {
+		const athlete = await locals.api.GET('/v1/auth/me');
+		if (!athlete.data || athlete.data.athlete_id !== expectedAthlete) {
+			return json(
+				{ detail: 'Sign in with the account that recorded this workout.' },
+				{ status: 401 }
+			);
+		}
+	}
 
 	const { data, error, response } = await locals.api.POST('/v1/workouts', { body });
 

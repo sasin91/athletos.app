@@ -32,7 +32,6 @@
 //! what a set is worth, how few is too few — is settled here.
 
 use serde::Serialize;
-use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -126,15 +125,18 @@ pub struct PaceProjection {
 /// pulling an older session in behind it, and the pace stays a statement about
 /// the last five sessions instead of about the last five that happened to be
 /// measurable — which could reach back a year.
-pub async fn measure(db: &PgPool, athlete_id: Uuid, sets: usize) -> ApiResult<PaceProjection> {
+pub async fn measure<'e>(
+    db: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+    athlete_id: Uuid,
+    sets: usize,
+) -> ApiResult<PaceProjection> {
     let samples: Vec<Sample> = sqlx::query_as(
         "select extract(epoch from (recent.ended_at - recent.started_at))::float8,
                 count(*) filter (where s.status = 'done')
          from (
              select w.id, w.started_at, w.ended_at
              from workouts w
-             join enrollments e on e.id = w.enrollment_id
-             where e.athlete_id = $1
+             where w.athlete_id = $1
              order by w.started_at desc, w.id desc
              limit $2
          ) recent

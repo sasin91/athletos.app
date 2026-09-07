@@ -1,4 +1,5 @@
 import { redirect } from '@sveltejs/kit';
+import { unwrap } from '$lib/server/api';
 
 import type { LayoutServerLoad } from './$types';
 
@@ -17,5 +18,12 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		redirect(303, `/login?from=${encodeURIComponent(url.pathname)}`);
 	}
 
-	return {};
+	const [me, enrollments] = await Promise.all([
+		locals.api.GET('/v1/auth/me', {}),
+		locals.api.GET('/v1/enrollments', {})
+	]);
+	return {
+		athleteId: unwrap(me, 'Could not verify your account.').athlete_id,
+		enrollmentIds: unwrap(enrollments, 'Could not load your programs.').enrollments.map((e) => e.id)
+	};
 };

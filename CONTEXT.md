@@ -87,6 +87,23 @@ are always rounded **down** to one.
 
 ### Training
 
+**My workouts**:
+The athlete's library of reusable workouts, authored by them or copied from a
+shared link. Interface actions say Create workout, Start workout, Edit workout,
+Share workout, and Save a copy. Internally a `WorkoutDefinition` owns immutable
+`WorkoutRevision`s; a recorded `Workout` is the result of training.
+_Avoid in interface_: Template, definition, dynamic workout category
+
+**Edit this session**:
+Change the exercises, sets, or targets for this particular session. Available
+for saved workouts and program sessions. Original prescribed work and recorded
+results remain distinct. Saving the changes as a reusable workout is explicit.
+
+**Shared workout**:
+A specific saved revision accessible through a revocable unlisted link. Save a
+copy creates an independent workout owned by the recipient. Edits and revocation
+cannot retract copies or change completed sessions.
+
 **Session**:
 One day's prescribed work — the exercises, and the lifts within them.
 _Avoid_: Day, training day
@@ -103,7 +120,8 @@ Adaptive one.
 **Commit**:
 Starting a session for real. Materialises every prescribed set and stamps the
 start time. The opposite of a Peek.
-_Avoid_: Start (ambiguous with beginning a program), begin
+The interface may say Start workout. Preparing a program draft before editing
+captures its baseline on the server without starting this clock.
 
 **Set**:
 One performed unit of work, carrying both what was prescribed and what was

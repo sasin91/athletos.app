@@ -3,7 +3,7 @@
 	import EnrollmentAdjustments from '$lib/EnrollmentAdjustments.svelte';
 	import ProgressDashboard from '$lib/ProgressDashboard.svelte';
 	import type { LocalSession } from '$lib/session';
-	import { loadActiveSession } from '$lib/storage';
+	import { loadActiveSession, setActiveAthlete } from '$lib/storage';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -18,7 +18,9 @@
 	let active = $state<LocalSession | null>(null);
 
 	$effect(() => {
-		void loadActiveSession().then((session) => (active = session));
+		void setActiveAthlete(data.athleteId, data.enrollmentIds)
+			.then(loadActiveSession)
+			.then((session) => (active = session));
 	});
 
 	const activeEnrollments = $derived(data.enrollments.filter((e) => e.status === 'active'));
@@ -31,9 +33,14 @@
 
 {#if active}
 	<a href={resolve('/session')} class="btn mb-4 w-full btn-lg btn-primary">
-		Resume session — week {active.week}, day {active.day}
+		Resume session — {active.title ?? `week ${active.week}, day ${active.day}`}
 	</a>
 {/if}
+
+<div class="mb-4 grid grid-cols-2 gap-2">
+	<a class="btn" href={resolve('/workouts')}>My workouts</a>
+	<a class="btn btn-outline" href={resolve('/workouts/new')}>Create workout</a>
+</div>
 
 {#if activeEnrollments.length === 0}
 	<div class="card border">
@@ -66,6 +73,37 @@
 	{/each}
 </ul>
 
+{#if data.allProgress}
+	<section class="mt-6 mb-4 rounded-box border border-base-300 p-3">
+		<h2 class="font-bold">All your training</h2>
+		<p class="mb-3 text-xs opacity-70">Program sessions and your own workouts</p>
+		<dl class="grid grid-cols-3 gap-3 text-sm">
+			<div>
+				<dt class="opacity-70">Sessions</dt>
+				<dd class="text-lg font-semibold">{data.allProgress.sessions}</dd>
+			</div>
+			<div>
+				<dt class="opacity-70">Sets logged</dt>
+				<dd class="text-lg font-semibold">{data.allProgress.done_sets}</dd>
+			</div>
+			<div>
+				<dt class="opacity-70">Load moved</dt>
+				<dd class="text-lg font-semibold">{data.allProgress.load_moved_kg.toLocaleString()} kg</dd>
+			</div>
+		</dl>
+		{#if data.allProgress.estimates.length > 0}
+			<h3 class="mt-3 text-sm font-semibold">Estimated strength</h3>
+			<ul class="mt-1 text-sm">
+				{#each data.allProgress.estimates as estimate (estimate.exercise)}<li>
+						{estimate.label}: {estimate.is_lower_bound ? 'at least ' : ''}{estimate.estimate} kg
+					</li>{/each}
+			</ul>
+		{/if}
+	</section>
+{/if}
+
+<h2 class="mt-6 font-bold">Program trends</h2>
+<p class="mt-1 text-xs opacity-70">These charts follow sessions recorded with your programs.</p>
 <ProgressDashboard
 	progress={data.progress}
 	enrollments={data.enrollments}
