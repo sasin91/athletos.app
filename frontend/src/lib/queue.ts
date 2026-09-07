@@ -1,7 +1,7 @@
 /**
  * The offline submit queue (D-09).
  *
- * A finished session becomes one `POST /v1/workouts` carrying a client-minted
+ * A finished session becomes one versioned workout POST carrying a client-minted
  * UUIDv7. If that post fails — no signal, API down, laptop asleep — the
  * submission stays here and is retried on the next launch. A retry is safe by
  * construction: the server does `on conflict (id) do nothing` and answers 200
@@ -15,12 +15,17 @@
  */
 
 import type { WorkoutReceipt, WorkoutSubmission } from './session';
+import type { V2WorkoutSubmission, V2WorkoutReceipt } from './editable-session';
+export type AnySubmission = WorkoutSubmission | V2WorkoutSubmission;
+export type AnyReceipt = WorkoutReceipt | V2WorkoutReceipt;
 
 /** A submission waiting to land, and its history of trying. */
 export type QueuedWorkout = {
 	/** The workout id, which is also the store's key and the idempotency key. */
 	id: string;
-	submission: WorkoutSubmission;
+	submission: AnySubmission;
+	schemaVersion?: 1 | 2;
+	athleteId?: string;
 	queuedAt: string;
 	attempts: number;
 	lastError: string | null;
@@ -36,7 +41,7 @@ export type QueuedWorkout = {
 
 /** What one attempt at sending came to. */
 export type SendOutcome =
-	| { kind: 'accepted'; duplicate: boolean; receipt: WorkoutReceipt | null }
+	| { kind: 'accepted'; duplicate: boolean; receipt: AnyReceipt | null }
 	| { kind: 'retry'; reason: string }
 	| { kind: 'rejected'; reason: string };
 
@@ -59,7 +64,7 @@ export type SendOutcome =
 export function classifyStatus(
 	status: number,
 	detail: string | null,
-	receipt: WorkoutReceipt | null = null
+	receipt: AnyReceipt | null = null
 ): SendOutcome {
 	if (status === 200 || status === 201) {
 		return { kind: 'accepted', duplicate: status === 200, receipt };
@@ -100,13 +105,20 @@ export type FlushReport = {
 	 * response body may not have parsed, and losing the numbers is not losing
 	 * the session.
 	 */
-	receipts: Record<string, WorkoutReceipt>;
+	receipts: Record<string, AnyReceipt>;
 };
 
-export function enqueued(submission: WorkoutSubmission, queuedAt: string): QueuedWorkout {
+export function enqueued(
+	submission: AnySubmission,
+	queuedAt: string,
+	athleteId?: string
+): QueuedWorkout {
 	return {
 		id: submission.id,
 		submission,
+		...(athleteId
+			? { athleteId, schemaVersion: 'source' in submission ? (2 as const) : (1 as const) }
+			: {}),
 		queuedAt,
 		attempts: 0,
 		lastError: null,
@@ -124,7 +136,7 @@ export function enqueued(submission: WorkoutSubmission, queuedAt: string): Queue
  */
 export async function flushQueue(
 	store: QueueStore,
-	send: (submission: WorkoutSubmission) => Promise<SendOutcome>
+	send: (submission: AnySubmission, item?: QueuedWorkout) => Promise<SendOutcome>
 ): Promise<FlushReport> {
 	const report: FlushReport = {
 		accepted: [],
@@ -139,7 +151,7 @@ export async function flushQueue(
 		.sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
 
 	for (const item of pending) {
-		const outcome = await send(item.submission);
+		const outcome = await send(item.submission, item);
 
 		if (outcome.kind === 'accepted') {
 			await store.remove(item.id);

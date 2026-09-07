@@ -1,15 +1,15 @@
 <script lang="ts">
 	/**
-	 * The four navigation glyphs, inline.
+	 * The navigation glyphs, inline.
 	 *
-	 * Inline rather than an icon package: it is four shapes, and a PWA that has
+	 * Inline rather than an icon package: it is a few shapes, and a PWA that has
 	 * to open with no network should not carry a dependency to draw them.
 	 *
-	 * Two of the four are taken from the subject rather than from a generic set —
+	 * Two are taken from the subject rather than from a generic set —
 	 * a loaded barbell for training, and a plate seen face-on for maxes. At this
 	 * size an athlete reads them peripherally, without reading the label.
 	 */
-	export type NavIconName = 'train' | 'programs' | 'maxes' | 'history';
+	export type NavIconName = 'train' | 'workouts' | 'programs' | 'maxes' | 'history';
 
 	let { name }: { name: NavIconName } = $props();
 </script>
@@ -30,6 +30,9 @@
 		<path d="M4 12h16" />
 		<rect x="5.25" y="7.25" width="3.25" height="9.5" rx="1.25" />
 		<rect x="15.5" y="7.25" width="3.25" height="9.5" rx="1.25" />
+	{:else if name === 'workouts'}
+		<rect x="5" y="3.5" width="14" height="17" rx="2" />
+		<path d="M8.5 8h7M8.5 12h7M8.5 16h4" />
 	{:else if name === 'programs'}
 		<!-- Two cards in a stack: the catalogue. -->
 		<rect x="3.5" y="4.5" width="17" height="6" rx="1.5" />

@@ -28,6 +28,12 @@ const progress: ProgressView = {
 	window_months: 12
 };
 
+const accountData = {
+	athleteId: 'athlete-test',
+	enrollmentIds: [enrollment.id],
+	allProgress: null
+};
+
 const observedProgress: ProgressView = {
 	lifts: [
 		{
@@ -158,6 +164,32 @@ describe('Train page load', () => {
 });
 
 describe('Train page SSR', () => {
+	it('labels all-source totals separately from program trends', () => {
+		const body = render(Page, {
+			props: {
+				data: {
+					...accountData,
+					enrollments: [],
+					progress: null,
+					requestedLift: null,
+					allProgress: {
+						sessions: 4,
+						done_sets: 24,
+						load_moved_kg: 1200,
+						duration_seconds: 3600,
+						estimates: [{ exercise: 'squat', label: 'Squat', estimate: 100, is_lower_bound: true }]
+					}
+				},
+				form: null
+			}
+		}).body;
+		expect(body).toContain('All your training');
+		expect(body).toContain('Program sessions and your own workouts');
+		expect(body).toContain('Squat: at least 100 kg');
+		expect(body).toContain('Program trends');
+		expect(body).toContain('My workouts');
+	});
+
 	it('scopes each active enrollment adjustment form to that enrollment', () => {
 		const second = {
 			...enrollment,
@@ -176,7 +208,7 @@ describe('Train page SSR', () => {
 		];
 		const body = render(Page, {
 			props: {
-				data: { enrollments: active, progress: null, requestedLift: null },
+				data: { ...accountData, enrollments: active, progress: null, requestedLift: null },
 				form: null
 			}
 		}).body;
@@ -192,7 +224,7 @@ describe('Train page SSR', () => {
 	it('keeps training usable when statistics are unavailable', () => {
 		const body = render(Page, {
 			props: {
-				data: { enrollments: [enrollment], progress: null, requestedLift: null },
+				data: { ...accountData, enrollments: [enrollment], progress: null, requestedLift: null },
 				form: null
 			}
 		}).body;
@@ -212,6 +244,7 @@ describe('Train page SSR', () => {
 		const body = render(Page, {
 			props: {
 				data: {
+					...accountData,
 					enrollments: [enrollment, finished],
 					progress: observedProgress,
 					requestedLift: 'squat'
@@ -264,6 +297,7 @@ describe('Train page SSR', () => {
 		const body = render(Page, {
 			props: {
 				data: {
+					...accountData,
 					enrollments: [enrollment],
 					progress: emptyStatistics,
 					requestedLift: 'squat'
@@ -283,6 +317,7 @@ describe('Train page SSR', () => {
 		const body = render(Page, {
 			props: {
 				data: {
+					...accountData,
 					enrollments: [enrollment],
 					progress: { ...progress, overall: observedProgress.overall },
 					requestedLift: null

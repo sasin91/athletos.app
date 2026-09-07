@@ -27,23 +27,60 @@
 
 <h1 class="text-xl font-bold">{formatDate(workout.started_at)}</h1>
 <p class="mb-4 text-sm opacity-70">
-	{workout.program_name} · week {workout.week}, day {workout.day}
+	{workout.title}
+	{#if workout.source === 'program' && workout.week !== null && workout.day !== null}
+		· week {workout.week}, day {workout.day}
+	{:else if workout.source === 'saved_workout'}
+		· My workouts
+	{/if}
+	{#if workout.modified}
+		· Modified{/if}
 	· {formatMinutes(workout.duration_seconds) ?? 'still open'}
 	{#if workout.cut_reason}
 		· cut short ({workout.cut_reason})
 	{/if}
 </p>
 
+{#if workout.progression === 'not_applied_stale'}
+	<p class="mb-4 alert alert-info">
+		This workout was recorded. Your program had already advanced or ended, so this session did not
+		advance it again.
+	</p>
+{/if}
+
+{#if workout.modified}
+	<section class="mb-4 rounded-box border border-base-300 p-3 text-sm">
+		<h2 class="mb-2 font-semibold">Changes to this session</h2>
+		<p>
+			{data.detail.changes.added_sets} added · {data.detail.changes.removed_sets} removed
+		</p>
+		<p class="mt-1 opacity-70">
+			{data.detail.changes.source_changed_sets} sets changed from the original workout · {data
+				.detail.changes.committed_changed_sets} changed after starting
+		</p>
+		<p class="mt-1 opacity-70">
+			Original work: {data.detail.changes.baseline_load_kg} kg · At start: {data.detail.changes
+				.committed_load_kg} kg · Final plan: {data.detail.changes.planned_load_kg} kg
+		</p>
+		{#if data.detail.changes.added_load_moved_kg > 0}<p class="mt-1 opacity-70">
+				Load moved in added work: {data.detail.changes.added_load_moved_kg} kg
+			</p>{/if}
+	</section>
+{/if}
+
 {#if data.detail.notes}
 	<p class="mb-4">{data.detail.notes}</p>
 {/if}
 
 <ol class="space-y-1">
-	{#each data.detail.sets as set (set.position)}
+	{#each data.detail.sets as set (set.id)}
 		<li class="flex flex-wrap items-baseline justify-between border p-2 text-sm">
 			<span class="font-medium">{set.label}</span>
 			<span class:font-bold={drifted(set)}>
-				{#if set.status === 'done'}
+				{#if set.removed}
+					Removed — originally {set.baseline_weight ?? set.prescribed_weight} kg × {set.baseline_reps ??
+						set.prescribed_reps}
+				{:else if set.status === 'done'}
 					{set.actual_weight} kg × {set.actual_reps}
 					{#if drifted(set)}
 						<span class="opacity-70">
@@ -54,6 +91,18 @@
 					{set.status} — asked {set.prescribed_weight} kg × {set.prescribed_reps}
 				{/if}
 			</span>
+			{#if workout.schema_version === 2 && !set.origin_id}
+				<p class="mt-1 w-full text-xs opacity-60">Added to this session</p>
+			{:else if !set.removed && set.baseline_weight !== null && (set.baseline_weight !== set.prescribed_weight || set.baseline_reps !== set.prescribed_reps)}
+				<p class="mt-1 w-full text-xs opacity-60">
+					Original workout: {set.baseline_weight} kg × {set.baseline_reps}
+				</p>
+			{/if}
+			{#if set.committed_weight !== set.prescribed_weight || set.committed_reps !== set.prescribed_reps}
+				<p class="mt-1 w-full text-xs opacity-60">
+					At session start: {set.committed_weight} kg × {set.committed_reps}
+				</p>
+			{/if}
 			{#if set.note}
 				<p class="mt-1 w-full text-sm opacity-60">{set.note}</p>
 			{/if}

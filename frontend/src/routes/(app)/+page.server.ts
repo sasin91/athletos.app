@@ -22,10 +22,11 @@ function optionalData<T>(result: OptionalRequestResult<T>): T | null {
  * counts progress, so there is nothing to sort or compute here (D-11).
  */
 export const load: PageServerLoad = async ({ locals, url }) => {
-	const [enrollmentResult, progress, programResult] = await Promise.all([
+	const [enrollmentResult, progress, programResult, allProgressResult] = await Promise.all([
 		locals.api.GET('/v1/enrollments', {}),
 		optionalProgress(() => locals.api.GET('/v1/progress', {})),
-		optionalRequest(() => locals.api.GET('/v1/programs', {}))
+		optionalRequest(() => locals.api.GET('/v1/programs', {})),
+		optionalRequest(() => locals.api.GET('/v2/progress', {}))
 	]);
 	const enrollments = unwrap(enrollmentResult, 'Could not load your programs.');
 	const programDocument = optionalData(programResult);
@@ -51,6 +52,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			adjustments: adjustmentDocuments[index]?.adjustments ?? null
 		})),
 		progress,
+		allProgress: optionalData(allProgressResult),
 		requestedLift: url.searchParams.get('lift')
 	};
 };

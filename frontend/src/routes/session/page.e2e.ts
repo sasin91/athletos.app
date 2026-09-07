@@ -25,10 +25,18 @@ import type {
  * do — IndexedDB is denied outright on its opaque origin.
  */
 async function seedSession(page: Page, session: LocalSession) {
+	// Finishing verifies ownership before draining the device queue. Keep that
+	// request real up to its BFF boundary, just like the receipt fixture below.
+	await page.route('/api/athlete', (route) =>
+		route.fulfill({
+			json: { id: 'e2e-athlete', enrollment_ids: [session.enrollmentId] }
+		})
+	);
 	await page.goto('/login');
 	await page.evaluate(async (data) => {
 		await new Promise<void>((resolve, reject) => {
-			const request = indexedDB.open('athletos', 1);
+			// First seed creates v1; later seeds also work after the logger's v2 upgrade.
+			const request = indexedDB.open('athletos');
 
 			request.onupgradeneeded = () => {
 				const db = request.result;

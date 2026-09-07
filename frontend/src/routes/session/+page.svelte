@@ -3,6 +3,9 @@
 	import Plates from '$lib/Plates.svelte';
 	import TechniqueReview from '$lib/TechniqueReview.svelte';
 	import ThemeToggle from '$lib/ThemeToggle.svelte';
+	import EditableWorkout from '$lib/EditableWorkout.svelte';
+	import { startEditableSession, toEditableSubmission } from '$lib/editable-session';
+	import type { AnyReceipt } from '$lib/queue';
 	import { formatClock, formatElapsed } from '$lib/time';
 	import { projectedFinish } from '$lib/pace';
 	import {
@@ -28,14 +31,21 @@
 	} from '$lib/session';
 	import type { CutReason, LocalSession, SessionSummary, WorkoutReceipt } from '$lib/session';
 	import type { TechniqueTarget } from '$lib/technique/types';
-	import { clearActiveSession, loadActiveSession, saveActiveSession } from '$lib/storage';
+	import {
+		clearActiveSession,
+		loadActiveSession,
+		saveActiveSession,
+		saveWorkoutDraft,
+		clearWorkoutDraft
+	} from '$lib/storage';
 	import { submitSession } from '$lib/submit';
 
 	/**
 	 * The logger. Every tap in here is local (D-09).
 	 *
-	 * Nothing on this page calls the network until the athlete finishes, and
-	 * even then the submit is queued before it is attempted. There is no rest
+	 * Editing and logging need no network. Finish durably queues the session
+	 * before attempting a send; Save as workout retains a local draft before its
+	 * explicit library write. There is no rest
 	 * timer: one was tried in the predecessor and removed because it was a
 	 * stress factor (D-10).
 	 */
@@ -46,6 +56,11 @@
 	let phase = $state<Phase>('loading');
 	let now = $state(Date.now());
 	let techniqueTarget = $state<TechniqueTarget | null>(null);
+	let editing = $state(false);
+	let saving = $state(false);
+	let storageError = $state('');
+	let savedWorkoutMessage = $state('');
+	let writing: Promise<void> = Promise.resolve();
 
 	// Which set's note field is open. One at a time: the athlete is writing
 	// about the set in front of them, and a screen of open textareas is a
@@ -53,10 +68,16 @@
 	let noting = $state<number | null>(null);
 
 	$effect(() => {
-		void loadActiveSession().then((stored) => {
-			session = stored;
-			phase = stored ? 'logging' : 'empty';
-		});
+		void loadActiveSession()
+			.then((stored) => {
+				session = stored;
+				editing = stored?.schemaVersion === 2 && !stored.startedAt;
+				phase = stored ? 'logging' : 'empty';
+			})
+			.catch(() => {
+				storageError = 'Could not open the workout stored on this device. Reload to try again.';
+				phase = 'empty';
+			});
 	});
 
 	// One tick a second is all a wall clock needs, and it is the only thing on
@@ -68,14 +89,27 @@
 
 	/** Applies a change and writes it straight back — crash safety is local too. */
 	async function apply(change: (current: LocalSession) => LocalSession) {
-		if (!session) return;
+		if (!session || saving) return;
 
-		const updated = change(session);
+		let updated: LocalSession;
+		try {
+			updated = change(session);
+		} catch (error) {
+			storageError = error instanceof Error ? error.message : 'Could not apply that change.';
+			return;
+		}
 		session = updated;
-		await saveActiveSession(updated);
+		writing = writing.catch(() => {}).then(() => saveActiveSession(updated));
+		try {
+			await writing;
+			storageError = '';
+		} catch {
+			storageError =
+				'This change could not be saved on this device. Free device storage and try again before leaving.';
+		}
 	}
 
-	const elapsed = $derived(session ? now - Date.parse(session.startedAt) : 0);
+	const elapsed = $derived(session?.startedAt ? now - Date.parse(session.startedAt) : 0);
 	const remaining = $derived(session ? setsRemaining(session) : 0);
 	const done = $derived(session ? setsDone(session) : 0);
 
@@ -84,9 +118,8 @@
 	const current = $derived(session ? nextSetPosition(session) : null);
 
 	// Kept across the submit so the finish screen has something to show. The
-	// session itself is cleared before the send is even attempted — it belongs
-	// to the queue from that moment, and leaving it here would offer a "resume"
-	// button for a workout already on its way.
+	// active slot and queued submission change atomically before the send, so a
+	// failed storage transaction leaves the workout available to resume.
 	let summary = $state<SessionSummary | null>(null);
 	let recordId = $state<string | null>(null);
 
@@ -94,34 +127,108 @@
 	// rather than taken off the report as a whole: a flush sends everything
 	// outstanding, and an older session landing at the same moment would
 	// otherwise put its numbers on this ending.
-	let receipt = $state<WorkoutReceipt | null>(null);
+	let receipt = $state<AnyReceipt | null>(null);
 
 	async function finishSession(cutReason: CutReason | null) {
+		if (!session || saving || !session.startedAt) return;
+		saving = true;
+		try {
+			await writing;
+
+			const ending = { endedAt: new Date().toISOString(), cutReason };
+			let body;
+			try {
+				body =
+					session.schemaVersion === 2
+						? toEditableSubmission(session, ending)
+						: toSubmission(session, ending);
+			} catch (error) {
+				storageError =
+					error instanceof Error ? error.message : 'Check the entered sets before finishing.';
+				return;
+			}
+
+			summary = summarise(session, ending);
+			recordId = session.id;
+
+			// Submission moves the active document into the queue atomically.
+			const report = await submitSession(body, session.athleteId);
+			session = null;
+			receipt = report.receipts[body.id] ?? null;
+
+			// Asked about *this* id rather than about the report as a whole. A flush
+			// sends everything outstanding, so an older session landing while this
+			// one is still stuck would otherwise be reported as this one landing.
+			if (report.accepted.includes(body.id) || report.duplicate.includes(body.id)) {
+				phase = 'sent';
+			} else if (report.rejected.includes(body.id)) {
+				phase = 'refused';
+			} else {
+				phase = 'queued';
+			}
+		} catch {
+			storageError = 'Could not save the finished workout. It is still here; try again.';
+		} finally {
+			saving = false;
+		}
+	}
+
+	async function start() {
+		if (!session || saving) return;
+		saving = true;
+		try {
+			await writing;
+			const updated = startEditableSession(session, new Date().toISOString());
+			await saveActiveSession(updated);
+			session = updated;
+			storageError = '';
+			editing = false;
+		} catch {
+			storageError =
+				'Could not save the start of this workout. Your preview is still here; try again.';
+		} finally {
+			saving = false;
+		}
+	}
+
+	async function saveAsWorkout() {
 		if (!session) return;
-
-		const ending = { endedAt: new Date().toISOString(), cutReason };
-		const body = toSubmission(session, ending);
-
-		summary = summarise(session, ending);
-		recordId = session.id;
-
-		// Cleared before the send is even attempted: the session is now the
-		// queue's problem, and leaving it here would offer the athlete a
-		// "resume" button for a workout that has already been submitted.
-		await clearActiveSession();
-		const report = await submitSession(body);
-		session = null;
-		receipt = report.receipts[body.id] ?? null;
-
-		// Asked about *this* id rather than about the report as a whole. A flush
-		// sends everything outstanding, so an older session landing while this
-		// one is still stuck would otherwise be reported as this one landing.
-		if (report.accepted.includes(body.id) || report.duplicate.includes(body.id)) {
-			phase = 'sent';
-		} else if (report.rejected.includes(body.id)) {
-			phase = 'refused';
-		} else {
-			phase = 'queued';
+		const blocks = [
+			...new Set(session.sets.filter((set) => !set.removed).map((set) => set.blockId))
+		].map((id) => {
+			const sets = session!.sets.filter((set) => set.blockId === id && !set.removed);
+			return {
+				exercise: sets[0].exercise,
+				lifts: sets.map((set) => ({
+					sets: 1,
+					reps: set.prescribedReps,
+					weight: set.prescribedWeight,
+					amrap: set.amrap
+				}))
+			};
+		});
+		try {
+			const draft = { title: session.title ?? 'My workout', description: null, blocks };
+			await saveWorkoutDraft(draft, session.athleteId);
+			const response = await fetch('/api/workout-definitions', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+					...(session.athleteId ? { 'x-athlete-id': session.athleteId } : {})
+				},
+				body: JSON.stringify(draft)
+			});
+			if (!response.ok)
+				throw new Error(
+					'Could not save the workout online. Your draft is on this device; open Create workout when connected to save it.'
+				);
+			await clearWorkoutDraft(session.athleteId);
+			savedWorkoutMessage = 'Saved to My workouts.';
+		} catch (error) {
+			savedWorkoutMessage =
+				error instanceof Error
+					? error.message
+					: 'Your draft is on this device. Open Create workout when connected to save it.';
 		}
 	}
 
@@ -135,7 +242,7 @@
 		return numberFromText((event.currentTarget as HTMLInputElement).value);
 	}
 
-	const weightDecimal = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+	const weightDecimal = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 
 	/** A receipt change is already computed by the server; this only adds its sign for display. */
 	function formatWeightChange(change: number): string {
@@ -153,6 +260,7 @@
 	<TechniqueReview target={techniqueTarget} onclose={() => (techniqueTarget = null)} />
 {/if}
 <div class="mx-auto flex min-h-dvh max-w-2xl flex-col" inert={techniqueTarget !== null}>
+	{#if storageError}<p class="m-3 alert alert-error" role="alert">{storageError}</p>{/if}
 	{#if phase === 'loading'}
 		<p class="p-4">Loading…</p>
 	{:else if phase === 'empty'}
@@ -174,6 +282,9 @@
 				<span class="text-lg">{summary.done}/{summary.total} sets</span>
 			</div>
 
+			{#if summary.removed}<p class="text-sm opacity-70">
+					{summary.removed} removed from the session
+				</p>{/if}
 			{#if summary.skipped > 0 || summary.pending > 0}
 				<p class="text-sm opacity-70">
 					{#if summary.skipped > 0}{summary.skipped} skipped{/if}
@@ -263,7 +374,17 @@
 						{/if}
 					</dl>
 				{/if}
-				<p class="text-sm opacity-70">Recorded. The program has moved on.</p>
+				<p class="text-sm opacity-70">
+					{receipt && 'progression' in receipt
+						? receipt.progression === 'applied'
+							? 'Recorded. The program has moved on.'
+							: receipt.progression === 'not_applied_stale'
+								? 'Recorded. The program had already moved on, so this session did not advance it again.'
+								: 'Workout recorded.'
+						: receipt
+							? 'Recorded. The program has moved on.'
+							: 'Workout recorded.'}
+				</p>
 				<a class="btn w-full" href={resolve(`/history/${recordId}`)}> See where the hour went </a>
 			{:else if phase === 'queued'}
 				<p class="text-sm opacity-70">
@@ -304,37 +425,52 @@
 
 		<main class="grow p-3">
 			<h1 class="mb-3 text-lg font-bold">
-				Week {session.week}, day {session.day} · {done}/{session.sets.length} done
+				{session.title ?? `Week ${session.week}, day ${session.day}`} · {done}/{session.sets.filter(
+					(set) => !set.removed
+				).length} done
 			</h1>
-
-			<ol class="space-y-2">
-				{#each session.sets as set (set.position)}
-					{@const cues = session.cues[set.exercise] ?? []}
-					<li
-						class="card border"
-						class:border-success={set.status === 'done'}
-						class:opacity-50={set.status === 'skipped'}
-						class:border-4={set.position === current}
+			{#if session.schemaVersion === 2}
+				<div class="flex gap-2">
+					<button class="btn btn-sm" onclick={() => (editing = !editing)}
+						>{editing ? 'Close editor' : 'Edit workout'}</button
 					>
-						<div class="card-body gap-2 p-3">
-							{#if set.position === current}
-								<!--
+					<button class="btn btn-sm" onclick={saveAsWorkout}>Save as workout</button>
+				</div>
+				{#if savedWorkoutMessage}<p class="my-2 text-sm" role="status">
+						{savedWorkoutMessage}
+					</p>{/if}
+				{#if editing}<EditableWorkout {session} onchange={apply} />{/if}
+			{/if}
+
+			{#if session.startedAt}
+				<ol class="space-y-2" inert={saving}>
+					{#each session.sets.filter((set) => !set.removed) as set (set.id ?? set.position)}
+						{@const cues = session.cues[set.exercise] ?? []}
+						<li
+							class="card border"
+							class:border-success={set.status === 'done'}
+							class:opacity-50={set.status === 'skipped'}
+							class:border-4={set.position === current}
+						>
+							<div class="card-body gap-2 p-3">
+								{#if set.position === current}
+									<!--
 									The set being performed right now, sized to be read at arm's
 									length while holding a bar. Everything else on this screen is
 									deliberately quieter than this block.
 								-->
-								<p class="eyebrow">{set.label}</p>
+									<p class="eyebrow">{set.label}</p>
 
-								<div class="flex items-baseline gap-2">
-									<span class="weight-hero">{set.prescribedWeight}</span>
-									<span class="weight-unit">kg</span>
-									<span class="ml-auto text-lg tabular opacity-70">
-										{set.prescribedReps}{set.amrap ? '+' : ''} reps
-									</span>
-								</div>
+									<div class="flex items-baseline gap-2">
+										<span class="weight-hero">{set.prescribedWeight}</span>
+										<span class="weight-unit">kg</span>
+										<span class="ml-auto text-lg tabular opacity-70">
+											{set.prescribedReps}{set.amrap ? '+' : ''} reps
+										</span>
+									</div>
 
-								{@const change = plateChangeFor(session, set.position)}
-								<!--
+									{@const change = plateChangeFor(session, set.position)}
+									<!--
 									Guarded on the pair, not on `change` alone (Finding 1 of the
 									branch review). `plateChangeFor` is `null` for two different
 									reasons that must not render the same way: a stale plan
@@ -348,14 +484,14 @@
 									line correctly, because it carries a `plate_change` with an
 									empty `plates_per_side` rather than no change at all.
 								-->
-								{@const unchanged = barUnchangedFrom(session, set.position)}
-								{@const showPrescribed =
-									set.actualWeight === set.prescribedWeight && set.platesPerSide.length > 0}
+									{@const unchanged = barUnchangedFrom(session, set.position)}
+									{@const showPrescribed =
+										set.actualWeight === set.prescribedWeight && set.platesPerSide.length > 0}
 
-								{#if change || unchanged || showPrescribed}
-									<div class="mt-1 mb-1">
-										{#if change}
-											<!--
+									{#if change || unchanged || showPrescribed}
+										<div class="mt-1 mb-1">
+											{#if change}
+												<!--
 												What to do to the bar, not what the bar should end up
 												as. The greedy breakdown of two adjacent weights can
 												share almost nothing, so read as instructions it says
@@ -363,27 +499,27 @@
 												put a convenient pair on instead and lift more than was
 												asked for (D-04).
 											-->
-											{#if change.remove.length > 0}
-												<p class="text-sm">
-													<span class="eyebrow">take off</span>
-													<span class="tabular">{change.remove.join(', ')}</span> per side
-												</p>
-											{/if}
-											{#if change.add.length > 0}
-												<p class="text-sm">
-													<span class="eyebrow">add</span>
-													<span class="tabular">{change.add.join(', ')}</span> per side
-												</p>
-											{/if}
-											{#if change.remove.length === 0 && change.add.length === 0 && change.plates_per_side.length > 0}
-												<!-- Same weight as the last set. Saying nothing here
+												{#if change.remove.length > 0}
+													<p class="text-sm">
+														<span class="eyebrow">take off</span>
+														<span class="tabular">{change.remove.join(', ')}</span> per side
+													</p>
+												{/if}
+												{#if change.add.length > 0}
+													<p class="text-sm">
+														<span class="eyebrow">add</span>
+														<span class="tabular">{change.add.join(', ')}</span> per side
+													</p>
+												{/if}
+												{#if change.remove.length === 0 && change.add.length === 0 && change.plates_per_side.length > 0}
+													<!-- Same weight as the last set. Saying nothing here
 												     would read as a screen that failed to load. -->
-												<p class="eyebrow">bar is already loaded</p>
-											{/if}
+													<p class="eyebrow">bar is already loaded</p>
+												{/if}
 
-											<Plates plates={change.plates_per_side} />
-										{:else if unchanged}
-											<!--
+												<Plates plates={change.plates_per_side} />
+											{:else if unchanged}
+												<!--
 												The plan is gone because this weight was edited, but
 												the bar is where the last set left it and that is the
 												whole instruction. No stack is drawn: nobody computed
@@ -391,24 +527,24 @@
 												the instruction while the picture was the nicety
 												(D-04, D-11).
 											-->
-											<p class="eyebrow">bar is already loaded</p>
-										{:else}
-											<!--
+												<p class="eyebrow">bar is already loaded</p>
+											{:else}
+												<!--
 												Stale for one of the *other* reasons — an earlier set
 												of this exercise skipped, or logged at a weight other
 												than its own. This set still sits at its own
 												prescription, so the breakdown is true about the
 												weight it names, and it stays dimmed and labelled.
 											-->
-											<div class="opacity-60">
-												<Plates plates={set.platesPerSide} />
-												<p class="text-xs">for the prescribed {set.prescribedWeight} kg</p>
-											</div>
-										{/if}
-									</div>
-								{/if}
+												<div class="opacity-60">
+													<Plates plates={set.platesPerSide} />
+													<p class="text-xs">for the prescribed {set.prescribedWeight} kg</p>
+												</div>
+											{/if}
+										</div>
+									{/if}
 
-								<!--
+									<!--
 									One cue per line. Joined with a separator they read as a
 									single sentence, and an athlete glancing down mid-set has to
 									parse the whole run to find the one thing they are about to
@@ -434,50 +570,51 @@
 									would be wrong for the other one on every session after the
 									first.
 								-->
-								{#if cues.length > 0}
-									<details>
-										<summary class="eyebrow">form cues</summary>
-										<ul class="list-disc space-y-1 pl-5 text-sm opacity-60 marker:opacity-50">
-											{#each cues as cue, index (index)}
-												<li>{cue}</li>
-											{/each}
-										</ul>
-									</details>
+									{#if cues.length > 0}
+										<details>
+											<summary class="eyebrow">form cues</summary>
+											<ul class="list-disc space-y-1 pl-5 text-sm opacity-60 marker:opacity-50">
+												{#each cues as cue, index (index)}
+													<li>{cue}</li>
+												{/each}
+											</ul>
+										</details>
+									{/if}
+
+									{#if set.exercise === 'squat'}
+										<button
+											class="btn self-start btn-outline btn-sm"
+											type="button"
+											onclick={() => {
+												if (!session) return;
+												techniqueTarget = {
+													workoutId: session.id,
+													setPosition: set.position,
+													setId: set.id,
+													exercise: 'squat'
+												};
+											}}
+										>
+											Record technique
+										</button>
+									{/if}
+								{:else}
+									<div class="flex items-baseline justify-between">
+										<span class="font-medium">{set.label}</span>
+										<span class="text-sm tabular opacity-70">
+											{set.prescribedWeight} kg × {set.prescribedReps}{set.amrap ? '+' : ''}
+										</span>
+									</div>
+
+									{#if set.platesPerSide.length > 0}
+										<p class="text-sm opacity-60">
+											bar + {set.platesPerSide.join(', ')} per side
+										</p>
+									{/if}
 								{/if}
 
-								{#if set.exercise === 'squat'}
-									<button
-										class="btn self-start btn-outline btn-sm"
-										type="button"
-										onclick={() => {
-											if (!session) return;
-											techniqueTarget = {
-												workoutId: session.id,
-												setPosition: set.position,
-												exercise: 'squat'
-											};
-										}}
-									>
-										Record technique
-									</button>
-								{/if}
-							{:else}
-								<div class="flex items-baseline justify-between">
-									<span class="font-medium">{set.label}</span>
-									<span class="text-sm tabular opacity-70">
-										{set.prescribedWeight} kg × {set.prescribedReps}{set.amrap ? '+' : ''}
-									</span>
-								</div>
-
-								{#if set.platesPerSide.length > 0}
-									<p class="text-sm opacity-60">
-										bar + {set.platesPerSide.join(', ')} per side
-									</p>
-								{/if}
-							{/if}
-
-							<div class="flex items-center gap-2">
-								<!--
+								<div class="flex items-center gap-2">
+									<!--
 									Two handlers on one field, doing different jobs.
 
 									`oninput` records the number as typed, unsnapped, exactly as
@@ -527,87 +664,91 @@
 									place that cannot be bypassed; see the exception to D-11
 									written out there.
 								-->
-								<label class="flex items-center gap-1">
-									<span class="sr-only">Weight in kilograms</span>
-									<input
-										type="text"
-										inputmode="decimal"
-										class="input-bordered input w-24 text-lg"
-										value={set.actualWeight}
-										oninput={(event) => {
-											const weight = numberFrom(event);
-											if (weight !== undefined) {
-												void apply((s) => editSet(s, set.position, { weight }));
-											}
-										}}
-										onchange={(event) => {
-											const weight = numberFrom(event);
-											if (weight !== undefined) {
-												void apply((s) => editSet(s, set.position, { weight: snap(weight) }));
-											}
-										}}
-									/>
-									<span>kg</span>
-									{#if set.actualWeight !== set.prescribedWeight}
-										<span class="badge badge-ghost tabular" data-testid="weight-change">
-											{formatWeightChange(set.actualWeight - set.prescribedWeight)}
-										</span>
-									{/if}
-								</label>
+									<label class="flex items-center gap-1">
+										<span class="sr-only">Weight in kilograms</span>
+										<input
+											type="text"
+											inputmode="decimal"
+											class="input-bordered input w-24 text-lg"
+											value={set.actualWeight}
+											oninput={(event) => {
+												const weight = numberFrom(event);
+												if (weight !== undefined) {
+													void apply((s) => editSet(s, set.position, { weight }));
+												}
+											}}
+											onchange={(event) => {
+												const weight = numberFrom(event);
+												if (weight !== undefined) {
+													void apply((s) =>
+														editSet(s, set.position, {
+															weight: s.schemaVersion === 2 ? weight : snap(weight)
+														})
+													);
+												}
+											}}
+										/>
+										<span>kg</span>
+										{#if set.actualWeight !== set.prescribedWeight}
+											<span class="badge badge-ghost tabular" data-testid="weight-change">
+												{formatWeightChange(set.actualWeight - set.prescribedWeight)}
+											</span>
+										{/if}
+									</label>
 
-								<label class="flex items-center gap-1">
-									<span class="sr-only">Reps</span>
-									<input
-										type="number"
-										inputmode="numeric"
-										step="1"
-										min="0"
-										class="input-bordered input w-20 text-lg"
-										value={set.actualReps}
-										oninput={(event) => {
-											const reps = numberFrom(event);
-											if (reps !== undefined) {
-												void apply((s) => editSet(s, set.position, { reps }));
-											}
-										}}
-									/>
-									<span>reps</span>
-								</label>
-							</div>
+									<label class="flex items-center gap-1">
+										<span class="sr-only">Reps</span>
+										<input
+											type="number"
+											inputmode="numeric"
+											step="1"
+											min="0"
+											class="input-bordered input w-20 text-lg"
+											value={set.actualReps}
+											oninput={(event) => {
+												const reps = numberFrom(event);
+												if (reps !== undefined) {
+													void apply((s) => editSet(s, set.position, { reps }));
+												}
+											}}
+										/>
+										<span>reps</span>
+									</label>
+								</div>
 
-							<!--
+								<!--
 								Why the weight changed. Appears only on the set being performed
 								and only once it actually differs; vanishes if it goes back.
 								Nothing is selected, no tap is a valid answer, and Log stays one
 								tap either way — honesty must never cost more than dishonesty
 								(D-07).
 							-->
-							{#if set.position === current && set.actualWeight !== set.prescribedWeight && set.weightInherited !== true}
-								<fieldset class="flex flex-wrap items-baseline gap-2">
-									<legend class="eyebrow">why</legend>
-									{#each DRIFT_REASONS as reason (reason.value)}
-										<button
-											class="btn btn-xs"
-											class:btn-primary={set.driftReason === reason.value}
-											class:btn-outline={set.driftReason !== reason.value}
-											type="button"
-											aria-pressed={set.driftReason === reason.value}
-											onclick={() =>
-												apply((s) =>
-													setDriftReason(
-														s,
-														set.position,
-														set.driftReason === reason.value ? null : reason.value
-													)
-												)}
-										>
-											{reason.label}
-										</button>
-									{/each}
-								</fieldset>
-							{/if}
+								{#if set.position === current && set.actualWeight !== set.prescribedWeight && set.weightInherited !== true}
+									<fieldset class="flex flex-wrap items-baseline gap-2">
+										<legend class="eyebrow">why</legend>
+										{#each DRIFT_REASONS as reason (reason.value)}
+											<button
+												class="btn btn-xs"
+												class:btn-primary={set.driftReason === reason.value}
+												class:btn-outline={set.driftReason !== reason.value}
+												type="button"
+												aria-pressed={set.driftReason === reason.value}
+												onclick={() =>
+													apply((s) =>
+														setDriftReason(
+															s,
+															set.position,
+															set.driftReason === reason.value ? null : reason.value
+														)
+													)}
+											>
+												{reason.label}
+											</button>
+										{/each}
+									</fieldset>
+								{/if}
 
-							<!--
+								<!--
 								Placed under the current set only, and reopened for a set that
 								carries a note even after it is no longer current — the
 								athlete gets the affordance where they are and can still read
@@ -620,105 +761,135 @@
 								(D-07), and a field that is always on screen is a field that
 								asks to be filled in.
 							-->
-							{#if set.position === current || set.note}
-								{#if noting === set.position}
-									<label class="flex w-full flex-col">
-										<span class="sr-only">Note for this set</span>
-										<textarea
-											class="textarea-bordered textarea w-full"
-											rows="2"
-											maxlength="500"
-											placeholder="What happened on this set?"
-											value={set.note ?? ''}
-											oninput={(event) =>
-												apply((s) => noteSet(s, set.position, event.currentTarget.value))}
-										></textarea>
-									</label>
-									<button
-										class="btn self-start btn-ghost btn-sm"
-										type="button"
-										onclick={() => (noting = null)}
-									>
-										Done
-									</button>
-								{:else if set.note}
-									<button
-										class="text-left text-sm opacity-70"
-										type="button"
-										onclick={() => (noting = set.position)}
-									>
-										{set.note}
-									</button>
-								{:else}
-									<button
-										class="min-h-11 min-w-11 self-start px-3 text-sm opacity-50"
-										type="button"
-										onclick={() => (noting = set.position)}
-									>
-										Add note
-									</button>
+								{#if set.position === current || set.note}
+									{#if noting === set.position}
+										<label class="flex w-full flex-col">
+											<span class="sr-only">Note for this set</span>
+											<textarea
+												class="textarea-bordered textarea w-full"
+												rows="2"
+												maxlength="500"
+												placeholder="What happened on this set?"
+												value={set.note ?? ''}
+												oninput={(event) =>
+													apply((s) => noteSet(s, set.position, event.currentTarget.value))}
+											></textarea>
+										</label>
+										<button
+											class="btn self-start btn-ghost btn-sm"
+											type="button"
+											onclick={() => (noting = null)}
+										>
+											Done
+										</button>
+									{:else if set.note}
+										<button
+											class="text-left text-sm opacity-70"
+											type="button"
+											onclick={() => (noting = set.position)}
+										>
+											{set.note}
+										</button>
+									{:else}
+										<button
+											class="min-h-11 min-w-11 self-start px-3 text-sm opacity-50"
+											type="button"
+											onclick={() => (noting = set.position)}
+										>
+											Add note
+										</button>
+									{/if}
 								{/if}
-							{/if}
 
-							<div class="flex gap-2">
-								{#if set.status === 'pending'}
-									<button
-										class="btn grow"
-										class:action-primary={set.position === current}
-										class:btn-primary={set.position === current}
-										class:btn-outline={set.position !== current}
-										type="button"
-										onclick={() => apply((s) => logSet(s, set.position, new Date().toISOString()))}
-									>
-										Log
-									</button>
-									<button
-										class="btn"
-										type="button"
-										onclick={() => apply((s) => skipSet(s, set.position, new Date().toISOString()))}
-									>
-										Skip set
-									</button>
-								{:else}
-									{@const interval = intervalBefore(session, set.position)}
-									<div class="flex grow items-baseline gap-2 self-center">
-										<span class="text-sm">
-											{set.status === 'done'
-												? `Logged ${set.actualWeight} kg × ${set.actualReps}`
-												: 'Skipped'}
-										</span>
-										<!--
+								<div class="flex gap-2">
+									{#if set.status === 'pending'}
+										<button
+											class="btn grow"
+											class:action-primary={set.position === current}
+											class:btn-primary={set.position === current}
+											class:btn-outline={set.position !== current}
+											type="button"
+											onclick={() =>
+												apply((s) => logSet(s, set.position, new Date().toISOString()))}
+										>
+											Log
+										</button>
+										<button
+											class="btn"
+											type="button"
+											onclick={() =>
+												apply((s) => skipSet(s, set.position, new Date().toISOString()))}
+										>
+											Skip set
+										</button>
+									{:else}
+										{@const interval = intervalBefore(session, set.position)}
+										<div class="flex grow items-baseline gap-2 self-center">
+											<span class="text-sm">
+												{set.status === 'done'
+													? `Logged ${set.actualWeight} kg × ${set.actualReps}`
+													: 'Skipped'}
+											</span>
+											<!--
 											When, and how long the gap before it was. Both describe work
 											already done and both stop changing the moment they appear —
 											which is the line between this and a rest timer. Nothing on
 											this screen counts up toward the set being rested for (D-10).
 										-->
-										{#if set.loggedAt}
-											<span class="ml-auto text-xs tabular opacity-50">
-												{formatClock(new Date(set.loggedAt))}
-												{#if interval !== null}
-													· +{formatElapsed(interval * 1000)}
-												{/if}
-											</span>
-										{/if}
-									</div>
-									<button
-										class="btn btn-ghost"
-										type="button"
-										onclick={() => apply((s) => resetSet(s, set.position))}
-									>
-										Undo
-									</button>
-								{/if}
+											{#if set.loggedAt}
+												<span class="ml-auto text-xs tabular opacity-50">
+													{formatClock(new Date(set.loggedAt))}
+													{#if interval !== null}
+														· +{formatElapsed(interval * 1000)}
+													{/if}
+												</span>
+											{/if}
+										</div>
+										<button
+											class="btn btn-ghost"
+											type="button"
+											onclick={() => apply((s) => resetSet(s, set.position))}
+										>
+											Undo
+										</button>
+									{/if}
+								</div>
 							</div>
-						</div>
-					</li>
-				{/each}
-			</ol>
+						</li>
+					{/each}
+				</ol>
+			{:else if !editing}
+				<ol class="mt-3 space-y-2">
+					{#each session.sets.filter((set) => !set.removed) as set (set.id)}
+						<li class="rounded-box border border-base-300 p-3">
+							<span class="font-medium">{set.label}</span><span class="float-right"
+								>{set.prescribedWeight} kg × {set.prescribedReps}{set.amrap ? '+' : ''}</span
+							>
+						</li>
+					{/each}
+				</ol>
+			{/if}
 		</main>
 
-		<footer class="sticky bottom-0 border-t bg-base-100 p-3">
-			{#if phase === 'ending' && !isComplete(session)}
+		<footer class="sticky bottom-0 border-t bg-base-100 p-3" inert={saving}>
+			{#if !session.startedAt}
+				<p class="mb-2 text-sm opacity-70">
+					Ready on this device. Your clock starts when you tap Start.
+				</p>
+				<button
+					class="btn w-full btn-lg btn-primary"
+					onclick={start}
+					disabled={session.sets.every((set) => set.removed)}>Start workout</button
+				>
+				<button
+					class="btn mt-2 w-full btn-ghost"
+					onclick={async () => {
+						await clearActiveSession(session!);
+						session = null;
+						phase = 'empty';
+					}}>Discard preview</button
+				>
+			{:else if phase === 'ending' && !isComplete(session)}
 				<!--
 					The one question, asked once, when a session ends before the
 					last set (D-08). The program advances whatever the answer is —

@@ -26,13 +26,23 @@
 					<span>{formatMinutes(workout.duration_seconds) ?? '—'}</span>
 				</div>
 				<div class="text-sm opacity-70">
-					{workout.program_name} · week {workout.week}, day {workout.day}
+					{workout.title}
+					{#if workout.source === 'program' && workout.week !== null && workout.day !== null}
+						· week {workout.week}, day {workout.day}
+					{:else if workout.source === 'saved_workout'}
+						· My workouts
+					{/if}
+					{#if workout.modified}
+						· Modified{/if}
 					{#if workout.cut_reason}
 						· cut short ({workout.cut_reason})
 					{:else if workout.outcome === 'auto_closed'}
 						· auto-closed
 					{/if}
 				</div>
+				{#if workout.progression === 'not_applied_stale'}<p class="text-xs opacity-70">
+						Recorded; program had already moved on.
+					</p>{/if}
 			</a>
 		</li>
 	{/each}

@@ -2,21 +2,13 @@ import { fail, redirect } from '@sveltejs/kit';
 
 import { problemDetail } from '$lib/server/api';
 import { storeSession } from '$lib/server/session';
+import { safeDestination } from '$lib/auth-destination';
 import type { Actions, PageServerLoad } from './$types';
 
-/**
- * Where to land after signing in.
- *
- * Only a path on this origin. `//evil.example` is a protocol-relative URL that
- * a browser follows off-site, so "starts with a slash" is not on its own enough.
- */
-function safeDestination(from: string | null): string {
-	return from && from.startsWith('/') && !from.startsWith('//') ? from : '/';
-}
-
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, setHeaders }) => {
+	setHeaders({ 'cache-control': 'private, no-store', 'referrer-policy': 'strict-origin' });
 	if (locals.authenticated) redirect(303, safeDestination(url.searchParams.get('from')));
-	return {};
+	return { from: safeDestination(url.searchParams.get('from'), '') };
 };
 
 export const actions: Actions = {

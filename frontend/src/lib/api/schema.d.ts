@@ -440,6 +440,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/shared-workouts/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["preview_shared_workout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/shared-workouts/{token}/copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["copy_shared_workout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workout-definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_workout_definitions"];
+        put?: never;
+        post: operations["create_workout_definition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workout-definitions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_workout_definition"];
+        put?: never;
+        post?: never;
+        delete: operations["archive_workout_definition"];
+        options?: never;
+        head?: never;
+        patch: operations["update_workout_definition"];
+        trace?: never;
+    };
+    "/v1/workout-definitions/{id}/copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["copy_workout_definition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workout-definitions/{id}/revisions/{revision}/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["materialize_saved_workout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workout-definitions/{id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_workout_shares"];
+        put?: never;
+        post: operations["create_workout_share"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workout-definitions/{id}/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revoke_workout_share"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workouts": {
         parameters: {
             query?: never;
@@ -513,10 +641,101 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/blank-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["blank_editable_session"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["all_workout_progress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/session-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["prepare_editable_session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/workouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_all_workouts"];
+        put?: never;
+        post: operations["submit_editable_workout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/workouts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["show_any_workout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AllWorkoutProgress: {
+            /** Format: int64 */
+            done_sets: number;
+            /** Format: int64 */
+            duration_seconds: number;
+            estimates: components["schemas"]["WorkoutEstimate"][];
+            /** Format: double */
+            load_moved_kg: number;
+            /** Format: int64 */
+            sessions: number;
+        };
         /**
          * @description The whole screen, in one round trip.
          *
@@ -605,11 +824,23 @@ export interface components {
             label: string;
             lifts: components["schemas"]["LiftView"][];
         };
+        CreatedShare: {
+            /** Format: uuid */
+            id: string;
+            path: string;
+            /** Format: int32 */
+            revision: number;
+            /** @description Returned once; only its SHA-256 digest is stored. */
+            token: string;
+        };
         /**
          * @description The four answers to the one question asked when a session ends early (D-08).
          * @enum {string}
          */
         CutReason: "out_of_time" | "pain" | "equipment" | "enough";
+        DefinitionList: {
+            workouts: components["schemas"]["WorkoutDefinition"][];
+        };
         /**
          * @description Why a set was lifted at something other than the prescribed weight (D-07).
          *
@@ -620,6 +851,85 @@ export interface components {
          * @enum {string}
          */
         DriftReason: "too_easy" | "too_heavy" | "already_loaded" | "felt_off";
+        EditableExercise: {
+            cues: string[];
+            is_primary: boolean;
+            key: string;
+            label: string;
+            loading: string;
+        };
+        EditablePrescribedSet: {
+            amrap: boolean;
+            /** Format: uuid */
+            block_id: string;
+            exercise: string;
+            /** Format: uuid */
+            id: string;
+            label: string;
+            plate_change?: null | components["schemas"]["PlateChangeView"];
+            plates_per_side: number[];
+            /** Format: int32 */
+            prescribed_reps: number;
+            /** Format: double */
+            prescribed_weight: number;
+        };
+        EditableSession: {
+            /** Format: uuid */
+            athlete_id: string;
+            /** Format: int32 */
+            day?: number | null;
+            /** Format: uuid */
+            definition_id?: string | null;
+            /** Format: uuid */
+            draft_id?: string | null;
+            /** Format: uuid */
+            enrollment_id?: string | null;
+            exercises: components["schemas"]["EditableExercise"][];
+            program_key?: string | null;
+            /** Format: int32 */
+            revision?: number | null;
+            /** Format: int32 */
+            schema_version: number;
+            /** Format: double */
+            seconds_per_set?: number | null;
+            sets: components["schemas"]["EditablePrescribedSet"][];
+            source: components["schemas"]["WorkoutSource"];
+            title: string;
+            /** Format: int32 */
+            week?: number | null;
+        };
+        EditableSubmittedSet: {
+            /** Format: int32 */
+            actual_reps?: number | null;
+            /** Format: double */
+            actual_weight?: number | null;
+            amrap: boolean;
+            /** Format: uuid */
+            block_id: string;
+            /** Format: int32 */
+            committed_reps: number;
+            /** Format: double */
+            committed_weight: number;
+            drift_reason?: null | components["schemas"]["DriftReason"];
+            exercise: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            logged_at?: string | null;
+            /** Format: int32 */
+            logged_order?: number | null;
+            note?: string | null;
+            /** Format: uuid */
+            origin_id?: string | null;
+            /** Format: int32 */
+            position: number;
+            /** Format: int32 */
+            prescribed_reps: number;
+            /** Format: double */
+            prescribed_weight: number;
+            removed: boolean;
+            status: components["schemas"]["SetStatus"];
+        };
         /** @description One athlete's run of one program. */
         Enrollment: {
             /**
@@ -1083,6 +1393,12 @@ export interface components {
              */
             remove: number[];
         };
+        PrepareSession: {
+            /** Format: uuid */
+            enrollment_id: string;
+            /** Format: uuid */
+            id: string;
+        };
         /** @description One prescribed set, ready to be logged. */
         PrescribedSet: {
             amrap: boolean;
@@ -1344,6 +1660,10 @@ export interface components {
             /** @example Military Press */
             label: string;
         };
+        RevisionRequest: {
+            /** Format: int32 */
+            revision: number;
+        };
         /** @description One session, for the load panel and the drift band. */
         SessionFigures: {
             /** Format: date-time */
@@ -1459,6 +1779,15 @@ export interface components {
         };
         /** @enum {string} */
         SetStatus: "done" | "skipped" | "pending";
+        ShareList: {
+            shares: components["schemas"]["WorkoutShare"][];
+        };
+        SharedWorkout: components["schemas"]["WorkoutContent"] & {
+            /** @description Display metadata for this revision, also available before sign-in. */
+            exercises: components["schemas"]["ExerciseSummary"][];
+            /** Format: int32 */
+            revision: number;
+        };
         /**
          * @description One set: what was asked for and what happened (D-07).
          *
@@ -1616,6 +1945,91 @@ export interface components {
          * @enum {string}
          */
         Unit: "kg" | "count" | "seconds";
+        UpdateDefinition: components["schemas"]["WorkoutContent"] & {
+            /** Format: int32 */
+            expected_revision: number;
+        };
+        V2LoggedSet: components["schemas"]["EditableSubmittedSet"] & {
+            /** Format: int32 */
+            baseline_reps?: number | null;
+            /** Format: double */
+            baseline_weight?: number | null;
+            label: string;
+        };
+        V2WorkoutDetail: {
+            changes: components["schemas"]["WorkoutChanges"];
+            notes?: string | null;
+            sets: components["schemas"]["V2LoggedSet"][];
+            summary: components["schemas"]["SessionReport"];
+            timing?: null | components["schemas"]["SessionTiming"];
+            workout: components["schemas"]["V2WorkoutSummary"];
+        };
+        V2WorkoutHistory: {
+            /** Format: int32 */
+            limit: number;
+            /** Format: int32 */
+            offset: number;
+            /** Format: int64 */
+            total: number;
+            workouts: components["schemas"]["V2WorkoutSummary"][];
+        };
+        V2WorkoutReceipt: {
+            changes: components["schemas"]["WorkoutChanges"];
+            duplicate: boolean;
+            /** Format: uuid */
+            id: string;
+            progress?: null | components["schemas"]["ProgressView"];
+            /** @description applied, not_applied_stale, or none. */
+            progression: string;
+            source: components["schemas"]["WorkoutSource"];
+            summary: components["schemas"]["SessionReport"];
+            title: string;
+        };
+        V2WorkoutSubmission: {
+            cut_reason?: null | components["schemas"]["CutReason"];
+            /** Format: uuid */
+            definition_id?: string | null;
+            /** Format: uuid */
+            draft_id?: string | null;
+            /** Format: date-time */
+            ended_at: string;
+            /** Format: uuid */
+            id: string;
+            notes?: string | null;
+            outcome: components["schemas"]["WorkoutOutcome"];
+            /** Format: int32 */
+            revision?: number | null;
+            sets: components["schemas"]["EditableSubmittedSet"][];
+            source: components["schemas"]["WorkoutSource"];
+            /** Format: date-time */
+            started_at: string;
+            title: string;
+        };
+        V2WorkoutSummary: {
+            cut_reason?: string | null;
+            /** Format: int32 */
+            day?: number | null;
+            /** Format: int64 */
+            duration_seconds?: number | null;
+            /** Format: date-time */
+            ended_at?: string | null;
+            /** Format: uuid */
+            enrollment_id?: string | null;
+            /** Format: uuid */
+            id: string;
+            modified: boolean;
+            outcome?: string | null;
+            program_key?: string | null;
+            progression: string;
+            /** Format: int32 */
+            schema_version: number;
+            source: string;
+            /** Format: date-time */
+            started_at: string;
+            title: string;
+            /** Format: int32 */
+            week?: number | null;
+        };
         /** @description One exact weight change, grouped across matching done sets. */
         WeightChange: {
             /** Format: double */
@@ -1639,6 +2053,46 @@ export interface components {
             /** @example Squat */
             label: string;
         };
+        WorkoutBlock: {
+            exercise: string;
+            lifts: components["schemas"]["WorkoutLift"][];
+        };
+        WorkoutChanges: {
+            /** Format: double */
+            added_load_moved_kg: number;
+            /** Format: int32 */
+            added_sets: number;
+            /** Format: double */
+            baseline_load_kg: number;
+            /** Format: int32 */
+            changed_sets: number;
+            /** Format: int32 */
+            committed_changed_sets: number;
+            /** Format: double */
+            committed_load_kg: number;
+            /** Format: int64 */
+            comparison_samples: number;
+            comparison_scope?: string | null;
+            modified: boolean;
+            /** Format: double */
+            planned_load_kg: number;
+            /** Format: int32 */
+            removed_sets: number;
+            /** Format: int32 */
+            source_changed_sets: number;
+        };
+        WorkoutContent: {
+            blocks: components["schemas"]["WorkoutBlock"][];
+            description?: string | null;
+            title: string;
+        };
+        WorkoutDefinition: components["schemas"]["WorkoutContent"] & {
+            archived: boolean;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            revision: number;
+        };
         /**
          * @description One workout, expanded.
          *
@@ -1657,6 +2111,13 @@ export interface components {
             timing?: null | components["schemas"]["SessionTiming"];
             workout: components["schemas"]["WorkoutSummary"];
         };
+        WorkoutEstimate: {
+            /** Format: double */
+            estimate: number;
+            exercise: string;
+            is_lower_bound: boolean;
+            label: string;
+        };
         /** @description A page of history, newest first. */
         WorkoutHistory: {
             /**
@@ -1673,6 +2134,15 @@ export interface components {
              */
             total: number;
             workouts: components["schemas"]["WorkoutSummary"][];
+        };
+        WorkoutLift: {
+            amrap?: boolean;
+            /** Format: int32 */
+            reps: number;
+            /** Format: int32 */
+            sets: number;
+            /** Format: double */
+            weight: number;
         };
         /**
          * @description How the session ended, as the athlete may report it.
@@ -1715,6 +2185,18 @@ export interface components {
              */
             week: number;
         };
+        WorkoutShare: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            revision: number;
+            /** Format: date-time */
+            revoked_at?: string | null;
+        };
+        /** @enum {string} */
+        WorkoutSource: "program" | "saved_workout" | "ad_hoc";
         /** @description A finished session, as the phone recorded it. */
         WorkoutSubmission: {
             cut_reason?: null | components["schemas"]["CutReason"];
@@ -2506,6 +2988,277 @@ export interface operations {
             };
         };
     };
+    preview_shared_workout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedWorkout"];
+                };
+            };
+        };
+    };
+    copy_shared_workout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkoutDefinition"];
+                };
+            };
+        };
+    };
+    list_workout_definitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefinitionList"];
+                };
+            };
+        };
+    };
+    create_workout_definition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkoutContent"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkoutDefinition"];
+                };
+            };
+        };
+    };
+    get_workout_definition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkoutDefinition"];
+                };
+            };
+        };
+    };
+    archive_workout_definition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_workout_definition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDefinition"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkoutDefinition"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    copy_workout_definition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevisionRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkoutDefinition"];
+                };
+            };
+        };
+    };
+    materialize_saved_workout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                revision: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved revision ready to start */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditableSession"];
+                };
+            };
+        };
+    };
+    list_workout_shares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareList"];
+                };
+            };
+        };
+    };
+    create_workout_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevisionRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedShare"];
+                };
+            };
+        };
+    };
+    revoke_workout_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                share_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_workouts: {
         parameters: {
             query?: {
@@ -2669,6 +3422,164 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    blank_editable_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catalogue for a session built from scratch */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditableSession"];
+                };
+            };
+        };
+    };
+    all_workout_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Actual work and estimates across all sources */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AllWorkoutProgress"];
+                };
+            };
+        };
+    };
+    prepare_editable_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareSession"];
+            };
+        };
+        responses: {
+            /** @description Prepared session; clock has not started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditableSession"];
+                };
+            };
+        };
+    };
+    list_all_workouts: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Only this enrolment's workouts — "how did that block go".
+                 *
+                 *     Worth having beyond convenience: with it supplied the query is one walk
+                 *     of `workouts_enrollment_id_idx (enrollment_id, started_at desc)` and
+                 *     needs no sort at all, which the athlete-wide query cannot manage.
+                 */
+                enrollment_id?: string;
+                /**
+                 * @description Rows per page. Defaults to 25, clamped to 100.
+                 * @example 25
+                 */
+                limit?: number;
+                /**
+                 * @description Rows to skip. Defaults to 0.
+                 * @example 0
+                 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description History from every workout source */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WorkoutHistory"];
+                };
+            };
+        };
+    };
+    submit_editable_workout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2WorkoutSubmission"];
+            };
+        };
+        responses: {
+            /** @description Already recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WorkoutReceipt"];
+                };
+            };
+            /** @description Recorded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WorkoutReceipt"];
+                };
+            };
+        };
+    };
+    show_any_workout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorded baseline, edits, and actual work */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2WorkoutDetail"];
                 };
             };
         };

@@ -1,9 +1,11 @@
 pub mod adjustments;
 pub mod auth;
+pub mod editable_workouts;
 pub mod enrollments;
 pub mod exercises;
 pub mod health;
 pub mod maxes;
 pub mod programs;
 pub mod progress;
+pub mod workout_definitions;
 pub mod workouts;

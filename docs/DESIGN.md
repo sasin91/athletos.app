@@ -182,6 +182,13 @@ pure `serde` types carrying **no behaviour and no formatting**. A v2
 data-driven authoring path emits the same shapes the engine already consumes.
 This is deliberately *not* designed now; it is only kept possible.
 
+> **Amended 2026-09-07: My workouts.** Athletes can now author reusable
+> single-session workouts, stored as owned definitions and immutable revisions.
+> Compiled programs still own progression; saving or copying their session
+> content does not copy their state or progression rules. “Dynamic” refers to
+> editing a session's exercises and sets. It is neither an adaptive program
+> nor a separate source category. See D-20 and the implementation plan.
+
 > The reference implementation bakes presentation into the domain —
 > `Lift` constructs `'%d x %d @ %.1fkg'` in its constructor. AthletOS does not.
 > Weights are bare numbers; units and formatting live at the UI edge.
@@ -2018,3 +2025,64 @@ ever pull the schema away from that, the chart gets its own table back.
   `enrollment`, matching the 148 identifiers and the published `/v1/enrollments`
   path. About 70 prose comments still disagree. Cosmetic, and cheap to fix in
   one pass.
+
+---
+
+## D-20 · My workouts and editable sessions
+
+An athlete owns a reusable workout definition. Each edit creates an immutable
+revision; a session captures the revision it started from. The interface says
+My workouts, Create workout, Start workout, Edit this session, Share workout,
+and Save a copy. Programs remain compiled methods with their own progression.
+Adding or removing exercises is a session capability, not a new program kind.
+
+Sharing publishes a pinned revision through a revocable unlisted link. A
+recipient saves an independent copy before training. Revocation prevents new
+reads and copies but cannot retract a saved copy. Shared previews contain the
+workout's explicit weights and exercise content, never account details, private
+training history, or technique recordings. Archive revokes the owner's links
+while preserving revisions already referenced by history.
+
+The original source prescription, the targets at local Start, and the final
+edited targets remain distinct from actual results. Pending work may be added,
+removed, reordered, or changed. Removed baseline rows remain as unperformed
+facts without fabricated timing. Stable set IDs survive edits; numeric display
+order is not identity. Existing positional technique references keep their
+original local handles.
+
+D-08 is amended at preparation: a deliberate Edit/Start action can POST a
+program draft containing its baseline and enrollment revision. This writes no
+workout result, starts no clock, and advances no program. GET peeks remain read
+only. Once cached, the draft is usable offline. Starting a saved workout captures
+a revision without a program draft. A session built from scratch has neither
+program context nor reusable ownership until the athlete explicitly saves it.
+
+D-09 retains one locally active session per athlete and one durable queued
+submission per workout ID. Finishing queues the complete result and clears the
+active slot in a single IndexedDB transaction. Older local documents keep their
+original API format. Account identity is verified before sending; legacy
+documents are claimed only through verified enrollment ownership. The service
+worker caches static shell assets only; private pages and share links must never
+be served from a general response cache.
+
+D-11 permits a bounded offline authoring exception: athletes can type an
+explicit load for newly added or changed work. The client does not calculate
+loadable weights or plates. It drops invalidated plate instructions and retains
+the typed value; Rust performs loading arithmetic when materializing saved
+definitions and programs online. Finished submissions do not retroactively
+round the prescription the athlete saw.
+
+D-19 projects program input from original baseline rows, mapping actual results
+by stable origin ID. Added work cannot replace an original top set, even for the
+same exercise. Removed work counts as unperformed. Replay uses the same versioned
+projection and reads actual values from recorded set rows. If an enrollment has
+already advanced since preparation, the workout is recorded with an explicit
+stale disposition and no further advance. A duplicate returns its stored
+receipt. The verifier distinguishes those records from an applied workout with
+a missing advance.
+
+D-12 keeps existing `/v1` workout shapes intact. New `/v2` session recording,
+history, and progress contracts carry optional program context and explicit
+source metadata. Definitions are new additive `/v1` resources. Deployment must
+install the expanded schema and API before exposing the new frontend, and keep
+both submission formats available for older offline queues.

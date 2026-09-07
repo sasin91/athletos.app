@@ -2,15 +2,17 @@ import { fail, redirect } from '@sveltejs/kit';
 
 import { problemDetail } from '$lib/server/api';
 import { storeSession } from '$lib/server/session';
+import { safeDestination } from '$lib/auth-destination';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals }) => {
-	if (locals.authenticated) redirect(303, '/');
-	return {};
+export const load: PageServerLoad = async ({ locals, url, setHeaders }) => {
+	setHeaders({ 'cache-control': 'private, no-store', 'referrer-policy': 'strict-origin' });
+	if (locals.authenticated) redirect(303, safeDestination(url.searchParams.get('from')));
+	return { from: safeDestination(url.searchParams.get('from'), '') };
 };
 
 export const actions: Actions = {
-	default: async ({ request, cookies, locals }) => {
+	default: async ({ request, cookies, locals, url }) => {
 		const form = await request.formData();
 		const email = String(form.get('email') ?? '');
 		const displayName = String(form.get('display_name') ?? '');
@@ -33,6 +35,6 @@ export const actions: Actions = {
 		}
 
 		storeSession(cookies, data);
-		redirect(303, '/maxes');
+		redirect(303, safeDestination(url.searchParams.get('from'), '/maxes'));
 	}
 };

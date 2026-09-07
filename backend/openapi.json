@@ -902,6 +902,455 @@
         ]
       }
     },
+    "/v1/shared-workouts/{token}": {
+      "get": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "preview_shared_workout",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedWorkout"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/shared-workouts/{token}/copies": {
+      "post": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "copy_shared_workout",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDefinition"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v1/workout-definitions": {
+      "get": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "list_workout_definitions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefinitionList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "create_workout_definition",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkoutContent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDefinition"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v1/workout-definitions/{id}": {
+      "get": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "get_workout_definition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDefinition"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "archive_workout_definition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "update_workout_definition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDefinition"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDefinition"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v1/workout-definitions/{id}/copies": {
+      "post": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "copy_workout_definition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDefinition"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v1/workout-definitions/{id}/revisions/{revision}/session": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "operationId": "materialize_saved_workout",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved revision ready to start",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditableSession"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v1/workout-definitions/{id}/shares": {
+      "get": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "list_workout_shares",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "create_workout_share",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedShare"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v1/workout-definitions/{id}/shares/{share_id}": {
+      "delete": {
+        "tags": [
+          "workout-definitions"
+        ],
+        "operationId": "revoke_workout_share",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "share_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
     "/v1/workouts": {
       "get": {
         "tags": [
@@ -1127,10 +1576,269 @@
           }
         ]
       }
+    },
+    "/v2/blank-session": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "operationId": "blank_editable_session",
+        "responses": {
+          "200": {
+            "description": "Catalogue for a session built from scratch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditableSession"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v2/progress": {
+      "get": {
+        "tags": [
+          "progress"
+        ],
+        "operationId": "all_workout_progress",
+        "responses": {
+          "200": {
+            "description": "Actual work and estimates across all sources",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllWorkoutProgress"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v2/session-drafts": {
+      "post": {
+        "tags": [
+          "workouts"
+        ],
+        "operationId": "prepare_editable_session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareSession"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Prepared session; clock has not started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditableSession"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v2/workouts": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "operationId": "list_all_workouts",
+        "parameters": [
+          {
+            "name": "enrollment_id",
+            "in": "query",
+            "description": "Only this enrolment's workouts — \"how did that block go\".\n\nWorth having beyond convenience: with it supplied the query is one walk\nof `workouts_enrollment_id_idx (enrollment_id, started_at desc)` and\nneeds no sort at all, which the athlete-wide query cannot manage.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Rows per page. Defaults to 25, clamped to 100.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "example": 25
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip. Defaults to 0.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "example": 0
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "History from every workout source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2WorkoutHistory"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "workouts"
+        ],
+        "operationId": "submit_editable_workout",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/V2WorkoutSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Already recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2WorkoutReceipt"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2WorkoutReceipt"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
+    },
+    "/v2/workouts/{id}": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "operationId": "show_any_workout",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recorded baseline, edits, and actual work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2WorkoutDetail"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_token": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "AllWorkoutProgress": {
+        "type": "object",
+        "required": [
+          "sessions",
+          "done_sets",
+          "load_moved_kg",
+          "duration_seconds",
+          "estimates"
+        ],
+        "properties": {
+          "done_sets": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "estimates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkoutEstimate"
+            }
+          },
+          "load_moved_kg": {
+            "type": "number",
+            "format": "double"
+          },
+          "sessions": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AthleteProgress": {
         "type": "object",
         "description": "The whole screen, in one round trip.\n\n# Why the component is called `AthleteProgress`\n\n`routes::enrollments::ProgressView` — sessions completed out of a block —\nhas been shipping under the component name `ProgressView` since the first\nrelease, and utoipa names a component after the type's last path segment.\nRegistering a second `ProgressView` does not collide loudly; it overwrites,\nand the generated TypeScript would silently start describing this screen\nwherever an enrolment's `progress` field is read. D-12 forbids changing what\nan existing `/v1` field means, so the older name stays with the older type\nand the newcomer takes an alias. The Rust name is unchanged and the JSON on\nthe wire is unaffected: this renames a schema, not a field.",
@@ -1263,6 +1971,32 @@
           }
         }
       },
+      "CreatedShare": {
+        "type": "object",
+        "required": [
+          "id",
+          "revision",
+          "token",
+          "path"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "path": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "token": {
+            "type": "string",
+            "description": "Returned once; only its SHA-256 digest is stored."
+          }
+        }
+      },
       "CutReason": {
         "type": "string",
         "description": "The four answers to the one question asked when a session ends early (D-08).",
@@ -1273,6 +2007,20 @@
           "enough"
         ]
       },
+      "DefinitionList": {
+        "type": "object",
+        "required": [
+          "workouts"
+        ],
+        "properties": {
+          "workouts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkoutDefinition"
+            }
+          }
+        }
+      },
       "DriftReason": {
         "type": "string",
         "description": "Why a set was lifted at something other than the prescribed weight (D-07).\n\nOptional in every direction. The chips that produce it are unselected by\ndefault, no tap is a valid answer, and nothing blocks — a default would\nanswer the question on the athlete's behalf and land a claim nobody made in\nthe one signal this product exists to read.",
@@ -1282,6 +2030,305 @@
           "already_loaded",
           "felt_off"
         ]
+      },
+      "EditableExercise": {
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "cues",
+          "loading",
+          "is_primary"
+        ],
+        "properties": {
+          "cues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "is_primary": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "loading": {
+            "type": "string"
+          }
+        }
+      },
+      "EditablePrescribedSet": {
+        "type": "object",
+        "required": [
+          "id",
+          "block_id",
+          "exercise",
+          "label",
+          "prescribed_weight",
+          "prescribed_reps",
+          "amrap",
+          "plates_per_side"
+        ],
+        "properties": {
+          "amrap": {
+            "type": "boolean"
+          },
+          "block_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "exercise": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "plate_change": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PlateChangeView"
+              }
+            ]
+          },
+          "plates_per_side": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "prescribed_reps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "prescribed_weight": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "EditableSession": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "athlete_id",
+          "title",
+          "source",
+          "sets",
+          "exercises"
+        ],
+        "properties": {
+          "athlete_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "day": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "definition_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "draft_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "enrollment_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "exercises": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EditableExercise"
+            }
+          },
+          "program_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "seconds_per_set": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EditablePrescribedSet"
+            }
+          },
+          "source": {
+            "$ref": "#/components/schemas/WorkoutSource"
+          },
+          "title": {
+            "type": "string"
+          },
+          "week": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "EditableSubmittedSet": {
+        "type": "object",
+        "required": [
+          "id",
+          "block_id",
+          "position",
+          "exercise",
+          "prescribed_weight",
+          "prescribed_reps",
+          "committed_weight",
+          "committed_reps",
+          "amrap",
+          "removed",
+          "status"
+        ],
+        "properties": {
+          "actual_reps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "actual_weight": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "amrap": {
+            "type": "boolean"
+          },
+          "block_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "committed_reps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "committed_weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "drift_reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DriftReason"
+              }
+            ]
+          },
+          "exercise": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "logged_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "logged_order": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "prescribed_reps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "prescribed_weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "removed": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SetStatus"
+          }
+        }
       },
       "Enrollment": {
         "type": "object",
@@ -2022,6 +3069,23 @@
           }
         }
       },
+      "PrepareSession": {
+        "type": "object",
+        "required": [
+          "id",
+          "enrollment_id"
+        ],
+        "properties": {
+          "enrollment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "PrescribedSet": {
         "type": "object",
         "description": "One prescribed set, ready to be logged.",
@@ -2446,6 +3510,18 @@
           }
         }
       },
+      "RevisionRequest": {
+        "type": "object",
+        "required": [
+          "revision"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "SessionFigures": {
         "type": "object",
         "description": "One session, for the load panel and the drift band.",
@@ -2627,6 +3703,47 @@
           "done",
           "skipped",
           "pending"
+        ]
+      },
+      "ShareList": {
+        "type": "object",
+        "required": [
+          "shares"
+        ],
+        "properties": {
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkoutShare"
+            }
+          }
+        }
+      },
+      "SharedWorkout": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/WorkoutContent"
+          },
+          {
+            "type": "object",
+            "required": [
+              "revision",
+              "exercises"
+            ],
+            "properties": {
+              "exercises": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ExerciseSummary"
+                },
+                "description": "Display metadata for this revision, also available before sign-in."
+              },
+              "revision": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          }
         ]
       },
       "SubmittedSet": {
@@ -2824,6 +3941,347 @@
           "seconds"
         ]
       },
+      "UpdateDefinition": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/WorkoutContent"
+          },
+          {
+            "type": "object",
+            "required": [
+              "expected_revision"
+            ],
+            "properties": {
+              "expected_revision": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          }
+        ]
+      },
+      "V2LoggedSet": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EditableSubmittedSet"
+          },
+          {
+            "type": "object",
+            "required": [
+              "label"
+            ],
+            "properties": {
+              "baseline_reps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32",
+                "minimum": 0
+              },
+              "baseline_weight": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "V2WorkoutDetail": {
+        "type": "object",
+        "required": [
+          "workout",
+          "sets",
+          "summary",
+          "changes"
+        ],
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/WorkoutChanges"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/V2LoggedSet"
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SessionReport"
+          },
+          "timing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SessionTiming"
+              }
+            ]
+          },
+          "workout": {
+            "$ref": "#/components/schemas/V2WorkoutSummary"
+          }
+        }
+      },
+      "V2WorkoutHistory": {
+        "type": "object",
+        "required": [
+          "workouts",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "workouts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/V2WorkoutSummary"
+            }
+          }
+        }
+      },
+      "V2WorkoutReceipt": {
+        "type": "object",
+        "required": [
+          "id",
+          "duplicate",
+          "title",
+          "source",
+          "progression",
+          "summary",
+          "changes"
+        ],
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/WorkoutChanges"
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "progress": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProgressView"
+              }
+            ]
+          },
+          "progression": {
+            "type": "string",
+            "description": "applied, not_applied_stale, or none."
+          },
+          "source": {
+            "$ref": "#/components/schemas/WorkoutSource"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SessionReport"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "V2WorkoutSubmission": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "title",
+          "started_at",
+          "ended_at",
+          "outcome",
+          "sets"
+        ],
+        "properties": {
+          "cut_reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CutReason"
+              }
+            ]
+          },
+          "definition_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "draft_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/WorkoutOutcome"
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EditableSubmittedSet"
+            }
+          },
+          "source": {
+            "$ref": "#/components/schemas/WorkoutSource"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "V2WorkoutSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "source",
+          "started_at",
+          "modified",
+          "progression",
+          "schema_version"
+        ],
+        "properties": {
+          "cut_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "day": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "duration_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "enrollment_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "program_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "progression": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "source": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "title": {
+            "type": "string"
+          },
+          "week": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "WeightChange": {
         "type": "object",
         "description": "One exact weight change, grouped across matching done sets.",
@@ -2876,6 +4334,148 @@
           }
         }
       },
+      "WorkoutBlock": {
+        "type": "object",
+        "required": [
+          "exercise",
+          "lifts"
+        ],
+        "properties": {
+          "exercise": {
+            "type": "string"
+          },
+          "lifts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkoutLift"
+            }
+          }
+        }
+      },
+      "WorkoutChanges": {
+        "type": "object",
+        "required": [
+          "modified",
+          "removed_sets",
+          "added_sets",
+          "changed_sets",
+          "source_changed_sets",
+          "committed_changed_sets",
+          "baseline_load_kg",
+          "planned_load_kg",
+          "committed_load_kg",
+          "added_load_moved_kg",
+          "comparison_samples"
+        ],
+        "properties": {
+          "added_load_moved_kg": {
+            "type": "number",
+            "format": "double"
+          },
+          "added_sets": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "baseline_load_kg": {
+            "type": "number",
+            "format": "double"
+          },
+          "changed_sets": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "committed_changed_sets": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "committed_load_kg": {
+            "type": "number",
+            "format": "double"
+          },
+          "comparison_samples": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "comparison_scope": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "planned_load_kg": {
+            "type": "number",
+            "format": "double"
+          },
+          "removed_sets": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "source_changed_sets": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "WorkoutContent": {
+        "type": "object",
+        "required": [
+          "title",
+          "blocks"
+        ],
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkoutBlock"
+            }
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkoutDefinition": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/WorkoutContent"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "revision",
+              "archived"
+            ],
+            "properties": {
+              "archived": {
+                "type": "boolean"
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "revision": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          }
+        ]
+      },
       "WorkoutDetail": {
         "type": "object",
         "description": "One workout, expanded.\n\nThe summary is nested rather than flattened so that the two responses cannot\ndrift: a field added to the history row is a field this endpoint gains for\nfree, and there is exactly one place that builds it.",
@@ -2913,6 +4513,30 @@
           }
         }
       },
+      "WorkoutEstimate": {
+        "type": "object",
+        "required": [
+          "exercise",
+          "label",
+          "estimate",
+          "is_lower_bound"
+        ],
+        "properties": {
+          "estimate": {
+            "type": "number",
+            "format": "double"
+          },
+          "exercise": {
+            "type": "string"
+          },
+          "is_lower_bound": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
       "WorkoutHistory": {
         "type": "object",
         "description": "A page of history, newest first.",
@@ -2944,6 +4568,33 @@
             "items": {
               "$ref": "#/components/schemas/WorkoutSummary"
             }
+          }
+        }
+      },
+      "WorkoutLift": {
+        "type": "object",
+        "required": [
+          "sets",
+          "reps",
+          "weight"
+        ],
+        "properties": {
+          "amrap": {
+            "type": "boolean"
+          },
+          "reps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "sets": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
           }
         }
       },
@@ -3000,6 +4651,43 @@
             "minimum": 0
           }
         }
+      },
+      "WorkoutShare": {
+        "type": "object",
+        "required": [
+          "id",
+          "revision",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkoutSource": {
+        "type": "string",
+        "enum": [
+          "program",
+          "saved_workout",
+          "ad_hoc"
+        ]
       },
       "WorkoutSubmission": {
         "type": "object",

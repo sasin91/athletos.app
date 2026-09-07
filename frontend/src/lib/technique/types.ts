@@ -4,6 +4,8 @@ import type { BarCalibration, BarTrackingResult } from './bar-path';
 export type TechniqueTarget = {
 	workoutId: string;
 	setPosition: number;
+	/** Stable identity for editable sessions; setPosition is a retained legacy handle. */
+	setId?: string;
 	exercise: 'squat';
 };
 

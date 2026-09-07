@@ -11,7 +11,6 @@ use athletos_training::{exercise, AdjustmentPercent, Loading};
 use axum::extract::{Path, State};
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -227,7 +226,10 @@ fn validate_and_normalize(
     Ok(normalized)
 }
 
-pub(crate) async fn load(pool: &PgPool, enrollment_id: Uuid) -> ApiResult<EngineAdjustments> {
+pub(crate) async fn load<'e>(
+    pool: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+    enrollment_id: Uuid,
+) -> ApiResult<EngineAdjustments> {
     let rows: Vec<(String, i16)> = sqlx::query_as(
         "select exercise, adjustment_percent
          from enrollment_exercise_adjustments
