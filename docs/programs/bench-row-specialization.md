@@ -4,23 +4,26 @@ A four-week, Smolov-inspired program prioritizing bench and barbell rows,
 with squat maintenance twice weekly. It is a separate catalogue entry:
 `bench-row-specialization`. The existing squat-focused Smolov Jr is unchanged.
 
-## Schedule and reference loads
+## Schedule and percentages
 
 Train Monday, Wednesday, Friday and Saturday for the first three weeks. Week
 four has only two easy sessions, separated by at least a rest day. Allow
 60–90 minutes, including warm-up and rest; the catalogue budgets 90 minutes.
 Bench comes first, rows second, lower body last. All prescriptions below are
-**working sets × reps**, with total bar weight in kilograms. Warm up separately.
+**working sets × reps at a percentage of that exercise's entered 1RM**.
+Warm up separately.
 
 | Session | Bench | Barbell row | Lower body |
 |---|---|---|---|
-| 1 — volume | 4×6 at 97.5 | 3×8 at 110 | Squat 3×5 at 110 |
-| 2 — strength | 5×5 at 105 | 4×5 at 125 | Optional deadlift 2×2 at 170 |
-| 3 — moderate | 6×4 at 112.5 | 3×8 at 105 | Squat 3×3 at 125 |
-| 4 — heavy practice | 7×3 at 120 | 4×3 at 135 | — |
+| 1 — volume | 4×6 at 67.5% | 3×8 at 65% | Squat 3×5 at 65% |
+| 2 — strength | 5×5 at 72.5% | 4×5 at 72.5% | Optional deadlift 2×2 at 70% |
+| 3 — moderate | 6×4 at 77.5% | 3×8 at 60% | Squat 3×3 at 75% |
+| 4 — heavy practice | 7×3 at 82.5% | 4×3 at 77.5% | — |
 
-Week two adds 2.5 kg to every bench and row prescription; week three adds
-another 2.5 kg. Squat and deadlift loads stay constant. Deadlifts are included
+Week two adds **2.5 percentage points** to every bench and row prescription;
+week three adds another 2.5 points (5 points above week one). For example,
+session-one bench progresses through 67.5%, 70%, and 72.5%. Squat and deadlift
+percentages stay constant. Deadlifts are included
 in session two of weeks one and two only; omit them whenever recovery is
 limited by removing that exercise in **Edit this session**, or skipping its
 sets if the session is already underway. Week three omits them by default.
@@ -29,37 +32,31 @@ Week four:
 
 | Session | Bench | Barbell row | Lower body |
 |---|---|---|---|
-| 1 | 3×3 at 90 | 2×5 at 100 | Squat 2×3 at 100 |
-| 2 | 3×3 at 90 | 2×5 at 100 | — |
+| 1 | 3×3 at 60% | 2×5 at 57.5% | Squat 2×3 at 60% |
+| 2 | 3×3 at 60% | 2×5 at 57.5% | — |
 
 The block ends after those 14 sessions. After at least 2–3 further rest days,
 an optional bench single can assess progress if warm-ups move well. Assess a
 row rep best on a separate day with consistent technique. These assessments
 are not mandatory program sessions. Use bench safeties or a competent spotter.
 
-## Entered 1RMs and scaling
+## Entered 1RMs and loading
 
-The reference loads were authored for these numbers:
+Enter a 1RM for bench, barbell row, squat and deadlift. Every prescription uses
+the corresponding exercise's own entered number, snapshotted at enrollment:
 
-| Exercise | Entered 1RM reference | Basis |
-|---|---|---|
-| Bench | 147 kg | Reported single |
-| Barbell row | 175 kg | Reference estimate from 150 kg × 5 |
-| Squat | 170 kg | Rounded-down reference estimate from 160 kg × 2 |
-| Deadlift | 245 kg | Reported single |
+`target = entered 1RM × scheduled percentage / 100`
 
-The squat and row references are estimates, not tested singles. Enter a number
-you consider appropriate for each exercise; the application neither estimates
-nor changes the athlete's entered numbers. In particular, 150 kg × 5 should
-not silently become an entered 1RM of 150 kg.
+The target then rounds **down** to a loadable weight using the same loading
+rules as the other programs. There are no reference-athlete numbers or fixed
+kilogram increments in the program. This applies to loading and deload weeks.
+For example, session-one bench at 67.5% of an entered 147 kg rounds down from
+99.225 kg to 97.5 kg. Rows depend on the row number only.
 
-Each reference load scales by that exercise's entered 1RM divided by its
-reference above, then rounds **down** to a loadable weight. The scheduled
-weekly addition is a fixed 2.5 kg after scaling, not a percentage increase.
-The same scaling applies to deload loads. Rows depend on the row number only.
-The references reproduce the table exactly; other entered numbers produce
-appropriately scaled prescriptions. There is no separately maintained training
-max: the initial conservative bench loads are already encoded in the table.
+The application does not convert a rep best into an entered 1RM or overwrite
+the athlete's numbers. Choose an appropriate entered number for each exercise
+before enrollment. There is no separately maintained training max; the
+conservative starting intensity is expressed directly by the percentages.
 
 ## Recovery and adjustments
 
