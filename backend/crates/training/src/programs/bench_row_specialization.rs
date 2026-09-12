@@ -65,11 +65,25 @@ impl Prescriptive for BenchRowSpecialization {
                 ((7, 3, 82.5), (4, 3, 77.5)),
             ];
 
-            for (index, ((bs, br, bp), (rs, rr, rp))) in days.into_iter().enumerate() {
+            for (index, (bench_work, row_work)) in days.into_iter().enumerate() {
+                let (bench_sets, bench_reps, bench_percentage) = bench_work;
+                let (row_sets, row_reps, row_percentage) = row_work;
                 let day = index as u32 + 1;
                 let mut blocks = vec![
-                    work(&BENCH, bs, br, bench, bp + percentage_points),
-                    work(&BARBELL_ROW, rs, rr, row, rp + percentage_points),
+                    work(
+                        &BENCH,
+                        bench_sets,
+                        bench_reps,
+                        bench,
+                        bench_percentage + percentage_points,
+                    ),
+                    work(
+                        &BARBELL_ROW,
+                        row_sets,
+                        row_reps,
+                        row,
+                        row_percentage + percentage_points,
+                    ),
                 ];
                 match day {
                     1 => blocks.push(work(&SQUAT, 3, 5, squat, 65.0)),
