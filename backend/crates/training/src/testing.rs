@@ -18,6 +18,7 @@ pub fn maxes() -> crate::Maxes {
         ("bench", 100.0),
         ("deadlift", 180.0),
         ("military-press", 60.0),
+        ("barbell-row", 120.0),
     ]
     .into_iter()
     .collect()
