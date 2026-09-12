@@ -5,22 +5,24 @@
 //! that fits on two hands.
 //!
 //! Note what the registry's type says. It is a slice of `&dyn Program` — one
-//! element authored as [`Prescriptive`] and one authored as [`Program`] — and
+//! elements authored as [`Prescriptive`] and as [`Program`] — and
 //! nothing downstream of this line can tell which is which.
 //!
 //! [`Prescriptive`]: crate::Prescriptive
 //! [`Program`]: crate::Program
 
+mod bench_row_specialization;
 mod smolov_jr;
 mod wendler_531_bbb;
 
+pub use bench_row_specialization::BenchRowSpecialization;
 pub use smolov_jr::SmolovJr;
 pub use wendler_531_bbb::Wendler531Bbb;
 
 use crate::Program;
 
 /// Every program an athlete can enrol in.
-pub static REGISTRY: &[&dyn Program] = &[&SmolovJr, &Wendler531Bbb];
+pub static REGISTRY: &[&dyn Program] = &[&SmolovJr, &Wendler531Bbb, &BenchRowSpecialization];
 
 /// Resolves a program key, for an enrolment reading `program_key` back out of
 /// the database.
