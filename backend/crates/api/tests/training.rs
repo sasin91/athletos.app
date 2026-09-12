@@ -1079,7 +1079,10 @@ async fn the_maxes_are_a_set_that_gains_and_loses_lifts(pool: PgPool) {
         after["maxes"].get("bench").is_none(),
         "a key absent from the body is a key deleted"
     );
-    assert_eq!(after["maxes"]["barbell-curl"], 35.0, "and the rest survived");
+    assert_eq!(
+        after["maxes"]["barbell-curl"], 35.0,
+        "and the rest survived"
+    );
 
     // The row is gone rather than zeroed, so nothing downstream can read a max
     // the athlete deleted.
