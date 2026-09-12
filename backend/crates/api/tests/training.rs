@@ -1014,7 +1014,7 @@ async fn putting_a_max_for_an_unknown_exercise_is_refused(pool: PgPool) {
 /// The maxes are a set the athlete owns: a lift goes in, a lift comes out, and
 /// no program has a vote (D-04).
 ///
-/// The lift added here is `barbell-row`, which is in the exercise registry and
+/// The lift added here is `barbell-curl`, which is in the exercise registry and
 /// which **no** compiled program declares in `required_maxes`. That is the whole
 /// point — before this, the client's form was the union of the programs' needs,
 /// so a number like this had nowhere to live. Removing `bench` in the same pass
@@ -1030,7 +1030,7 @@ async fn the_maxes_are_a_set_that_gains_and_loses_lifts(pool: PgPool) {
 
     // Gaining a lift no program asks for.
     let mut wanted = full_maxes();
-    wanted["barbell-row"] = json!(85.0);
+    wanted["barbell-curl"] = json!(35.0);
     set_maxes(&server, &token, wanted).await;
 
     let held: serde_json::Value = server
@@ -1038,7 +1038,7 @@ async fn the_maxes_are_a_set_that_gains_and_loses_lifts(pool: PgPool) {
         .authorization_bearer(&token)
         .await
         .json();
-    assert_eq!(held["maxes"]["barbell-row"], 85.0);
+    assert_eq!(held["maxes"]["barbell-curl"], 35.0);
     assert_eq!(held["maxes"].as_object().unwrap().len(), 5);
 
     // No program declares it, which is what makes it an athlete's number rather
@@ -1051,7 +1051,7 @@ async fn the_maxes_are_a_set_that_gains_and_loses_lifts(pool: PgPool) {
     for program in catalogue["programs"].as_array().unwrap() {
         for required in program["required_maxes"].as_array().unwrap() {
             assert_ne!(
-                required["exercise"], "barbell-row",
+                required["exercise"], "barbell-curl",
                 "this test needs a lift no program requires"
             );
         }
@@ -1065,7 +1065,7 @@ async fn the_maxes_are_a_set_that_gains_and_loses_lifts(pool: PgPool) {
             "squat": 140.0,
             "deadlift": 180.0,
             "military-press": 60.0,
-            "barbell-row": 85.0,
+            "barbell-curl": 35.0,
         }),
     )
     .await;
@@ -1079,7 +1079,7 @@ async fn the_maxes_are_a_set_that_gains_and_loses_lifts(pool: PgPool) {
         after["maxes"].get("bench").is_none(),
         "a key absent from the body is a key deleted"
     );
-    assert_eq!(after["maxes"]["barbell-row"], 85.0, "and the rest survived");
+    assert_eq!(after["maxes"]["barbell-curl"], 35.0, "and the rest survived");
 
     // The row is gone rather than zeroed, so nothing downstream can read a max
     // the athlete deleted.
