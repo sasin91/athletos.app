@@ -1850,7 +1850,7 @@ async fn the_training_endpoints_all_require_a_token(pool: PgPool) {
 // --- the catalogue --------------------------------------------------------
 
 #[sqlx::test]
-async fn the_catalogue_lists_both_programs_with_the_axes_that_matter(pool: PgPool) {
+async fn the_catalogue_lists_all_programs_with_the_axes_that_matter(pool: PgPool) {
     let server = server(pool);
     let token = register(&server, EMAIL).await;
 
@@ -1862,7 +1862,7 @@ async fn the_catalogue_lists_both_programs_with_the_axes_that_matter(pool: PgPoo
 
     let body: serde_json::Value = response.json();
     let programs = body["programs"].as_array().unwrap();
-    assert_eq!(programs.len(), 2);
+    assert_eq!(programs.len(), 3);
 
     let smolov = programs
         .iter()
@@ -1882,6 +1882,25 @@ async fn the_catalogue_lists_both_programs_with_the_axes_that_matter(pool: PgPoo
         .find(|program| program["key"] == "wendler-531-bbb")
         .expect("wendler-531-bbb is in the catalogue");
     assert_eq!(wendler["length"], json!({ "kind": "open_ended" }));
+
+    let bench_row = programs
+        .iter()
+        .find(|program| program["key"] == "bench-row-specialization")
+        .expect("bench-row-specialization is in the catalogue");
+    assert_eq!(bench_row["recovery_demand"], "high");
+    assert_eq!(bench_row["estimated_session_minutes"], 90);
+    assert_eq!(bench_row["days_per_week"], 4);
+    assert_eq!(
+        bench_row["length"],
+        json!({ "kind": "fixed", "weeks": 4, "sessions": 14 })
+    );
+    let required: Vec<_> = bench_row["required_maxes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["exercise"].as_str().unwrap())
+        .collect();
+    assert_eq!(required, vec!["bench", "barbell-row", "squat", "deadlift"]);
 
     server
         .get("/v1/programs/no-such-program")
