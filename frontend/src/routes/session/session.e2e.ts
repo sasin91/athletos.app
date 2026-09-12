@@ -79,6 +79,12 @@ test('prepared edits survive reload, then finishing offline atomically queues th
 	await seed(page);
 	await page.getByRole('textbox', { name: 'kg', exact: true }).fill('20,25');
 	await page.getByRole('button', { name: 'Add set', exact: true }).click();
+	// Clicking updates the editor immediately, but its queued IndexedDB writes are asynchronous.
+	// Wait for both edits to commit before testing that a reload restores them.
+	await expect.poll(async () => (await stored(page)).active).toMatchObject({
+		id: session.id,
+		sets: [{ prescribedWeight: 20.25 }, { prescribedWeight: 20.25 }]
+	});
 	await page.reload();
 	await expect(page.getByRole('button', { name: 'Remove set', exact: true })).toHaveCount(2);
 	await expect(page.getByRole('textbox', { name: 'kg', exact: true }).first()).toHaveValue('20.25');
