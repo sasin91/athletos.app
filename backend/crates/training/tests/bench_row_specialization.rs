@@ -35,7 +35,7 @@ fn reference_loads_progress_into_two_deload_sessions_and_finish() {
     let mut state = program.start(&reference_maxes()).unwrap();
     let preview = program.preview(&state).unwrap().unwrap();
     #[rustfmt::skip]
-    let expected = vec![
+    let expected = [
         vec![("bench", 4, 6, 97.5), ("barbell-row", 3, 8, 110.0), ("squat", 3, 5, 110.0)],
         vec![("bench", 5, 5, 105.0), ("barbell-row", 4, 5, 125.0), ("deadlift", 2, 2, 170.0)],
         vec![("bench", 6, 4, 112.5), ("barbell-row", 3, 8, 105.0), ("squat", 3, 3, 125.0)],
