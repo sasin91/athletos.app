@@ -68,7 +68,10 @@ fn reference_loads_progress_into_two_deload_sessions_and_finish() {
             .unwrap();
     }
     assert!(program.progress(&state).unwrap().is_finished());
-    assert!(matches!(program.session(&state), Err(ProgramError::Finished)));
+    assert!(matches!(
+        program.session(&state),
+        Err(ProgramError::Finished)
+    ));
 }
 
 #[test]
