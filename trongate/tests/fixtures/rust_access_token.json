@@ -1,6 +1,7 @@
 {
   "athlete_id": "0199d6a0-0000-7000-8000-000000000001",
   "kid": "parity-fixture",
+  "note": "Test vector, not a credential: signed with a key derived from a public, fixed seed, and trusted only by a test run that configures this public key.",
   "public_key": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
-  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6InBhcml0eS1maXh0dXJlIn0.eyJzdWIiOiIwMTk5ZDZhMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpc3MiOiJhdGhsZXRvcy1hcGkiLCJhdWQiOiJhdGhsZXRvcyIsImV4cCI6NDk0NTM4NjUyNiwiaWF0IjoxNzkxNzg2NTI2LCJqdGkiOiIwMWExMmVjYy1hOGJiLTcyNTEtYTNkYy02OGQxNjVmOTBlYTEifQ.OrbIFhCv5ud3Lq9ZLd809gCb4qVJdnQJ5O1OuyO2MRnT2D05ht2StPszn5jg5g4ILrf7eGVnPEG9jK_f0GHnCQ"
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6InBhcml0eS1maXh0dXJlIn0.eyJzdWIiOiIwMTk5ZDZhMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpc3MiOiJhdGhsZXRvcy1hcGkiLCJhdWQiOiJhdGhsZXRvcyIsImV4cCI6NDk0NTM4NzIxMiwiaWF0IjoxNzkxNzg3MjEyLCJqdGkiOiIwMWExMmVkNy0xZmI2LTczNzktYmE2OC1hNDc0NmVhN2M3MTMifQ.XNbYGDLPCburAH3zOjAtXtQWGr7tKa8d2Dv6rQLEUuWGUVgnpOFU9ur_Lx02A4t6O2E1AG3Tv7i8vEWm3s9eCw"
 }

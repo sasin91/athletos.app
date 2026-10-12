@@ -184,8 +184,10 @@ jobs:
     services:
       mariadb:
         image: mariadb:10.11
+        # A throwaway container that only the test runner reaches, so there is
+        # no password to keep: an empty one keeps a literal out of the repo.
         env:
-          MARIADB_ROOT_PASSWORD: athletos
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
         ports: ['3306:3306']
         options: >-
           --health-cmd "healthcheck.sh --connect --innodb_initialized"
@@ -196,7 +198,7 @@ jobs:
     env:
       DB_HOST: 127.0.0.1
       DB_USER: root
-      DB_PASSWORD: athletos
+      DB_PASSWORD: ''
 
     defaults:
       run:

@@ -67,6 +67,7 @@ fn rust_access_token() -> serde_json::Value {
     let jwks = serde_json::to_value(keys.jwks()).expect("jwks");
 
     serde_json::json!({
+        "note": "Test vector, not a credential: signed with a key derived from a public, fixed seed, and trusted only by a test run that configures this public key.",
         "kid": "parity-fixture",
         "public_key": jwks["keys"][0]["x"],
         "athlete_id": athlete_id,
