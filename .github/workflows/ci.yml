@@ -174,3 +174,62 @@ jobs:
 
       - name: End-to-end tests
         run: npx playwright test
+
+  # The Trongate port (trongate/README.md). Its tests serve the app with PHP's
+  # built-in server against a real MariaDB and assert byte-for-byte parity with
+  # fixtures the Rust API's own types generate.
+  trongate:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: athletos
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASSWORD: athletos
+
+    defaults:
+      run:
+        working-directory: trongate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, sodium, curl, intl, gd
+          coverage: none
+
+      - name: Lint
+        run: find . -name '*.php' -not -path './parity/*' -print0 | xargs -0 -n1 php -l > /dev/null
+
+      - name: Test
+        run: php tests/run.php
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: trongate/parity/fixtures-gen
+
+      # The fixtures are what parity is measured against, so they must be what
+      # the Rust code currently answers. The access-token fixture is excluded:
+      # it carries a fresh `iat` and `jti` every time it is minted.
+      - name: Parity fixtures are current
+        run: |
+          cargo run --manifest-path parity/fixtures-gen/Cargo.toml -- tests/fixtures
+          git diff --exit-code -- tests/fixtures ':!tests/fixtures/rust_access_token.json' || {
+            echo "::error::trongate/tests/fixtures is stale. Regenerate: cargo run --manifest-path parity/fixtures-gen/Cargo.toml -- tests/fixtures"
+            exit 1
+          }

@@ -1,0 +1,80 @@
+{
+  "key": "smolov-jr",
+  "name": "Smolov Jr",
+  "days_per_week": 4,
+  "equipment": [
+    "barbell",
+    "squat_rack",
+    "bench",
+    "dumbbells",
+    "pull_up_bar"
+  ],
+  "experience_floor": "advanced",
+  "length": {
+    "kind": "fixed",
+    "weeks": 3,
+    "sessions": 12
+  },
+  "recovery_demand": "brutal",
+  "estimated_session_minutes": 75,
+  "required_maxes": [
+    {
+      "exercise": "squat",
+      "label": "Squat"
+    },
+    {
+      "exercise": "bench",
+      "label": "Bench Press"
+    },
+    {
+      "exercise": "deadlift",
+      "label": "Deadlift"
+    }
+  ],
+  "weighted_exercises": [
+    {
+      "exercise": "squat",
+      "label": "Squat"
+    },
+    {
+      "exercise": "deadlift",
+      "label": "Deadlift"
+    },
+    {
+      "exercise": "military-press",
+      "label": "Military Press"
+    },
+    {
+      "exercise": "lateral-raise",
+      "label": "Lateral Raise"
+    },
+    {
+      "exercise": "bench",
+      "label": "Bench Press"
+    },
+    {
+      "exercise": "barbell-row",
+      "label": "Barbell Row"
+    },
+    {
+      "exercise": "barbell-curl",
+      "label": "Barbell Curl"
+    },
+    {
+      "exercise": "dumbbell-tricep-extension",
+      "label": "Dumbbell Tricep Extension"
+    },
+    {
+      "exercise": "incline-dumbbell-press",
+      "label": "Dumbbell Press"
+    },
+    {
+      "exercise": "romanian-deadlift",
+      "label": "Romanian deadlift"
+    },
+    {
+      "exercise": "hammer-curl",
+      "label": "Hammer Curl"
+    }
+  ]
+}

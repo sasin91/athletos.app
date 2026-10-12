@@ -1,0 +1,17 @@
+[package]
+name = "athletos-parity-fixtures"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Standalone on purpose: not a member of backend/'s workspace, so the Rust API
+# never builds or ships this.
+[workspace]
+
+[dependencies]
+athletos-api = { path = "../../../backend/crates/api" }
+athletos-training = { path = "../../../backend/crates/training" }
+serde_json = "1"
+serde = "1"
+uuid = "1"
+ed25519-dalek = { version = "3", features = ["pkcs8", "pem"] }

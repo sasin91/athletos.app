@@ -1,0 +1,64 @@
+{
+  "exercises": [
+    {
+      "key": "squat",
+      "label": "Squat",
+      "is_primary": true
+    },
+    {
+      "key": "bench",
+      "label": "Bench Press",
+      "is_primary": true
+    },
+    {
+      "key": "deadlift",
+      "label": "Deadlift",
+      "is_primary": true
+    },
+    {
+      "key": "military-press",
+      "label": "Military Press",
+      "is_primary": false
+    },
+    {
+      "key": "barbell-row",
+      "label": "Barbell Row",
+      "is_primary": true
+    },
+    {
+      "key": "romanian-deadlift",
+      "label": "Romanian deadlift",
+      "is_primary": false
+    },
+    {
+      "key": "barbell-curl",
+      "label": "Barbell Curl",
+      "is_primary": true
+    },
+    {
+      "key": "hanging-leg-raise",
+      "label": "Hanging leg raise",
+      "is_primary": false
+    },
+    {
+      "key": "lateral-raise",
+      "label": "Lateral Raise",
+      "is_primary": false
+    },
+    {
+      "key": "dumbbell-tricep-extension",
+      "label": "Dumbbell Tricep Extension",
+      "is_primary": false
+    },
+    {
+      "key": "incline-dumbbell-press",
+      "label": "Dumbbell Press",
+      "is_primary": false
+    },
+    {
+      "key": "hammer-curl",
+      "label": "Hammer Curl",
+      "is_primary": false
+    }
+  ]
+}

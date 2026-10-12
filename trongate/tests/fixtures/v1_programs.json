@@ -1,0 +1,190 @@
+{
+  "programs": [
+    {
+      "key": "smolov-jr",
+      "name": "Smolov Jr",
+      "days_per_week": 4,
+      "equipment": [
+        "barbell",
+        "squat_rack",
+        "bench",
+        "dumbbells",
+        "pull_up_bar"
+      ],
+      "experience_floor": "advanced",
+      "length": {
+        "kind": "fixed",
+        "weeks": 3,
+        "sessions": 12
+      },
+      "recovery_demand": "brutal",
+      "estimated_session_minutes": 75,
+      "required_maxes": [
+        {
+          "exercise": "squat",
+          "label": "Squat"
+        },
+        {
+          "exercise": "bench",
+          "label": "Bench Press"
+        },
+        {
+          "exercise": "deadlift",
+          "label": "Deadlift"
+        }
+      ],
+      "weighted_exercises": [
+        {
+          "exercise": "squat",
+          "label": "Squat"
+        },
+        {
+          "exercise": "deadlift",
+          "label": "Deadlift"
+        },
+        {
+          "exercise": "military-press",
+          "label": "Military Press"
+        },
+        {
+          "exercise": "lateral-raise",
+          "label": "Lateral Raise"
+        },
+        {
+          "exercise": "bench",
+          "label": "Bench Press"
+        },
+        {
+          "exercise": "barbell-row",
+          "label": "Barbell Row"
+        },
+        {
+          "exercise": "barbell-curl",
+          "label": "Barbell Curl"
+        },
+        {
+          "exercise": "dumbbell-tricep-extension",
+          "label": "Dumbbell Tricep Extension"
+        },
+        {
+          "exercise": "incline-dumbbell-press",
+          "label": "Dumbbell Press"
+        },
+        {
+          "exercise": "romanian-deadlift",
+          "label": "Romanian deadlift"
+        },
+        {
+          "exercise": "hammer-curl",
+          "label": "Hammer Curl"
+        }
+      ]
+    },
+    {
+      "key": "wendler-531-bbb",
+      "name": "5/3/1 Boring But Big",
+      "days_per_week": 4,
+      "equipment": [
+        "barbell",
+        "squat_rack",
+        "bench"
+      ],
+      "experience_floor": "novice",
+      "length": {
+        "kind": "open_ended"
+      },
+      "recovery_demand": "high",
+      "estimated_session_minutes": 55,
+      "required_maxes": [
+        {
+          "exercise": "military-press",
+          "label": "Military Press"
+        },
+        {
+          "exercise": "deadlift",
+          "label": "Deadlift"
+        },
+        {
+          "exercise": "bench",
+          "label": "Bench Press"
+        },
+        {
+          "exercise": "squat",
+          "label": "Squat"
+        }
+      ],
+      "weighted_exercises": [
+        {
+          "exercise": "military-press",
+          "label": "Military Press"
+        },
+        {
+          "exercise": "deadlift",
+          "label": "Deadlift"
+        },
+        {
+          "exercise": "bench",
+          "label": "Bench Press"
+        },
+        {
+          "exercise": "squat",
+          "label": "Squat"
+        }
+      ]
+    },
+    {
+      "key": "bench-row-specialization",
+      "name": "Bench & Row Specialization",
+      "days_per_week": 4,
+      "equipment": [
+        "barbell",
+        "squat_rack",
+        "bench"
+      ],
+      "experience_floor": "advanced",
+      "length": {
+        "kind": "fixed",
+        "weeks": 4,
+        "sessions": 14
+      },
+      "recovery_demand": "high",
+      "estimated_session_minutes": 90,
+      "required_maxes": [
+        {
+          "exercise": "bench",
+          "label": "Bench Press"
+        },
+        {
+          "exercise": "barbell-row",
+          "label": "Barbell Row"
+        },
+        {
+          "exercise": "squat",
+          "label": "Squat"
+        },
+        {
+          "exercise": "deadlift",
+          "label": "Deadlift"
+        }
+      ],
+      "weighted_exercises": [
+        {
+          "exercise": "bench",
+          "label": "Bench Press"
+        },
+        {
+          "exercise": "barbell-row",
+          "label": "Barbell Row"
+        },
+        {
+          "exercise": "squat",
+          "label": "Squat"
+        },
+        {
+          "exercise": "deadlift",
+          "label": "Deadlift"
+        }
+      ]
+    }
+  ]
+}

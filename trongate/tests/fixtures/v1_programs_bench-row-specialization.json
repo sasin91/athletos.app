@@ -1,0 +1,54 @@
+{
+  "key": "bench-row-specialization",
+  "name": "Bench & Row Specialization",
+  "days_per_week": 4,
+  "equipment": [
+    "barbell",
+    "squat_rack",
+    "bench"
+  ],
+  "experience_floor": "advanced",
+  "length": {
+    "kind": "fixed",
+    "weeks": 4,
+    "sessions": 14
+  },
+  "recovery_demand": "high",
+  "estimated_session_minutes": 90,
+  "required_maxes": [
+    {
+      "exercise": "bench",
+      "label": "Bench Press"
+    },
+    {
+      "exercise": "barbell-row",
+      "label": "Barbell Row"
+    },
+    {
+      "exercise": "squat",
+      "label": "Squat"
+    },
+    {
+      "exercise": "deadlift",
+      "label": "Deadlift"
+    }
+  ],
+  "weighted_exercises": [
+    {
+      "exercise": "bench",
+      "label": "Bench Press"
+    },
+    {
+      "exercise": "barbell-row",
+      "label": "Barbell Row"
+    },
+    {
+      "exercise": "squat",
+      "label": "Squat"
+    },
+    {
+      "exercise": "deadlift",
+      "label": "Deadlift"
+    }
+  ]
+}
